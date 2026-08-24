@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Escolha o que compartilhar</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: #1d1f24;
+        color: #e6e8ec;
+        font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+      }
+      header { padding: 16px 20px 10px; }
+      h1 { margin: 0; font-size: 17px; }
+      .abas { display: flex; gap: 6px; padding: 6px 20px 12px; }
+      .abas button {
+        padding: 6px 14px;
+        border: none;
+        border-radius: 999px;
+        background: #24262c;
+        color: #969ba5;
+        font: inherit;
+        cursor: pointer;
+      }
+      .abas button.ativa { background: #5b7cfa; color: #fff; }
+      .lista {
+        flex: 1;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        gap: 12px;
+        padding: 0 20px 20px;
+      }
+      .fonte {
+        border: 2px solid transparent;
+        border-radius: 10px;
+        background: #24262c;
+        padding: 8px;
+        cursor: pointer;
+        text-align: left;
+        color: inherit;
+        font: inherit;
+      }
+      .fonte:hover { border-color: #5b7cfa; }
+      .fonte img {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: contain;
+        border-radius: 6px;
+        background: #000;
+        display: block;
+      }
+      .fonte span {
+        display: block;
+        margin-top: 8px;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .vazio { padding: 40px 20px; color: #969ba5; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <header><h1>Escolha o que compartilhar</h1></header>
+
+    <div class="abas">
+      <button data-tipo="tela" class="ativa">Telas</button>
+      <button data-tipo="janela">Janelas</button>
+    </div>
+
+    <div class="lista" id="lista"></div>
+
+    <script>
+      let fontes = [];
+      let tipoAtivo = 'tela';
+
+      const lista = document.getElementById('lista');
+
+      function desenhar() {
+        const filtradas = fontes.filter((f) => f.tipo === tipoAtivo);
+        if (!filtradas.length) {
+          lista.innerHTML = '<p class="vazio">Nada aqui.</p>';
+          return;
+        }
+        lista.innerHTML = '';
+        for (const fonte of filtradas) {
+          const botao = document.createElement('button');
+          botao.className = 'fonte';
+          botao.innerHTML = `<img src="${fonte.thumbnail}" alt="" /><span></span>`;
+          botao.querySelector('span').textContent = fonte.name;
+          botao.addEventListener('click', () => window.seletorDeTela.escolher(fonte.id));
+          lista.appendChild(botao);
+        }
+      }
+
+      for (const aba of document.querySelectorAll('.abas button')) {
+        aba.addEventListener('click', () => {
+          tipoAtivo = aba.dataset.tipo;
+          for (const outra of document.querySelectorAll('.abas button')) {
+            outra.classList.toggle('ativa', outra === aba);
+          }
+          desenhar();
+        });
+      }
+
+      window.seletorDeTela.listar().then((recebidas) => {
+        fontes = recebidas;
+        desenhar();
+      });
+    </script>
+  </body>
+</html>

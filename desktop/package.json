@@ -1,0 +1,59 @@
+{
+  "name": "discord-caseiro-desktop",
+  "version": "0.2.2",
+  "private": true,
+  "description": "Cliente de desktop do Discord Caseiro",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "dist": "electron-builder --publish=never",
+    "publicar": "node scripts/publicar.js",
+    "smoke": "electron scripts/smoke-electron.js"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^38.4.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.discordcaseiro.app",
+    "productName": "Discord Caseiro",
+    "icon": "build/icon.png",
+    "files": [
+      "src/**/*"
+    ],
+    "publish": {
+      "provider": "generic",
+      "url": "https://registry-absinthe-dehydrate.ngrok-free.dev/updates"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "Discord Caseiro"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Network"
+    }
+  }
+}

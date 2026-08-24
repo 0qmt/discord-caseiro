@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Discord Caseiro</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at 30% 20%, #262a35, #16171b);
+        color: #e6e8ec;
+        font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+      }
+      .cartao {
+        width: min(430px, 90vw);
+        padding: 32px;
+        background: #24262c;
+        border-radius: 12px;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+      }
+      h1 { margin: 0 0 4px; font-size: 21px; }
+      p.sub { margin: 0 0 24px; color: #969ba5; font-size: 14px; }
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: #969ba5;
+      }
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #34373f;
+        border-radius: 8px;
+        background: #16171b;
+        color: inherit;
+        font: inherit;
+      }
+      input:focus { outline: 2px solid #5b7cfa; outline-offset: -1px; }
+      button {
+        width: 100%;
+        margin-top: 16px;
+        padding: 11px;
+        border: none;
+        border-radius: 8px;
+        background: #5b7cfa;
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover { background: #6d8bff; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      .aviso {
+        margin: 0 0 16px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: rgba(229, 85, 95, .12);
+        color: #ff9aa1;
+        font-size: 13px;
+      }
+      .dica { margin-top: 18px; color: #969ba5; font-size: 12px; }
+      code { background: #16171b; padding: 1px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <form class="cartao" id="formulario">
+      <h1>Discord Caseiro</h1>
+      <p class="sub">Em qual servidor você vai entrar?</p>
+
+      <div id="aviso"></div>
+
+      <label for="endereco">Endereço do servidor</label>
+      <input id="endereco" placeholder="192.168.0.10:3001" autofocus />
+
+      <button type="submit" id="conectar">Conectar</button>
+
+      <p class="dica">
+        Se o servidor roda nesta mesma máquina, use <code>localhost:3001</code>.
+        Na sua rede, use o IP do computador que está com o servidor ligado.
+      </p>
+    </form>
+
+    <script>
+      const parametros = new URLSearchParams(location.search);
+      const aviso = document.getElementById('aviso');
+      const campo = document.getElementById('endereco');
+      const botao = document.getElementById('conectar');
+
+      function mostrarAviso(texto) {
+        aviso.innerHTML = texto ? `<div class="aviso">${texto}</div>` : '';
+      }
+
+      if (parametros.get('erro') === 'fora-do-ar') {
+        mostrarAviso(
+          `Não consegui falar com <code>${parametros.get('endereco') ?? ''}</code>. `
+          + 'O servidor está ligado?',
+        );
+      }
+
+      (async () => {
+        const salvo = parametros.get('endereco') || (await window.appConfig.ler()).serverUrl;
+        campo.value = salvo || 'localhost:3001';
+        campo.select();
+      })();
+
+      document.getElementById('formulario').addEventListener('submit', async (evento) => {
+        evento.preventDefault();
+        botao.disabled = true;
+        botao.textContent = 'Procurando...';
+        mostrarAviso('');
+
+        const resultado = await window.appConfig.definir(campo.value);
+        if (resultado?.erro) {
+          mostrarAviso(resultado.erro);
+          botao.disabled = false;
+          botao.textContent = 'Conectar';
+        } else if (resultado?.reiniciando) {
+          botao.textContent = 'Reiniciando o app...';
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,560 @@
+/*
+ * Estilos das peças que chegaram na fase de paridade com o Discord: menu de
+ * contexto, presença, ações de mensagem, reações, fixadas e comandos com "/".
+ *
+ * Ficam separados de styles.css só pra aquele arquivo não virar um monólito;
+ * a paleta (as variáveis em :root) continua vindo de lá.
+ */
+
+/* ========================================================================== */
+/*  Menu de contexto (botão direito)                                          */
+/* ========================================================================== */
+
+/*
+ * Uma camada invisível cobrindo a tela inteira fecha o menu com um clique
+ * fora. Sem ela seria preciso um listener global de clique, que briga com o
+ * próprio clique que abriu o menu.
+ */
+.ctx-backdrop { position: fixed; inset: 0; z-index: 60; }
+
+.ctx-menu {
+  position: fixed;
+  z-index: 61;
+  min-width: 200px;
+  max-width: 280px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-0);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, .28);
+  font-size: 14px;
+  animation: ctx-entra .12s ease-out;
+}
+
+@keyframes ctx-entra {
+  from { opacity: 0; transform: scale(.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.ctx-titulo {
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 4px;
+  color: var(--text-soft);
+  text-align: left;
+  line-height: 1.25;
+}
+
+.ctx-item:hover { background: var(--accent); color: #fff; }
+.ctx-item:disabled { opacity: .4; cursor: not-allowed; }
+.ctx-item:disabled:hover { background: none; color: var(--text-soft); }
+.ctx-item .ctx-icone { width: 18px; flex: none; text-align: center; font-size: 15px; }
+.ctx-item .ctx-atalho { margin-left: auto; font-size: 11px; color: var(--text-dim); }
+.ctx-item:hover .ctx-atalho { color: rgba(255, 255, 255, .7); }
+.ctx-item .ctx-marca { margin-left: auto; font-size: 12px; }
+
+.ctx-item.perigo { color: var(--danger); }
+.ctx-item.perigo:hover { background: var(--danger); color: #fff; }
+
+.ctx-sep { height: 1px; margin: 4px 0; background: var(--line); }
+
+/* Submenu encostado no item, do lado direito. */
+.ctx-sub { position: relative; }
+.ctx-sub > .ctx-item .ctx-seta { margin-left: auto; font-size: 16px; line-height: 1; }
+
+.ctx-sub-painel {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: -6px;
+  min-width: 190px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-0);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, .28);
+}
+
+/* Perto da borda direita da tela o submenu abre pro outro lado. */
+.ctx-sub-painel.esquerda { left: auto; right: calc(100% + 6px); }
+
+.ctx-slider { padding: 6px 8px 10px; }
+.ctx-slider input[type="range"] { width: 100%; padding: 0; background: none; border: none; accent-color: var(--accent); }
+.ctx-slider-topo { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+
+/* ========================================================================== */
+/*  Presença: bolinha de status e linha de atividade                          */
+/* ========================================================================== */
+
+.status-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  /* A borda usa a cor do fundo de trás pra "recortar" o avatar. */
+  border: 3px solid var(--bg-2);
+  background: #80848e;
+  box-sizing: content-box;
+}
+
+.status-dot.online { background: var(--ok); }
+.status-dot.idle { background: var(--idle); }
+.status-dot.dnd { background: var(--danger); }
+.status-dot.offline { background: #80848e; }
+
+/*
+ * Cada status tem forma própria, não só cor - assim continua legível pra quem
+ * não distingue bem verde de vermelho (o Discord faz igual).
+ */
+.status-dot.idle {
+  -webkit-mask: radial-gradient(circle at 32% 32%, transparent 45%, #000 46%);
+  mask: radial-gradient(circle at 32% 32%, transparent 45%, #000 46%);
+}
+.status-dot.dnd {
+  -webkit-mask: radial-gradient(circle, #000 99%, transparent 100%) exclude, linear-gradient(#000 0 0) center / 100% 30% no-repeat;
+  mask: radial-gradient(circle, #000 99%, transparent 100%) exclude, linear-gradient(#000 0 0) center / 100% 30% no-repeat;
+}
+.status-dot.offline {
+  -webkit-mask: radial-gradient(circle, transparent 42%, #000 43%);
+  mask: radial-gradient(circle, transparent 42%, #000 43%);
+}
+
+/* A borda tem que casar com o fundo de cada lugar onde o avatar aparece. */
+.user-panel .status-dot { border-color: var(--painel); }
+.member .status-dot, .dm-row .status-dot, .contato-item .status-dot { border-color: var(--bg-2); }
+.member:hover .status-dot { border-color: var(--hover); }
+.voice-face .status-dot, .msg .status-dot { border-color: var(--bg-1); }
+
+.member-linhas { display: grid; flex: 1; min-width: 0; }
+
+.member-atividade {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.member-name.colorido { font-weight: 600; }
+
+/* Escolher o próprio status. */
+.status-picker .ctx-item { align-items: flex-start; }
+.status-picker .status-amostra {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border: none;
+  flex: none;
+}
+.status-picker small { display: block; font-size: 11px; color: var(--text-dim); line-height: 1.35; white-space: normal; }
+.status-picker .ctx-item:hover small { color: rgba(255, 255, 255, .75); }
+
+/* ========================================================================== */
+/*  Mensagens: ações, reações, resposta                                       */
+/* ========================================================================== */
+
+.msg { position: relative; }
+.msg:hover { background: rgba(2, 2, 2, .07); }
+.msg.destacada { background: rgba(88, 101, 242, .12); }
+
+.msg-acoes {
+  position: absolute;
+  right: 14px;
+  top: -14px;
+  display: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--bg-2);
+  box-shadow: 0 0 0 1px rgba(4, 4, 5, .15), 0 1px 3px rgba(0, 0, 0, .25);
+}
+
+.msg:hover .msg-acoes, .msg:focus-within .msg-acoes { display: flex; }
+.msg-acoes .icon-btn { width: 30px; height: 30px; border-radius: 4px; font-size: 15px; }
+.msg-acoes .icon-btn:hover { background: var(--hover); }
+.msg-acoes .icon-btn.perigo:hover { background: var(--danger); color: #fff; }
+
+/* Linha de cima quando a mensagem responde outra. */
+.reply-linha {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.reply-linha:hover .reply-texto { color: var(--text-soft); }
+
+/* O ganchinho que liga a resposta à mensagem original. */
+.reply-gancho {
+  width: 26px;
+  height: 9px;
+  border-left: 2px solid var(--line);
+  border-top: 2px solid var(--line);
+  border-top-left-radius: 6px;
+  flex: none;
+  align-self: flex-end;
+}
+
+.reply-autor { font-weight: 600; color: var(--text-soft); flex: none; }
+.reply-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+.msg-editada { margin-left: 4px; font-size: 10px; color: var(--text-dim); }
+.msg-fixada-selo { margin-left: 6px; font-size: 11px; color: var(--text-dim); }
+
+.reacoes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+
+.reacao {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .05);
+  font-size: 14px;
+  line-height: 20px;
+  transition: background .1s, border-color .1s;
+}
+
+.reacao:hover { background: rgba(255, 255, 255, .09); border-color: var(--text-dim); }
+.reacao.minha { background: rgba(88, 101, 242, .18); border-color: var(--accent); }
+.reacao.minha:hover { background: rgba(88, 101, 242, .28); }
+.reacao-conta { font-size: 12px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.reacao.minha .reacao-conta { color: #c3ccff; }
+
+.reacao-add {
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .04);
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 20px;
+  opacity: 0;
+}
+
+.msg:hover .reacao-add { opacity: 1; }
+.reacao-add:hover { background: rgba(255, 255, 255, .09); color: var(--text); }
+
+/* Barra acima do composer: respondendo alguém ou editando. */
+.composer-contexto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px;
+  padding: 8px 12px;
+  border-radius: 8px 8px 0 0;
+  background: var(--campo);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.composer-contexto strong { color: var(--text-soft); }
+.composer-contexto .composer-contexto-texto { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Seletor rápido de emoji pra reagir. */
+.emoji-rapido {
+  position: absolute;
+  z-index: 25;
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--bg-0);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, .3);
+}
+
+.emoji-rapido button { padding: 4px 6px; border-radius: 4px; font-size: 19px; line-height: 1; }
+.emoji-rapido button:hover { background: var(--hover); }
+
+/* ========================================================================== */
+/*  Mensagens fixadas                                                         */
+/* ========================================================================== */
+
+.pins-popover {
+  position: absolute;
+  right: 12px;
+  top: 46px;
+  z-index: 25;
+  width: min(420px, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg-0);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+}
+
+.pins-popover h4 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.pin-item {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--bg-1);
+  font-size: 14px;
+  text-align: left;
+}
+
+.pin-item:hover { background: var(--hover); }
+.pin-item .pin-autor { font-weight: 600; font-size: 13px; }
+.pin-item .pin-texto { color: var(--text-soft); word-break: break-word; }
+.pins-vazio { color: var(--text-dim); font-size: 13px; }
+
+/* ========================================================================== */
+/*  Comandos com barra (/)                                                    */
+/* ========================================================================== */
+
+.slash-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--bg-0);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+}
+
+.slash-titulo {
+  margin-bottom: 6px;
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.slash-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 4px;
+  text-align: left;
+  min-width: 0;
+}
+
+.slash-item:hover, .slash-item.ativo { background: var(--hover); }
+.slash-item .slash-nome { flex: none; font-weight: 600; color: var(--text); }
+.slash-item .slash-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Resposta de comando que só quem rodou enxerga. */
+.efemera-selo {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  font-size: 10px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ========================================================================== */
+/*  Convite de call e avisos flutuantes                                       */
+/* ========================================================================== */
+
+.convite-call-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 460px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--bg-0);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  font-size: 13px;
+  transform: translateX(-50%);
+  animation: convite-sobe .18s ease-out;
+}
+
+@keyframes convite-sobe {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.convite-call-banner .convite-texto { flex: 1; }
+.convite-call-banner button { padding: 7px 14px; border-radius: 6px; background: var(--bg-3); font-size: 13px; font-weight: 600; }
+.convite-call-banner button.primary { width: auto; background: var(--ok); }
+.convite-call-banner button.primary:hover { background: #1e9150; }
+
+/* ========================================================================== */
+/*  Cabecalho do chat e aviso flutuante                                       */
+/* ========================================================================== */
+
+.chat-head-divisor { width: 1px; height: 18px; background: var(--line); flex: none; }
+
+.chat-topico {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-head-acoes { display: flex; align-items: center; gap: 4px; margin-left: auto; flex: none; }
+.chat-head-acoes .icon-btn.ativo { color: var(--text); background: var(--hover); }
+
+/* Some a coluna da direita quando a pessoa esconde a lista de membros. */
+.app.sem-membros { grid-template-columns: 72px 240px 1fr; }
+
+.aviso-flutuante {
+  position: fixed;
+  left: 50%;
+  top: 18px;
+  z-index: 70;
+  max-width: min(90vw, 560px);
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  white-space: pre-line;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+  transform: translateX(-50%);
+  cursor: pointer;
+  animation: aviso-desce .16s ease-out;
+}
+
+@keyframes aviso-desce {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ------------------------- transmissao ao vivo ------------------------- */
+
+.voice-voltar {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: var(--bg-3);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.voice-voltar:hover { background: var(--hover); color: var(--text); }
+
+.voice-aovivo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 6px;
+  background: var(--bg-3);
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+
+.voice-aovivo:hover { background: var(--hover); color: var(--text); }
+
+.voice-aovivo-selo {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+
+/* --------------------- perfil: cargos e nota privada -------------------- */
+
+.profile-cargos { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.profile-cargo {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.profile-nota { margin-top: 4px; font-size: 13px; resize: vertical; }
+
+/* ------------------- configuracoes: notificacoes ------------------- */
+
+.settings-linha {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--bg-2);
+}
+
+.settings-linha > div { flex: 1; }
+.settings-linha .hint { margin: 4px 0 0; }
+
+.selo-permissao {
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--bg-3);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.selo-permissao.granted { background: rgba(35, 165, 89, .18); color: #58d68b; }
+.selo-permissao.denied { background: rgba(242, 63, 67, .18); color: #ff8b8e; }
+.selo-permissao.default { background: rgba(240, 178, 50, .18); color: #ffd075; }
+
+.settings-acoes { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.settings-acoes button { padding: 9px 16px; border-radius: 6px; background: var(--bg-3); font-weight: 600; font-size: 13.5px; }
+.settings-acoes button:hover { background: var(--hover); }
+.settings-acoes button.primary { width: auto; background: var(--accent); }
+.settings-acoes button.primary:hover { background: var(--accent-hover); }

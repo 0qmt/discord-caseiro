@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "discord-caseiro-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "server", "run", "start"],
+      "port": 3001
+    },
+    {
+      "name": "discord-caseiro-client",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "client", "run", "dev"],
+      "port": 5220
+    }
+  ]
+}

@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Teste de WebRTC (dev)</title>
+    <style>
+      body { font: 14px monospace; background: #16171b; color: #e6e8ec; padding: 20px; }
+      .ok::before { content: 'ok   '; color: #3ba55d; }
+      .falhou::before { content: 'FALHOU '; color: #e5555f; }
+      pre { white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>Teste de ponta a ponta da chamada</h1>
+    <p>
+      Sobe dois VoiceClient de verdade, com o signaling de verdade, e conecta um
+      no outro. Sem microfone nem câmera: a mídia é sintética.
+    </p>
+    <pre id="saida">rodando...</pre>
+
+    <script type="module">
+      import { io } from 'socket.io-client';
+      import { VoiceClient } from '/src/lib/voice.js';
+
+      const saida = document.getElementById('saida');
+      const linhas = [];
+      let passou = 0;
+      const falhas = [];
+
+      function check(rotulo, condicao, detalhe = '') {
+        if (condicao) { passou += 1; linhas.push(`<span class="ok">${rotulo}</span>`); }
+        else { falhas.push(rotulo); linhas.push(`<span class="falhou">${rotulo} ${detalhe}</span>`); }
+        saida.innerHTML = linhas.join('\n');
+      }
+
+      const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      async function ate(condicao, limite = 15000, passo = 200) {
+        const fim = Date.now() + limite;
+        while (Date.now() < fim) {
+          if (condicao()) return true;
+          await espera(passo);
+        }
+        return false;
+      }
+
+      /* -------- mídia sintética no lugar da câmera e do microfone -------- */
+
+      function audioSintetico() {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        osc.frequency.value = 440;
+        const destino = ctx.createMediaStreamDestination();
+        const ganho = ctx.createGain();
+        ganho.gain.value = 0.3;
+        osc.connect(ganho).connect(destino);
+        osc.start();
+        return destino.stream;
+      }
+
+      function videoSintetico(cor) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 320; canvas.height = 180;
+        const ctx = canvas.getContext('2d');
+        setInterval(() => {
+          ctx.fillStyle = cor;
+          ctx.fillRect(0, 0, 320, 180);
+          ctx.fillStyle = '#fff';
+          ctx.fillRect((Date.now() / 20) % 320, 80, 20, 20);
+        }, 40);
+        return canvas.captureStream(25);
+      }
+
+      /**
+       * Fonte grande (1920×1080) e rápida (desenha ~120x/s), só pra testar os
+       * presets de qualidade: precisa ser maior que qualquer preset pra dar
+       * pra ver a resolução realmente encolher, e mais rápida que 60fps pra
+       * não ser ela mesma o gargalo.
+       *
+       * Aplica as constraints já na captura, como o Chromium de verdade faz
+       * (getDisplayMedia com resolução/fps pedidos entrega a faixa já
+       * ajustada — não é um passo separado). Sem isso, o mock devolveria
+       * sempre a fonte crua e só o applyConstraints() de "mudar qualidade"
+       * pareceria funcionar, mascarando se o preset inicial foi aplicado.
+       */
+      async function telaGrandeSintetica(restricoesVideo) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1920; canvas.height = 1080;
+        const ctx = canvas.getContext('2d');
+        // 60Hz é o teto de qualquer preset (o mais rápido é "fluida", 60fps) -
+        // desenhar mais rápido que isso só sobrecarrega a CPU à toa e não
+        // ajuda em nada, além de arriscar acionar a redução automática de
+        // qualidade do próprio WebRTC quando o encoder fica sobrecarregado.
+        setInterval(() => {
+          ctx.fillStyle = '#e0a03a';
+          ctx.fillRect(0, 0, 1920, 1080);
+          ctx.fillStyle = '#fff';
+          ctx.fillRect((Date.now() / 4) % 1920, 400, 60, 60);
+        }, 16);
+        const stream = canvas.captureStream(60);
+        if (restricoesVideo) await stream.getVideoTracks()[0].applyConstraints(restricoesVideo).catch(() => {});
+        return stream;
+      }
+
+      // Liga/desliga sob demanda, pra simular "entrar sem microfone" e depois
+      // "ativar o microfone" no meio do teste.
+      let bloquearMicrofone = false;
+      navigator.mediaDevices.getUserMedia = async (restricoes) => {
+        if (!restricoes.video && bloquearMicrofone) {
+          const erro = new Error('sem microfone (simulado pelo teste)');
+          erro.name = 'NotFoundError';
+          throw erro;
+        }
+        return restricoes.video ? videoSintetico('#5b7cfa') : audioSintetico();
+      };
+      navigator.mediaDevices.getDisplayMedia = async () => videoSintetico('#3ba55d');
+
+      /* ------------------------------ o teste ---------------------------- */
+
+      async function entrar(email, senha) {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email, senha, password: senha }),
+        });
+        if (!res.ok) throw new Error(`login de ${email} falhou: ${res.status}`);
+        return res.json();
+      }
+
+      const conectar = (token) => new Promise((resolve, reject) => {
+        const socket = io({ auth: { token }, autoConnect: false });
+        socket.once('connect', () => resolve(socket));
+        socket.once('connect_error', reject);
+        socket.connect();
+      });
+
+      async function principal() {
+        const a = await entrar('joao@casa.local', 'senha-forte-123');
+        const b = await entrar('maria@casa.local', 'senha-forte-123');
+        check('as duas contas entram', Boolean(a.token && b.token));
+
+        const guilds = await fetch('/api/guilds', {
+          headers: { authorization: `Bearer ${a.token}` },
+        }).then((r) => r.json());
+        const detalhe = await fetch(`/api/guilds/${guilds.guilds[0].id}`, {
+          headers: { authorization: `Bearer ${a.token}` },
+        }).then((r) => r.json());
+        const canalVoz = detalhe.guild.channels.find((c) => c.type === 'voice');
+        check('achei um canal de voz', Boolean(canalVoz), JSON.stringify(detalhe.guild.channels));
+
+        const socketA = await conectar(a.token);
+        const socketB = await conectar(b.token);
+
+        let estadoA = null;
+        let estadoB = null;
+        const clienteA = new VoiceClient(socketA, (s) => { estadoA = s; });
+        const clienteB = new VoiceClient(socketB, (s) => { estadoB = s; });
+
+        await clienteA.join(canalVoz.id);
+        check('A entra no canal de voz', estadoA?.channelId === canalVoz.id, estadoA?.error ?? '');
+        check('A entra sozinho', estadoA?.peers.length === 0);
+
+        await clienteB.join(canalVoz.id);
+        check('B entra no canal de voz', estadoB?.channelId === canalVoz.id, estadoB?.error ?? '');
+
+        const viuUmAoOutro = await ate(() =>
+          estadoA?.peers.length === 1 && estadoB?.peers.length === 1);
+        check('os dois enxergam um ao outro', viuUmAoOutro,
+          `A=${estadoA?.peers.length} B=${estadoB?.peers.length}`);
+
+        const conectados = await ate(() =>
+          estadoA?.peers[0]?.connectionState === 'connected'
+          && estadoB?.peers[0]?.connectionState === 'connected');
+        check('a conexão WebRTC fecha nos dois lados', conectados,
+          `A=${estadoA?.peers[0]?.connectionState} B=${estadoB?.peers[0]?.connectionState}`);
+
+        const diag = (cliente, rotulo) => ({
+          rotulo,
+          pares: [...cliente.peers.entries()].map(([id, p]) => ({
+            id: id.slice(0, 6),
+            media: Object.fromEntries(Object.entries(p.media).map(([k, v]) => [k, Boolean(v)])),
+            receivers: p.pc.getReceivers().map((r) => `${r.track?.kind ?? '?'}:${r.track ? r.track.readyState : 'sem faixa'}`),
+            transceivers: Object.fromEntries(Object.entries(p.transceivers)
+              .map(([k, t]) => [k, `mid=${t.mid} dir=${t.currentDirection}`])),
+          })),
+        });
+        window.__diag = [diag(clienteA, 'A'), diag(clienteB, 'B')];
+
+        check('A sabe o nome de quem entrou', estadoA?.peers[0]?.user?.username === 'maria',
+          JSON.stringify(estadoA?.peers[0]?.user));
+        check('B sabe o nome de quem ja estava', estadoB?.peers[0]?.user?.username === 'joao',
+          JSON.stringify(estadoB?.peers[0]?.user));
+
+        check('B recebe a faixa de áudio de A', Boolean(estadoB?.peers[0]?.media.audio));
+
+        // Mídia de verdade trafegando, não só sinalização.
+        const bytesRecebidos = async (cliente) => {
+          const pc = [...cliente.peers.values()][0].pc;
+          let total = 0;
+          for (const relatorio of await pc.getStats()) {
+            const r = relatorio[1];
+            if (r.type === 'inbound-rtp' && r.kind === 'audio') total += r.bytesReceived ?? 0;
+          }
+          return total;
+        };
+        const fluindo = await ate(async () => (await bytesRecebidos(clienteB)) > 0, 10000);
+        check('áudio realmente trafega (bytesReceived > 0)', fluindo,
+          `bytes=${await bytesRecebidos(clienteB)}`);
+
+        // Mute
+        clienteA.toggleMute();
+        const viuMute = await ate(() => estadoB?.peers[0]?.state.muted === true, 5000);
+        check('B vê que A se mutou', viuMute);
+        clienteA.toggleMute();
+
+        // Câmera: replaceTrack, sem renegociar
+        await clienteA.toggleCamera();
+        const viuCamera = await ate(() =>
+          estadoB?.peers[0]?.state.camera === true && Boolean(estadoB?.peers[0]?.media.camera), 8000);
+        check('B recebe a câmera de A', viuCamera,
+          `state=${estadoB?.peers[0]?.state.camera} media=${Boolean(estadoB?.peers[0]?.media.camera)}`);
+
+        // Tela: usa o terceiro transceiver, separado da câmera
+        await clienteA.toggleScreen();
+        const viuTela = await ate(() =>
+          estadoB?.peers[0]?.state.screen === true && Boolean(estadoB?.peers[0]?.media.screen), 8000);
+        check('B recebe a tela de A', viuTela,
+          `state=${estadoB?.peers[0]?.state.screen} media=${Boolean(estadoB?.peers[0]?.media.screen)}`);
+
+        check('câmera e tela chegam em faixas diferentes',
+          estadoB?.peers[0]?.media.camera !== estadoB?.peers[0]?.media.screen
+          && Boolean(estadoB?.peers[0]?.media.camera) && Boolean(estadoB?.peers[0]?.media.screen));
+
+        const semRenegociar = await ate(() =>
+          estadoA?.peers[0]?.connectionState === 'connected', 3000);
+        check('a conexão continua de pé depois de câmera e tela', semRenegociar);
+
+        // Fps e qualidade da tela: precisa de pelo menos duas leituras de
+        // estatística (o kbps é calculado pela diferença entre duas), então
+        // dá tempo de sobra.
+        const statsChegaram = await ate(() => {
+          const s = estadoB?.peers[0]?.screenStats;
+          return Boolean(s?.fps && s?.width && s?.height && s?.kbps);
+        }, 15000);
+        const statsB = estadoB?.peers[0]?.screenStats;
+        check('quem recebe a tela vê fps/resolução/taxa de transmissão', statsChegaram,
+          JSON.stringify(statsB));
+        check('a resolução recebida bate com a da captura (320×180)',
+          statsB?.width === 320 && statsB?.height === 180, JSON.stringify(statsB));
+
+        const statsDoDono = await ate(() => {
+          const s = estadoA?.self?.screenStats;
+          return Boolean(s?.fps && s?.width && s?.height && s?.kbps);
+        }, 15000);
+        check('quem compartilha também vê os próprios fps/qualidade', statsDoDono,
+          JSON.stringify(estadoA?.self?.screenStats));
+
+        await clienteA.toggleScreen();   // encerra o compartilhamento
+        const statsSomem = await ate(() =>
+          estadoA?.self?.screenStats === null && estadoB?.peers[0]?.screenStats === null, 5000);
+        check('parar de compartilhar limpa as estatísticas dos dois lados', statsSomem,
+          `A=${JSON.stringify(estadoA?.self?.screenStats)} B=${JSON.stringify(estadoB?.peers[0]?.screenStats)}`);
+
+        // Detecção de fala com o tom sintético
+        const detectouFala = await ate(() => estadoA?.self.speaking === true, 5000);
+        check('detecção de fala acusa o áudio sintético', detectouFala);
+
+        // Saída de B - sobra só A na call, pra simplificar a próxima etapa.
+        clienteB.leave();
+        const viuSaida = await ate(() => estadoA?.peers.length === 0, 6000);
+        check('A vê B sair da chamada', viuSaida, `peers=${estadoA?.peers.length}`);
+        clienteB.destroy();
+        socketB.close();
+
+        /* ------------------- entrar na call sem microfone ------------------ */
+        // Segunda aba do joão: mesma conta, socket novo - assim testamos sem
+        // precisar de uma terceira conta cadastrada.
+        bloquearMicrofone = true;
+        const socketA2 = await conectar(a.token);
+        let estadoA2 = null;
+        const clienteA2 = new VoiceClient(socketA2, (s) => { estadoA2 = s; });
+
+        await clienteA2.join(canalVoz.id);
+        check('dá pra entrar na call mesmo sem microfone',
+          estadoA2?.channelId === canalVoz.id, JSON.stringify(estadoA2));
+        check('o aviso de "sem microfone" não bloqueia a entrada, só avisa',
+          typeof estadoA2?.error === 'string' && estadoA2.error.includes('ouvir'),
+          estadoA2?.error);
+        check('quem entra sem microfone começa sem mic e mutado',
+          estadoA2?.self.hasMic === false && estadoA2?.self.muted === true);
+
+        const aViuSemMic = await ate(() =>
+          estadoA?.peers[0]?.state.hasMic === false, 6000);
+        check('quem já estava na call vê que o novo não tem microfone', aViuSemMic,
+          JSON.stringify(estadoA?.peers[0]?.state));
+
+        const ouveAudioDeA = await ate(() => Boolean(estadoA2?.peers[0]?.media.audio), 8000);
+        check('mesmo sem mandar áudio, dá pra ouvir quem já estava na call', ouveAudioDeA);
+
+        // Mudou de ideia: ativa o microfone depois de já estar na call.
+        bloquearMicrofone = false;
+        await clienteA2.toggleMute();
+        check('ativar o microfone depois de entrar funciona',
+          estadoA2?.self.hasMic === true && estadoA2?.self.muted === false,
+          JSON.stringify(estadoA2?.self));
+
+        const aViuMicAtivado = await ate(() =>
+          estadoA?.peers[0]?.state.hasMic === true, 6000);
+        check('quem já estava na call vê o microfone ser ativado', aViuMicAtivado,
+          JSON.stringify(estadoA?.peers[0]?.state));
+
+        /* ---------------- várias qualidades e fps na tela compartilhada --------------- */
+        // A e A2 já estão conectados um no outro; A compartilha, A2 recebe.
+        navigator.mediaDevices.getDisplayMedia = async (restricoes) =>
+          telaGrandeSintetica(restricoes?.video);
+
+        // As checagens abaixo leem o lado de quem compartilha (getSettings do
+        // próprio track, via self.screenStats), não o que o outro lado
+        // recebeu: a entrega do outro lado passa pelo adaptador automático de
+        // qualidade do WebRTC (reage a CPU/rede), então é legítimo ele
+        // entregar menos do que foi pedido - isso não significa que o preset
+        // escolhido esteja errado. O que prova que o código fez a coisa certa
+        // é o que foi CONFIGURADO na faixa, que é exatamente o que
+        // getSettings() devolve.
+
+        await clienteA.toggleScreen();   // começa direto, sem escolher qualidade antes
+        check('começa a compartilhar com a qualidade padrão (720p, 30fps)',
+          estadoA?.self.telaResolucaoId === '720p' && estadoA?.self.telaFpsId === '30',
+          JSON.stringify(estadoA?.self));
+
+        const statsPadrao = await ate(() =>
+          estadoA?.self?.screenStats?.width === 1280
+          && estadoA?.self?.screenStats?.height === 720
+          && estadoA?.self?.screenStats?.fps === 30, 15000);
+        check('a faixa nasce configurada em 1280×720, 30fps',
+          statsPadrao, JSON.stringify(estadoA?.self?.screenStats));
+
+        // Muda só a resolução: a velocidade tem que continuar a mesma.
+        await clienteA.mudarQualidadeTela('480p', null);
+        check('mudar só a resolução mantém o fps como estava',
+          estadoA?.self.telaResolucaoId === '480p' && estadoA?.self.telaFpsId === '30',
+          JSON.stringify(estadoA?.self));
+
+        const stats480 = await ate(() =>
+          estadoA?.self?.screenStats?.width === 854
+          && estadoA?.self?.screenStats?.height === 480
+          && estadoA?.self?.screenStats?.fps === 30, 15000);
+        check('a faixa reconfigura pra 854×480 sem mexer no fps', stats480,
+          JSON.stringify(estadoA?.self?.screenStats));
+
+        // Agora só a velocidade: a resolução tem que continuar a mesma.
+        await clienteA.mudarQualidadeTela(null, '60');
+        check('mudar só a velocidade mantém a resolução como estava',
+          estadoA?.self.telaResolucaoId === '480p' && estadoA?.self.telaFpsId === '60',
+          JSON.stringify(estadoA?.self));
+
+        const stats480a60 = await ate(() =>
+          estadoA?.self?.screenStats?.width === 854 && estadoA?.self?.screenStats?.fps >= 50, 15000);
+        check('a faixa vai pra 60fps sem mexer na resolução', stats480a60,
+          JSON.stringify(estadoA?.self?.screenStats));
+
+        // Combinação que só existe por causa dos eixos independentes: 1080p a 60fps.
+        await clienteA.mudarQualidadeTela('1080p', '60');
+        check('dá pra combinar 1080p com 60fps ao mesmo tempo',
+          estadoA?.self.telaResolucaoId === '1080p' && estadoA?.self.telaFpsId === '60');
+
+        const stats1080p60 = await ate(() =>
+          estadoA?.self?.screenStats?.width === 1920
+          && estadoA?.self?.screenStats?.height === 1080
+          && estadoA?.self?.screenStats?.fps >= 50, 15000);
+        check('a faixa reconfigura pra 1920×1080 a 60fps sem derrubar a conexão',
+          stats1080p60 && estadoA2?.peers[0]?.connectionState === 'connected',
+          JSON.stringify({ self: estadoA?.self?.screenStats, conexao: estadoA2?.peers[0]?.connectionState }));
+
+        const receptorAindaRecebeAlgo = await ate(() =>
+          Boolean(estadoA2?.peers[0]?.media.screen) && estadoA2?.peers[0]?.connectionState === 'connected',
+          8000);
+        check('o outro lado continua recebendo a tela em todas as trocas de qualidade',
+          receptorAindaRecebeAlgo);
+
+        await clienteA.toggleScreen();   // encerra
+        check('parar de compartilhar limpa a resolução e o fps selecionados',
+          estadoA?.self.telaResolucaoId === null && estadoA?.self.telaFpsId === null);
+
+        clienteA2.leave();
+        clienteA2.destroy();
+        socketA2.close();
+
+        clienteA.leave();
+        clienteA.destroy();
+        socketA.close();
+
+        const total = passou + falhas.length;
+        linhas.push('');
+        linhas.push(`RESULTADO ${passou}/${total}`);
+        if (falhas.length) linhas.push(`falhas: ${falhas.join(', ')}`);
+        saida.innerHTML = linhas.join('\n');
+        window.__resultado = { passou, total, falhas };
+      }
+
+      principal().catch((err) => {
+        linhas.push(`<span class="falhou">quebrou: ${err.message}</span>`);
+        saida.innerHTML = linhas.join('\n');
+        window.__resultado = { passou, total: passou + falhas.length + 1, falhas: [String(err.message)] };
+      });
+    </script>
+  </body>
+</html>

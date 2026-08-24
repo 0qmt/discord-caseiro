@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Discord Caseiro</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #16171b;
+        overflow: hidden;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        -webkit-app-region: drag;
+      }
+      .logo {
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
+        filter: drop-shadow(0 20px 40px rgba(0, 0, 0, .5));
+        animation: pulsar 1.6s ease-in-out infinite;
+      }
+      @keyframes pulsar {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.06); }
+      }
+    </style>
+  </head>
+  <body>
+    <img class="logo" src="logo.png" alt="" />
+  </body>
+</html>

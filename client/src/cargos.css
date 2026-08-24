@@ -1,0 +1,147 @@
+/*
+ * Tela de cargos e os retoques da barra lateral que vieram com categorias.
+ * Separado de componentes.css só por assunto - a paleta continua vindo do
+ * :root de styles.css.
+ */
+
+/* ---------------------------- modal largo ---------------------------- */
+
+.modal.largo { width: min(760px, 94vw); }
+
+.campo-rotulo {
+  display: block;
+  margin: 16px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.perigo-link {
+  margin-top: 18px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.perigo-link:hover { background: #c93338; }
+
+/* ------------------------------ cargos ------------------------------ */
+
+.cargos-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 18px;
+  min-height: 340px;
+}
+
+.cargos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 6px;
+  border-right: 1px solid var(--line);
+}
+
+.cargos-novo {
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cargos-novo:hover { background: var(--accent-hover); }
+
+.cargos-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--text-soft);
+  font-size: 14px;
+}
+
+.cargos-item:hover { background: var(--hover); color: var(--text); }
+.cargos-item.ativo { background: var(--ativo); color: var(--text); }
+
+.cargos-bolinha { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.cargos-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cargos-detalhe { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+
+.cargos-cores { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.cargos-cor {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+
+.cargos-cor:hover { transform: scale(1.08); }
+.cargos-cor.ativa { border-color: var(--text); }
+.cargos-cor.sem { background: var(--bg-3); color: var(--text-dim); font-size: 15px; }
+
+.cargos-permissoes {
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--campo);
+}
+
+.cargos-permissoes .checkbox {
+  margin: 0;
+  padding: 6px 4px;
+  border-radius: 4px;
+  font-size: 13.5px;
+  color: var(--text-soft);
+}
+
+.cargos-permissoes .checkbox:hover { background: var(--hover); }
+.cargos-permissoes .hint { font-size: 11px; }
+
+/* --------------------- categorias na barra lateral -------------------- */
+
+.group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: left;
+}
+
+.group-toggle:hover { color: var(--text); }
+
+.group-seta {
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1;
+  transition: transform .15s ease;
+}
+
+/* Categoria fechada: a seta aponta pro lado em vez de pra baixo. */
+.group-seta.fechada { transform: rotate(-90deg); }
+
+@media (max-width: 720px) {
+  .cargos-layout { grid-template-columns: 1fr; }
+  .cargos-lista { border-right: none; border-bottom: 1px solid var(--line); max-height: 180px; }
+}
