@@ -2,15 +2,25 @@ import { useEffect, useState } from 'react';
 import Logo from './Logo.jsx';
 
 const NOME = 'Discord Caseiro';
-const INSTALADOR_URL = '/updates/discord-caseiro-setup-latest.exe';
+const REPO = '0qmt/discord-caseiro';
+// O instalador (~90 MB) vem direto do GitHub Releases, não do nosso servidor -
+// senão cada download passaria pelo túnel caseiro e comeria a banda dele à toa.
+const INSTALADOR_URL = `https://github.com/${REPO}/releases/latest/download/discord-caseiro-setup-latest.exe`;
 
-/** Busca a versão publicada de verdade; se o servidor não responder, some sem quebrar a página. */
+/** Busca a versão publicada de verdade; se o GitHub não responder, some sem quebrar a página. */
 function useVersaoPublicada() {
   const [info, setInfo] = useState(null);
   useEffect(() => {
-    fetch('/updates/version.json')
+    fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
       .then((r) => (r.ok ? r.json() : null))
-      .then(setInfo)
+      .then((r) => {
+        if (!r) return;
+        const exe = r.assets?.find((a) => a.name.endsWith('.exe') && !a.name.includes('blockmap'));
+        setInfo({
+          version: r.tag_name?.replace(/^v/, ''),
+          size: exe ? `${(exe.size / 1024 / 1024).toFixed(0)} MB` : null,
+        });
+      })
       .catch(() => {});
   }, []);
   return info;

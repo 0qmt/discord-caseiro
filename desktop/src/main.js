@@ -276,13 +276,21 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', mostrarJanelaPrincipal);
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     instalarCabecalhoDeTunel(session.defaultSession);
     instalarPermissoes(session.defaultSession, ehNossoServidor);
     instalarCapturaDeTela(session.defaultSession, () => janela);
     montarMenu();
     montarBandeja();
     mostrarSplash();
+
+    // O app já serve tudo com nome de arquivo com hash (index-XYZ.js) e o
+    // index.html com no-cache, mas mesmo assim o cache em disco do Electron
+    // (diferente de uma aba de navegador comum, ele sobrevive a fechar e
+    // abrir o app de novo) às vezes insiste numa cópia velha. Começar cada
+    // abertura sem cache nenhum é a forma mais simples de garantir que
+    // "fechei e abri" realmente pega a versão nova.
+    await session.defaultSession.clearCache();
     criarJanela();
 
     // Só instalado (via NSIS) o auto-update funciona de verdade - em dev

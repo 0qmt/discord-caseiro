@@ -1,4 +1,5 @@
 import Avatar from './Avatar.jsx';
+import Icon from './Icon.jsx';
 
 const RÓTULO_ANEXO = { image: '📷 imagem', gif: '🎬 GIF', video: '🎬 vídeo', audio: '🎵 áudio', file: '📎 arquivo' };
 
@@ -25,7 +26,7 @@ export default function DMSidebar({
     <aside className="channel-sidebar">
       <header className="sidebar-head">
         <span className="guild-name">Mensagens diretas</span>
-        <button className="icon-btn" title="Nova conversa" onClick={onNovaConversa}>+</button>
+        <button className="icon-btn" title="Nova conversa" onClick={onNovaConversa}><Icon name="plus" /></button>
       </header>
 
       <div className="channel-scroll">
@@ -65,7 +66,7 @@ export default function DMSidebar({
             {connected ? 'conectado' : 'reconectando...'}
           </span>
         </div>
-        <button className="icon-btn" title="Configurações" onClick={onOpenSettings}>⚙</button>
+        <button className="icon-btn" title="Configurações" onClick={onOpenSettings}><Icon name="settings" /></button>
       </footer>
     </aside>
   );

@@ -12,6 +12,8 @@ import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
 import { channelRoutes } from './routes/channels.js';
 import { dmRoutes } from './routes/dms.js';
+import { embedRoutes } from './routes/embed.js';
+import { reportRoutes } from './routes/reports.js';
 import { gifRoutes } from './routes/gifs.js';
 import { guildRoutes } from './routes/guilds.js';
 import { inviteRoutes } from './routes/invites.js';
@@ -37,13 +39,6 @@ app.get('/api/ice', (_req, res) => {
   res.json({ iceServers: [...config.iceServers, ...turnServers()] });
 });
 
-// Pasta onde `desktop/scripts/publicar.js` deixa o instalador mais recente,
-// o latest.yml (electron-updater le isso pra saber se tem versao nova) e um
-// version.json (a pagina de download le esse, mais simples que parsear yaml).
-// No-cache em tudo: latest.yml e version.json precisam refletir o build mais
-// recente na hora, e os arquivos aqui sao pequenos - cachear nao compensa.
-app.use('/updates', express.static(config.updatesDir, { maxAge: 0, etag: false }));
-
 app.use('/api/auth', authRoutes);
 app.use('/api/guilds', guildRoutes);
 app.use('/api/channels', channelRoutes);
@@ -54,6 +49,8 @@ app.use('/api/attachments', attachmentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/gifs', gifRoutes);
 app.use('/api/prefs', prefRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/embed', embedRoutes);
 
 // Avatares. O nome do arquivo ja e unico por upload, entao pode cachear forte.
 app.use('/uploads', express.static(config.uploadsDir, { maxAge: '365d', immutable: true }));

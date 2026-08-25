@@ -78,6 +78,25 @@ export const api = {
   listGuilds: () => request('GET', '/guilds'),
   createGuild: (payload) => request('POST', '/guilds', payload),
   getGuild: (guildId) => request('GET', `/guilds/${guildId}`),
+  updateGuild: (guildId, payload) => request('PATCH', `/guilds/${guildId}`, payload),
+
+  reportarBug: ({ title, whatHappens, whatStopsWorking, howToFix, images }) => {
+    const form = new FormData();
+    form.append('title', title);
+    form.append('whatHappens', whatHappens);
+    form.append('whatStopsWorking', whatStopsWorking);
+    if (howToFix) form.append('howToFix', howToFix);
+    for (const img of images ?? []) form.append('images', img);
+    return upload('/reports', form);
+  },
+
+  uploadGuildIcon: (guildId, file, crop) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (crop) form.append('crop', JSON.stringify(crop));
+    return upload(`/guilds/${guildId}/icon`, form);
+  },
+  deleteGuildIcon: (guildId) => request('DELETE', `/guilds/${guildId}/icon`),
 
   naoLidas: (guildId) => request('GET', `/guilds/${guildId}/unread`),
   createChannel: (guildId, payload) => request('POST', `/guilds/${guildId}/channels`, payload),
@@ -122,6 +141,7 @@ export const api = {
     return request('GET', `/channels/${channelId}/messages?${params}`);
   },
   pins: (channelId) => request('GET', `/channels/${channelId}/pins`),
+  getEmbed: (url) => request('GET', `/embed?url=${encodeURIComponent(url)}`),
   buscarNoCanal: (channelId, termo) =>
     request('GET', `/channels/${channelId}/search?q=${encodeURIComponent(termo)}`),
 

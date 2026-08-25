@@ -149,6 +149,67 @@ export const COMANDOS = [
     },
   },
   {
+    nome: 'id',
+    descricao: 'Mostra seu ID e @usuário (útil pra suporte/bot)',
+    exemplo: '/id',
+    run: ({ me }) => ({
+      aviso: `Seu ID: ${me.id}${me.handle ? `\n@${me.handle}` : '\n(você ainda não definiu um @usuário)'}`,
+    }),
+  },
+  {
+    nome: 'rolar',
+    descricao: 'Rola dados - ex: /rolar 2d6',
+    exemplo: '/rolar 2d20',
+    run: ({ argumento }) => {
+      const m = (argumento || '1d6').trim().match(/^(\d*)d(\d+)$/i);
+      if (!m) return { aviso: 'Formato: /rolar QUANTIDADEdLADOS - ex: /rolar 2d6' };
+      const quantidade = Math.min(Number(m[1] || 1), 20);
+      const lados = Math.min(Number(m[2]), 1000);
+      if (quantidade < 1 || lados < 1) return { aviso: 'Número inválido de dados ou lados.' };
+      const resultados = Array.from({ length: quantidade }, () => 1 + Math.floor(Math.random() * lados));
+      const total = resultados.reduce((a, b) => a + b, 0);
+      return { texto: `🎲 rolou ${quantidade}d${lados}: [${resultados.join(', ')}]${quantidade > 1 ? ` = ${total}` : ''}` };
+    },
+  },
+  {
+    nome: 'moeda',
+    descricao: 'Cara ou coroa',
+    exemplo: '/moeda',
+    run: () => ({ texto: `🪙 deu ${Math.random() < 0.5 ? 'cara' : 'coroa'}` }),
+  },
+  {
+    nome: 'escolher',
+    descricao: 'Escolhe um item aleatório entre opções separadas por vírgula',
+    exemplo: '/escolher pizza, hambúrguer, sushi',
+    run: ({ argumento }) => {
+      const opcoes = argumento.split(',').map((o) => o.trim()).filter(Boolean);
+      if (opcoes.length < 2) return { aviso: 'Separa as opções por vírgula: /escolher a, b, c' };
+      return { texto: `🤔 escolhi: ${opcoes[Math.floor(Math.random() * opcoes.length)]}` };
+    },
+  },
+  {
+    nome: 'silenciar',
+    descricao: 'Silencia as notificações deste canal por um tempo',
+    exemplo: '/silenciar 1h',
+    opcoes: ['15m', '1h', '8h', '24h', 'sempre'],
+    run: async ({ argumento, guild, activeChannelId, api }) => {
+      if (!guild || !activeChannelId) return { aviso: 'Abre um canal de texto primeiro.' };
+      const mapa = {
+        '15m': 15 * 60_000, '1h': 60 * 60_000, '8h': 8 * 60 * 60_000, '24h': 24 * 60 * 60_000,
+      };
+      const chave = (argumento || '1h').toLowerCase().trim();
+      const ms = mapa[chave];
+      if (chave !== 'sempre' && !ms) return { aviso: 'Duração válida: 15m, 1h, 8h, 24h ou sempre.' };
+      await api.setNotificationSetting({
+        scopeType: 'channel',
+        scopeId: activeChannelId,
+        level: 'all',
+        mutedUntil: chave === 'sempre' ? 8640000000000000 : Date.now() + ms,
+      });
+      return { aviso: `Canal silenciado ${chave === 'sempre' ? 'até você reativar' : `por ${chave}`}.` };
+    },
+  },
+  {
     nome: 'ajuda',
     descricao: 'Lista todos os comandos',
     exemplo: '/ajuda',

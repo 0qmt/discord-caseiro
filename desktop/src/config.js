@@ -11,7 +11,7 @@ const ARQUIVO = path.join(app.getPath('userData'), 'config.json');
  * digitar endereco nenhum. Quem hospeda o proprio servidor (ou testa em
  * dev) ainda troca em Arquivo > Trocar de servidor... a qualquer momento.
  */
-const PADRAO = { serverUrl: 'https://registry-absinthe-dehydrate.ngrok-free.dev' };
+const PADRAO = { serverUrl: 'http://discord-caseiro.duckdns.org:3001' };
 
 function ler() {
   try {

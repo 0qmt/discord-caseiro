@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import Icon from './Icon.jsx';
 
 /**
  * Menu de botão direito genérico.
@@ -75,7 +76,7 @@ function Item({ item, onFechar }) {
     >
       {item.icone && <span className="ctx-icone">{item.icone}</span>}
       <span>{item.label}</span>
-      {item.marcado && <span className="ctx-marca">✓</span>}
+      {item.marcado && <Icon name="check" size={13} className="ctx-marca" />}
       {item.atalho && <span className="ctx-atalho">{item.atalho}</span>}
     </button>
   );

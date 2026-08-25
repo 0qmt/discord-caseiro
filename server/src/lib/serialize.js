@@ -19,6 +19,9 @@ export const profileDto = (u) => ({
   bannerCrop: u.banner_crop ? JSON.parse(u.banner_crop) : null,
   bio: u.bio ?? null,
   createdAt: u.created_at,
+  themePrimary: u.theme_primary ?? null,
+  themeAccent: u.theme_accent ?? null,
+  themePosition: u.theme_position ?? null,
 });
 
 export const selfUser = (u) => ({ ...profileDto(u), email: u.email });
@@ -110,6 +113,8 @@ export const guildSummary = (g) => ({
   id: g.id,
   name: g.name,
   iconUrl: g.icon_url ?? null,
+  iconCrop: g.icon_crop ? JSON.parse(g.icon_crop) : null,
+  description: g.description ?? null,
   ownerId: g.owner_id,
   isPublic: Boolean(g.is_public),
   role: g.role ?? null,

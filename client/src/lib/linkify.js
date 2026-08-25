@@ -1,11 +1,12 @@
-// Casa http(s)://..., www.... e os tokens de menção (<@id> / <@everyone>) na
-// mesma passada - assim um não atropela o outro por acidente.
-const TOKEN_REGEX = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|<@everyone>|<@[a-zA-Z0-9]+>)/g;
+// Casa http(s)://..., www...., os tokens de menção (<@id> / <@everyone>),
+// ||spoiler|| e *itálico* na mesma passada - assim um não atropela o outro
+// por acidente. Ordem importa: ||...|| antes de *...*, senão um spoiler com
+// asterisco dentro quebraria em dois.
+const TOKEN_REGEX = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|<@everyone>|<@[a-zA-Z0-9]+>|\|\|[^|]+\|\||\*[^*\n]+\*)/g;
 
 /**
- * Quebra um texto em pedaços string/link/menção, pra renderizar como React
- * sem dangerouslySetInnerHTML. Link vira { href, texto }; menção vira
- * { mencao: 'everyone' | idDoUsuario }.
+ * Quebra um texto em pedaços string/link/menção/spoiler/itálico, pra
+ * renderizar como React sem dangerouslySetInnerHTML.
  */
 export function linkify(texto) {
   const partes = [];
@@ -18,6 +19,20 @@ export function linkify(texto) {
     if (bruto.startsWith('<@')) {
       if (indice > ultimoIndice) partes.push(texto.slice(ultimoIndice, indice));
       partes.push({ mencao: bruto === '<@everyone>' ? 'everyone' : bruto.slice(2, -1) });
+      ultimoIndice = indice + bruto.length;
+      continue;
+    }
+
+    if (bruto.startsWith('||')) {
+      if (indice > ultimoIndice) partes.push(texto.slice(ultimoIndice, indice));
+      partes.push({ spoiler: bruto.slice(2, -2) });
+      ultimoIndice = indice + bruto.length;
+      continue;
+    }
+
+    if (bruto.startsWith('*')) {
+      if (indice > ultimoIndice) partes.push(texto.slice(ultimoIndice, indice));
+      partes.push({ italico: bruto.slice(1, -1) });
       ultimoIndice = indice + bruto.length;
       continue;
     }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar.jsx';
+import Icon from './Icon.jsx';
 import { getSaidaAudio, assinarSaidaAudio } from '../lib/audioOutput.js';
 
 /**
@@ -190,11 +191,11 @@ function Tile({
         style={zoom !== 1 ? { transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)` } : undefined}
       />
       <span className="voice-tile-label">
-        {tipo === 'screen' ? '🖥' : '🎥'} {label}
+        <Icon name={tipo === 'screen' ? 'monitor' : 'camera'} size={13} /> {label}
       </span>
       {(muted || !hasMic) && (
         <span className="voice-tile-mic" title={hasMic ? 'mutado' : 'sem microfone'}>
-          {hasMic ? '🔇' : '👂'}
+          <Icon name={hasMic ? 'mic-off' : 'headphones'} size={12} />
         </span>
       )}
       {qualidade && <span className="voice-tile-qualidade">{qualidade}</span>}
@@ -209,8 +210,8 @@ function Tile({
         )}
         {ehTela && (
           <>
-            <button className="icon-btn faint" title="Abrir em janela flutuante" onClick={abrirPopup}>⧉</button>
-            <button className="icon-btn faint" title="Tela cheia" onClick={alternarTelaCheia}>⛶</button>
+            <button className="icon-btn faint" title="Abrir em janela flutuante" onClick={abrirPopup}><Icon name="picture-in-picture" size={13} /></button>
+            <button className="icon-btn faint" title="Tela cheia" onClick={alternarTelaCheia}><Icon name="expand" size={14} /></button>
           </>
         )}
       </span>
@@ -226,7 +227,7 @@ function Tile({
 function AcaoExpulsar({ podeExpulsar, votacao, onExpulsar, onVotarExpulsao }) {
   if (podeExpulsar) {
     return (
-      <button className="icon-btn faint perigo" title="Expulsar da chamada" onClick={onExpulsar}>⛔</button>
+      <button className="icon-btn faint perigo" title="Expulsar da chamada" onClick={onExpulsar}><Icon name="ban" size={13} /></button>
     );
   }
   return (
@@ -235,7 +236,7 @@ function AcaoExpulsar({ podeExpulsar, votacao, onExpulsar, onVotarExpulsao }) {
       title={votacao ? `Votar expulsão (${votacao.votos}/${votacao.necessario})` : 'Votar para expulsar da chamada'}
       onClick={onVotarExpulsao}
     >
-      ✋{votacao && <span className="voice-tile-votos">{votacao.votos}/{votacao.necessario}</span>}
+      <Icon name="hand" size={13} />{votacao && <span className="voice-tile-votos">{votacao.votos}/{votacao.necessario}</span>}
     </button>
   );
 }
@@ -320,7 +321,7 @@ export default function VoiceStage({
 
         {assistindo && (
           <button className="voice-voltar" onClick={onPararDeAssistir}>
-            ← Ver todo mundo
+            <Icon name="arrow-right" size={13} style={{ transform: 'rotate(180deg)' }} /> Ver todo mundo
           </button>
         )}
 
@@ -336,7 +337,9 @@ export default function VoiceStage({
           </button>
         ))}
 
-        <button className="icon-btn" title="Minimizar" onClick={onMinimizar}>⌄</button>
+        <button className="icon-btn" title="Minimizar" onClick={onMinimizar}>
+          <Icon name="arrow-right" size={15} style={{ transform: 'rotate(90deg)' }} />
+        </button>
       </header>
 
       {tiles.length > 0 ? (

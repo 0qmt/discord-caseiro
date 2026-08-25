@@ -194,9 +194,15 @@
 /* Linha de cima quando a mensagem responde outra. */
 .reply-linha {
   display: flex;
+  /* .message é um flex row (avatar + corpo lado a lado); sem "width: 100%"
+     aqui essa linha vira uma quarta coluna nesse row em vez de empilhar por
+     cima - o wrap no .message (ver styles.css) é o que faz ela quebrar pra
+     sua própria linha. */
+  width: 100%;
   align-items: center;
   gap: 6px;
   margin-bottom: 3px;
+  margin-left: 50px; /* alinha com o corpo da mensagem, não com o avatar */
   font-size: 13px;
   color: var(--text-dim);
   cursor: pointer;
@@ -209,8 +215,8 @@
 .reply-gancho {
   width: 26px;
   height: 9px;
-  border-left: 2px solid var(--line);
-  border-top: 2px solid var(--line);
+  border-left: 2px solid var(--line-claro);
+  border-top: 2px solid var(--line-claro);
   border-top-left-radius: 6px;
   flex: none;
   align-self: flex-end;
@@ -428,7 +434,7 @@
 /*  Cabecalho do chat e aviso flutuante                                       */
 /* ========================================================================== */
 
-.chat-head-divisor { width: 1px; height: 18px; background: var(--line); flex: none; }
+.chat-head-divisor { width: 1px; height: 18px; background: var(--line-claro); flex: none; }
 
 .chat-topico {
   flex: 1;
@@ -558,3 +564,183 @@
 .settings-acoes button:hover { background: var(--hover); }
 .settings-acoes button.primary { width: auto; background: var(--accent); }
 .settings-acoes button.primary:hover { background: var(--accent-hover); }
+
+/* --------------------------------- spoiler -------------------------------- */
+
+.spoiler {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: #1a1b1e;
+  color: transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: background .1s;
+}
+
+.spoiler:hover { background: #232428; }
+
+.spoiler.revelado {
+  background: rgba(255, 255, 255, .06);
+  color: inherit;
+  cursor: text;
+  user-select: text;
+}
+
+/* ========================================================================== */
+/*  Tema de perfil: cores + galeria de gradientes prontos                     */
+/* ========================================================================== */
+
+.tema-cores { display: flex; align-items: center; gap: 20px; margin-bottom: 12px; }
+
+.tema-cor-campo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.tema-cor-botao {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+}
+
+.tema-cor-botao:hover { border-color: var(--text-soft); }
+
+.tema-remover {
+  margin-left: auto;
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-decoration: underline;
+}
+
+.tema-remover:hover { color: var(--danger); }
+
+.tema-galeria {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tema-galeria-item {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 2px solid transparent;
+}
+
+.tema-galeria-item:hover { transform: scale(1.06); }
+.tema-galeria-item.ativo { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+
+/* --------------------------------- picker --------------------------------- */
+
+.color-picker {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  z-index: 30;
+  display: grid;
+  gap: 10px;
+  width: 240px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg-0);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+  transform: translateX(-50%);
+  cursor: default;
+}
+
+.color-picker-sv {
+  position: relative;
+  height: 140px;
+  border-radius: 6px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.color-picker-alca {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.color-picker-hue {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.color-picker-alca-hue {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.color-picker-hex {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--campo);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.color-picker-hex input {
+  flex: 1;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  text-transform: uppercase;
+}
+
+.color-picker-conta-gotas {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.color-picker-conta-gotas:hover { background: var(--hover); }
+.color-picker-conta-gotas input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.color-picker-recentes { display: flex; gap: 6px; }
+
+.color-picker-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+
+.color-picker-ok { padding: 8px; border-radius: 6px; font-size: 13px; font-weight: 600; }

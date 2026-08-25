@@ -1,3 +1,6 @@
+import { cropStyle } from '../lib/cropStyle.js';
+import Icon from './Icon.jsx';
+
 const initials = (name) =>
   name
     .split(/\s+/)
@@ -8,6 +11,7 @@ const initials = (name) =>
 
 export default function GuildBar({
   guilds, activeGuildId, dmMode, unreadDmTotal, onSelect, onOpenDms, onCreate, onJoin, unreadByGuild,
+  onReportarBug,
 }) {
   return (
     <nav className="guild-bar">
@@ -16,7 +20,7 @@ export default function GuildBar({
         title="Mensagens diretas"
         onClick={onOpenDms}
       >
-        💬
+        <Icon name="message-circle" size={22} />
         {unreadDmTotal > 0 && !dmMode && <span className="badge">{unreadDmTotal}</span>}
       </button>
       <div className="guild-bar-divisor" />
@@ -28,15 +32,24 @@ export default function GuildBar({
           title={guild.name}
           onClick={() => onSelect(guild.id)}
         >
-          {initials(guild.name)}
+          {guild.iconUrl ? (
+            <span className="guild-pill-icone">
+              <img src={guild.iconUrl} alt="" style={cropStyle(guild.iconCrop)} />
+            </span>
+          ) : initials(guild.name)}
           {unreadByGuild[guild.id] > 0 && guild.id !== activeGuildId && (
             <span className="badge">{unreadByGuild[guild.id]}</span>
           )}
         </button>
       ))}
 
-      <button className="guild-pill ghost" title="Criar servidor" onClick={onCreate}>+</button>
-      <button className="guild-pill ghost" title="Entrar com convite" onClick={onJoin}>&#8594;</button>
+      <button className="guild-pill ghost" title="Criar servidor" onClick={onCreate}><Icon name="plus" size={20} /></button>
+      <button className="guild-pill ghost" title="Entrar com convite" onClick={onJoin}><Icon name="arrow-right" size={19} /></button>
+
+      <div className="guild-bar-divisor" />
+      <button className="guild-pill ghost reportar" title="Reportar um problema" onClick={onReportarBug}>
+        <Icon name="alert-triangle" size={19} />
+      </button>
     </nav>
   );
 }

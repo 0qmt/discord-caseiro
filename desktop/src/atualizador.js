@@ -8,9 +8,9 @@ const REAVISO_MS = 20 * 60 * 1000;
 
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = false;
-// Mesmo motivo do main.js: o ngrok gratuito interroga navegacoes de
-// pagina, nao deveria pegar esses pedidos, mas nao custa nada garantir.
-autoUpdater.requestHeaders = { 'ngrok-skip-browser-warning': '1' };
+// Atualizacao vem do GitHub Releases (ver "publish" em package.json), nao
+// mais do nosso tunel - o instalador e grande (~90MB) e baixar ele pelo
+// tunel caseiro toda hora e o que estourava a banda gratis do ngrok.
 
 let infoBaixada = null;
 let janelaAviso = null;

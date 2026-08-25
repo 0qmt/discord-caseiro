@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ScreenQualityPopover from './ScreenQualityPopover.jsx';
+import Icon from './Icon.jsx';
 
 export default function VoicePanel({ voice, channelName, actions }) {
   // Hooks não podem vir depois de um return condicional, então os guards de
@@ -41,7 +42,7 @@ export default function VoicePanel({ voice, channelName, actions }) {
       {voice.error && (
         <div className="voice-erro">
           <span>{voice.error}</span>
-          <button className="icon-btn" title="Fechar" onClick={actions.clearError}>x</button>
+          <button className="icon-btn" title="Fechar" onClick={actions.clearError}><Icon name="x" size={14} /></button>
         </div>
       )}
 
@@ -52,7 +53,7 @@ export default function VoicePanel({ voice, channelName, actions }) {
             title={!hasMic ? 'Você entrou sem microfone — clique pra ativar' : muted ? 'Desmutar' : 'Mutar'}
             onClick={actions.toggleMute}
           >
-            {!hasMic ? '🎙️' : muted ? '🔇' : '🎙'}
+            <Icon name={!hasMic ? 'mic-off' : muted ? 'mic-off' : 'mic'} />
           </button>
 
           <button
@@ -60,7 +61,7 @@ export default function VoicePanel({ voice, channelName, actions }) {
             title={deafened ? 'Voltar a ouvir' : 'Ensurdecer (para de ouvir e muta você junto)'}
             onClick={actions.toggleDeafen}
           >
-            {deafened ? '🔕' : '🎧'}
+            <Icon name={deafened ? 'headphones-off' : 'headphones'} />
           </button>
 
           <button
@@ -68,7 +69,7 @@ export default function VoicePanel({ voice, channelName, actions }) {
             title={camera ? 'Desligar câmera' : 'Ligar câmera'}
             onClick={actions.toggleCamera}
           >
-            🎥
+            <Icon name={camera ? 'camera' : 'camera-off'} />
           </button>
 
           <button
@@ -76,7 +77,7 @@ export default function VoicePanel({ voice, channelName, actions }) {
             title={screen ? 'Parar de compartilhar' : 'Compartilhar tela'}
             onClick={() => { setAjusteAberto(false); actions.toggleScreen(); }}
           >
-            🖥
+            <Icon name="monitor" />
           </button>
 
           {screen && (
@@ -85,12 +86,12 @@ export default function VoicePanel({ voice, channelName, actions }) {
               title="Ajustar qualidade da transmissão"
               onClick={() => setAjusteAberto((v) => !v)}
             >
-              ⚙
+              <Icon name="settings" />
             </button>
           )}
 
           <button className="voice-btn perigo" title="Sair da chamada" onClick={actions.leave}>
-            ⏻
+            <Icon name="power" />
           </button>
         </div>
       )}

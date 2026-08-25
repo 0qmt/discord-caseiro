@@ -1,8 +1,14 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Router } from 'express';
+import multer from 'multer';
+import { config } from '../config.js';
 import { q, tx } from '../db.js';
 import { requireAuth } from '../lib/auth.js';
 import { emitToGuild, getIo } from '../lib/bus.js';
 import { newId, newInviteCode } from '../lib/ids.js';
+import { parseCrop, removeFile, sniffImage } from '../lib/images.js';
 import {
   can, hasRole, highestPosition, membership, podeAgirSobre, requirePerm, requireRole,
   rolesOf, PERM, PERMISSOES_PADRAO,
@@ -12,6 +18,11 @@ import { dropVoiceRoom } from '../voice.js';
 
 export const guildRoutes = Router();
 guildRoutes.use(requireAuth);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: config.maxAvatarBytes, files: 1 },
+});
 
 /** Só aceita cor em #rrggbb; qualquer outra coisa vira "sem cor". */
 function corValida(bruto) {
@@ -79,6 +90,92 @@ guildRoutes.get('/:guildId', (req, res) => {
   const guild = guildDetail(req.params.guildId, req.user.id);
   if (!guild) return res.status(404).json({ error: 'servidor nao encontrado' });
   res.json({ guild });
+});
+
+/** Renomear o servidor, mudar a descrição ou se ele é público (pra convites). */
+guildRoutes.patch('/:guildId', requirePerm(PERM.GERENCIAR_SERVIDOR), (req, res) => {
+  const { guildId } = req.params;
+  const patch = {};
+
+  if (req.body?.name !== undefined) {
+    const name = String(req.body.name).trim();
+    if (name.length < 2 || name.length > 64) {
+      return res.status(400).json({ error: 'nome do servidor precisa ter de 2 a 64 caracteres' });
+    }
+    patch.name = name;
+  }
+
+  if (req.body?.description !== undefined) {
+    const description = String(req.body.description).trim();
+    if (description.length > 300) {
+      return res.status(400).json({ error: 'a descricao passa de 300 caracteres' });
+    }
+    patch.description = description || null;
+  }
+
+  if (req.body?.isPublic !== undefined) {
+    patch.is_public = req.body.isPublic ? 1 : 0;
+  }
+
+  if (!Object.keys(patch).length) return res.status(400).json({ error: 'nada pra alterar' });
+
+  for (const [column, value] of Object.entries(patch)) {
+    q.run(`UPDATE guilds SET ${column} = ? WHERE id = ?`, value, guildId);
+  }
+
+  const guild = guildDetail(guildId, req.user.id);
+  emitToGuild(guildId, 'guild:updated', guild);
+  res.json({ guild });
+});
+
+/** Ícone do servidor: mesma regra do avatar de usuário (ver lib/images.js). */
+guildRoutes.post('/:guildId/icon', requirePerm(PERM.GERENCIAR_SERVIDOR), upload.single('file'), (req, res) => {
+  const { guildId } = req.params;
+  if (!req.file) return res.status(400).json({ error: 'nenhum arquivo enviado' });
+
+  const kind = sniffImage(req.file.buffer);
+  if (!kind) {
+    return res.status(400).json({ error: 'formato nao suportado (use png, jpg, webp ou gif)' });
+  }
+
+  const crop = parseCrop(req.body?.crop);
+  if (kind.animated && !crop) {
+    return res.status(400).json({ error: 'imagem animada precisa vir com os dados do recorte' });
+  }
+
+  const anterior = q.get('SELECT icon_url FROM guilds WHERE id = ?', guildId);
+  const filename = `${guildId}-${crypto.randomBytes(8).toString('hex')}.${kind.ext}`;
+  fs.writeFileSync(path.join(config.uploadsDir, filename), req.file.buffer);
+  removeFile(anterior?.icon_url);
+
+  q.run(
+    'UPDATE guilds SET icon_url = ?, icon_crop = ? WHERE id = ?',
+    `/uploads/${filename}`, kind.animated ? JSON.stringify(crop) : null, guildId,
+  );
+
+  const guild = guildDetail(guildId, req.user.id);
+  emitToGuild(guildId, 'guild:updated', guild);
+  res.json({ guild });
+});
+
+guildRoutes.delete('/:guildId/icon', requirePerm(PERM.GERENCIAR_SERVIDOR), (req, res) => {
+  const { guildId } = req.params;
+  const anterior = q.get('SELECT icon_url FROM guilds WHERE id = ?', guildId);
+  removeFile(anterior?.icon_url);
+  q.run('UPDATE guilds SET icon_url = NULL, icon_crop = NULL WHERE id = ?', guildId);
+
+  const guild = guildDetail(guildId, req.user.id);
+  emitToGuild(guildId, 'guild:updated', guild);
+  res.json({ guild });
+});
+
+/** Erros do multer (arquivo grande demais) viram mensagem legivel. */
+guildRoutes.use((err, _req, res, next) => {
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    const mb = Math.round(config.maxAvatarBytes / (1024 * 1024));
+    return res.status(413).json({ error: `arquivo passa de ${mb} MB` });
+  }
+  return next(err);
 });
 
 /* -------------------------------- canais -------------------------------- */

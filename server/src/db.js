@@ -53,6 +53,17 @@ addColumnIfMissing('channels', 'category_id', 'TEXT');
 // (nome do jogo/programa detectado pelo app de desktop).
 addColumnIfMissing('users', 'status', "TEXT NOT NULL DEFAULT 'online'");
 
+// Tema do perfil: duas cores (#rrggbb) que viram um gradiente atrás do
+// cartão de perfil - null nas duas = sem tema, usa o fundo padrão.
+addColumnIfMissing('users', 'theme_primary', 'TEXT');
+addColumnIfMissing('users', 'theme_accent', 'TEXT');
+// 0-100: onde a cor de destaque termina de dominar o degradê (a barrinha que
+// a pessoa ajusta abaixo das duas cores).
+addColumnIfMissing('users', 'theme_position', 'INTEGER');
+
+addColumnIfMissing('guilds', 'icon_crop', 'TEXT');
+addColumnIfMissing('guilds', 'description', 'TEXT');
+
 /**
  * Todo servidor precisa de um cargo @everyone pra ser a base das permissoes.
  * Os que nasceram antes dos cargos customizados ganham o deles aqui, com as

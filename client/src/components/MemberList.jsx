@@ -1,6 +1,7 @@
 import { corDoMembro, nomeExibido, PERM, podeAgirSobre, temPermissao } from '../lib/cargos.js';
 import Avatar from './Avatar.jsx';
 import StatusDot from './StatusDot.jsx';
+import Icon from './Icon.jsx';
 
 const ROLE_LABEL = { owner: 'dono', admin: 'admin', member: null };
 
@@ -56,7 +57,7 @@ function MemberRow({
             title="Chamar pra sua chamada"
             onClick={() => onChamarParaCall(member)}
           >
-            📞
+            <Icon name="phone" size={13} />
           </button>
         )}
         {canManage && member.role !== 'owner' && !isMe && (
@@ -66,9 +67,15 @@ function MemberRow({
               title={member.role === 'admin' ? 'Rebaixar para membro' : 'Promover a admin'}
               onClick={() => onPromote(member, member.role === 'admin' ? 'member' : 'admin')}
             >
-              {member.role === 'admin' ? '↓' : '↑'}
+              <Icon
+                name="arrow-right"
+                size={13}
+                style={{ transform: `rotate(${member.role === 'admin' ? 90 : -90}deg)` }}
+              />
             </button>
-            <button className="icon-btn faint" title="Expulsar" onClick={() => onKick(member)}>x</button>
+            <button className="icon-btn faint" title="Expulsar" onClick={() => onKick(member)}>
+              <Icon name="x" size={13} />
+            </button>
           </>
         )}
       </span>
@@ -133,14 +140,14 @@ export function itensDoMembro({
 }) {
   const itens = [{ tipo: 'titulo', label: nomeExibido(membro) }];
 
-  itens.push({ label: 'Ver perfil', icone: '👤', onClick: () => acoes.abrirPerfil(membro) });
+  itens.push({ label: 'Ver perfil', icone: <Icon name="user" size={15} />, onClick: () => acoes.abrirPerfil(membro) });
   if (!souEu) {
     itens.push({ label: 'Mencionar', icone: '@', onClick: () => acoes.mencionar(membro) });
-    itens.push({ label: 'Mensagem direta', icone: '💬', onClick: () => acoes.abrirDm(membro) });
+    itens.push({ label: 'Mensagem direta', icone: <Icon name="message-circle" size={15} />, onClick: () => acoes.abrirDm(membro) });
     if (acoes.chamarParaCall) {
-      itens.push({ label: 'Puxar pra call', icone: '📞', onClick: () => acoes.chamarParaCall(membro) });
+      itens.push({ label: 'Puxar pra call', icone: <Icon name="phone" size={15} />, onClick: () => acoes.chamarParaCall(membro) });
     }
-    itens.push({ label: 'Nota privada', icone: '📝', onClick: () => acoes.abrirNota(membro) });
+    itens.push({ label: 'Nota privada', icone: <Icon name="note" size={15} />, onClick: () => acoes.abrirNota(membro) });
   }
 
   // Trocar o próprio apelido é sempre permitido; o dos outros exige cargo.
@@ -148,7 +155,7 @@ export function itensDoMembro({
     || (temPermissao(euMembro, guild, PERM.GERENCIAR_APELIDOS) && podeAgirSobre(euMembro, membro, guild));
   if (podeMexerNoApelido) {
     itens.push({ tipo: 'sep' });
-    itens.push({ label: 'Alterar apelido', icone: '✎', onClick: () => acoes.mudarApelido(membro) });
+    itens.push({ label: 'Alterar apelido', icone: <Icon name="pencil" size={15} />, onClick: () => acoes.mudarApelido(membro) });
   }
 
   const mandaNele = podeAgirSobre(euMembro, membro, guild);
@@ -158,7 +165,7 @@ export function itensDoMembro({
     itens.push({
       tipo: 'sub',
       label: 'Cargos',
-      icone: '🏷',
+      icone: <Icon name="tag" size={15} />,
       itens: cargosAtribuiveis.map((r) => ({
         key: r.id,
         label: r.name,
@@ -186,10 +193,10 @@ export function itensDoMembro({
 
   if (mandaNele && (temPermissao(euMembro, guild, PERM.EXPULSAR) || guild?.role === 'owner')) {
     itens.push({ tipo: 'sep' });
-    itens.push({ label: 'Expulsar do servidor', icone: '🚪', perigo: true, onClick: () => acoes.expulsar(membro) });
+    itens.push({ label: 'Expulsar do servidor', icone: <Icon name="door-exit" size={15} />, perigo: true, onClick: () => acoes.expulsar(membro) });
   }
   if (mandaNele && temPermissao(euMembro, guild, PERM.BANIR)) {
-    itens.push({ label: 'Banir', icone: '⛔', perigo: true, onClick: () => acoes.banir(membro) });
+    itens.push({ label: 'Banir', icone: <Icon name="ban" size={15} />, perigo: true, onClick: () => acoes.banir(membro) });
   }
 
   itens.push({ tipo: 'sep' });

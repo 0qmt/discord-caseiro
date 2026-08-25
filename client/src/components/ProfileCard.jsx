@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { cargosDoMembro } from '../lib/cargos.js';
 import { cropStyle } from '../lib/cropStyle.js';
+import { estiloGradiente } from '../lib/cor.js';
 import Avatar from './Avatar.jsx';
 import Modal from './Modal.jsx';
 
@@ -63,14 +64,25 @@ export default function ProfileCard({ userId, guild, reloadToken, onClose, onEdi
   const cargo = membro?.role;
   const cargosColoridos = cargosDoMembro(membro, guild?.roles);
 
+  const temTema = Boolean(profile?.themePrimary && profile?.themeAccent);
+  const estiloTema = temTema
+    ? estiloGradiente(profile.themePrimary, profile.themeAccent, profile.themePosition)
+    : null;
+
   return (
-    <Modal title="Perfil" onClose={onClose}>
+    <Modal title="Perfil" onClose={onClose} bare>
       {error && <div className="auth-error">{error}</div>}
       {!profile && !error && <p className="hint">carregando...</p>}
 
       {profile && (
-        <div className="profile">
-          <div className="profile-banner">
+        <div className="profile" style={estiloTema ?? undefined}>
+          {/* Sem banner próprio, a faixa é transparente e deixa o gradiente do
+              .profile (o pai) aparecer; com banner, a foto cobre e o gradiente
+              só some pra reaparecer mais embaixo, no corpo - como se
+              continuasse por trás da foto. "topo" arredonda os cantos de
+              cima porque, sem cabeçalho, a faixa agora encosta direto no
+              topo do modal. */}
+          <div className="profile-banner topo" style={temTema ? { background: 'none' } : undefined}>
             {profile.bannerUrl && (
               <img src={profile.bannerUrl} alt="" style={cropStyle(profile.bannerCrop)} />
             )}

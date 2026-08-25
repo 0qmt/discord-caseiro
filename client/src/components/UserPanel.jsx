@@ -1,5 +1,6 @@
 import Avatar from './Avatar.jsx';
 import StatusDot from './StatusDot.jsx';
+import Icon from './Icon.jsx';
 
 /** Os quatro status, com a explicação que aparece no menu. */
 export const STATUS = [
@@ -35,15 +36,15 @@ export function itensDeStatus({ me, statusAtual, onTrocarStatus, onAbrirPerfil, 
                 {s.label}
                 {s.dica && <small>{s.dica}</small>}
               </span>
-              {statusAtual === s.id && <span className="ctx-marca">✓</span>}
+              {statusAtual === s.id && <Icon name="check" size={13} className="ctx-marca" />}
             </button>
           ))}
         </div>
       ),
     },
     { tipo: 'sep' },
-    { label: 'Ver meu perfil', icone: '👤', onClick: onAbrirPerfil },
-    { label: 'Configurações', icone: '⚙', onClick: onAbrirConfiguracoes },
+    { label: 'Ver meu perfil', icone: <Icon name="user" size={15} />, onClick: onAbrirPerfil },
+    { label: 'Configurações', icone: <Icon name="settings" size={15} />, onClick: onAbrirConfiguracoes },
   ];
 }
 
@@ -70,7 +71,7 @@ export default function UserPanel({
         </span>
       </div>
 
-      <button className="icon-btn" title="Configurações" onClick={onAbrirConfiguracoes}>⚙</button>
+      <button className="icon-btn" title="Configurações" onClick={onAbrirConfiguracoes}><Icon name="settings" /></button>
     </footer>
   );
 }

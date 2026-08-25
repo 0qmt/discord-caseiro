@@ -132,16 +132,92 @@
 .group-toggle:hover { color: var(--text); }
 
 .group-seta {
-  display: inline-block;
+  display: inline-flex;
   font-size: 13px;
   line-height: 1;
+  transform: rotate(90deg);
   transition: transform .15s ease;
 }
 
 /* Categoria fechada: a seta aponta pro lado em vez de pra baixo. */
-.group-seta.fechada { transform: rotate(-90deg); }
+.group-seta.fechada { transform: rotate(0deg); }
 
 @media (max-width: 720px) {
   .cargos-layout { grid-template-columns: 1fr; }
   .cargos-lista { border-right: none; border-bottom: 1px solid var(--line); max-height: 180px; }
+}
+
+/* ---------------------- perfil com tema: campos discretos --------------------- */
+
+/* Com o gradiente por baixo, um campo de input opaco (--campo, cinza sólido)
+   vira uma caixa cinza destacada e feia flutuando em cima da cor. Translúcido
+   deixa o gradiente passar por trás e o campo continua legível. */
+.profile.com-tema input,
+.profile.com-tema textarea {
+  background: rgba(0, 0, 0, .28);
+  border-color: rgba(255, 255, 255, .12);
+}
+
+.profile.com-tema input:focus,
+.profile.com-tema textarea:focus {
+  background: rgba(0, 0, 0, .38);
+}
+
+.tema-posicao {
+  display: block;
+  margin: 4px 0 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: none;
+  color: var(--text-dim);
+}
+
+/* ------------------------- tema do app (Configurações) ------------------------- */
+
+.tema-app-escolha {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 16px 0 20px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--campo);
+}
+
+.tema-app-escolha .tema-posicao { margin: 12px 0 0; }
+.tema-app-escolha .tema-cores { margin: 0; padding: 0; background: none; }
+
+.tema-app-modos {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.tema-app-modos button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--campo);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tema-app-modos button:hover { color: var(--text); }
+.tema-app-modos button.ativo { background: var(--accent); color: #fff; }
+
+.tema-app-preview-gradiente {
+  height: 64px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+}
+
+.tema-posicao input[type="range"] {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 0;
+  background: none;
+  border: none;
+  accent-color: var(--accent);
 }

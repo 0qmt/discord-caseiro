@@ -7,6 +7,9 @@ import { codificarMencoes, mensagemMenciona } from '../lib/mencoes.js';
 import Avatar from './Avatar.jsx';
 import ContextMenu, { useContextMenu } from './ContextMenu.jsx';
 import GifPicker from './GifPicker.jsx';
+import Icon from './Icon.jsx';
+import ImageLightbox from './ImageLightbox.jsx';
+import LinkPreview from './LinkPreview.jsx';
 
 const timeOf = (ts) =>
   new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -18,7 +21,7 @@ const dayOf = (ts) =>
 const EMOJIS_RAPIDOS = ['👍', '❤️', '😂', '🔥', '😮', '😢', '🎉', '👀'];
 
 /** Mensagens seguidas da mesma pessoa em ate 5 min viram um bloco so. */
-function shouldGroup(previous, message) {
+export function shouldGroup(previous, message) {
   if (!previous) return false;
   if (previous.author.id !== message.author.id) return false;
   // Uma resposta sempre começa bloco novo: ela precisa da linha de cima
@@ -28,13 +31,29 @@ function shouldGroup(previous, message) {
 }
 
 /** Texto com URLs viráveis em link e <@id>/<@everyone> virando @nome destacado. */
-function Conteudo({ texto, membros, meuId }) {
+/** ||spoiler||: fica borrado até clicar - clique não deve abrir link nenhum por baixo. */
+function Spoiler({ texto }) {
+  const [revelado, setRevelado] = useState(false);
+  return (
+    <span
+      className={`spoiler ${revelado ? 'revelado' : ''}`}
+      onClick={(e) => { e.stopPropagation(); setRevelado(true); }}
+      title={revelado ? undefined : 'Clique pra revelar'}
+    >
+      {texto}
+    </span>
+  );
+}
+
+export function Conteudo({ texto, membros, meuId }) {
   if (!texto) return null;
   return linkify(texto).map((parte, i) => {
     if (typeof parte === 'string') return <span key={i}>{parte}</span>;
     if ('href' in parte) {
       return <a key={i} href={parte.href} target="_blank" rel="noreferrer noopener">{parte.texto}</a>;
     }
+    if ('spoiler' in parte) return <Spoiler key={i} texto={parte.spoiler} />;
+    if ('italico' in parte) return <em key={i}>{parte.italico}</em>;
     // menção
     const souEu = parte.mencao === 'everyone' || parte.mencao === meuId;
     const alvo = membros?.find((m) => m.id === parte.mencao);
@@ -43,10 +62,24 @@ function Conteudo({ texto, membros, meuId }) {
   });
 }
 
-function Anexo({ anexo }) {
+export function Anexo({ anexo }) {
+  const [aberta, setAberta] = useState(false);
   if (!anexo) return null;
   if (anexo.type === 'image' || anexo.type === 'gif') {
-    return <img className="anexo-imagem" src={anexo.url} alt={anexo.name ?? 'imagem'} loading="lazy" />;
+    return (
+      <>
+        <img
+          className="anexo-imagem clicavel"
+          src={anexo.url}
+          alt={anexo.name ?? 'imagem'}
+          loading="lazy"
+          onClick={() => setAberta(true)}
+        />
+        {aberta && (
+          <ImageLightbox src={anexo.url} nome={anexo.name} onClose={() => setAberta(false)} />
+        )}
+      </>
+    );
   }
   if (anexo.type === 'video') {
     return <video className="anexo-video" src={anexo.url} controls />;
@@ -56,7 +89,7 @@ function Anexo({ anexo }) {
   }
   return (
     <a className="anexo-arquivo" href={anexo.url} download={anexo.name ?? undefined}>
-      <span className="anexo-arquivo-icone">📎</span>
+      <span className="anexo-arquivo-icone"><Icon name="file" size={15} /></span>
       <span className="anexo-arquivo-nome">{anexo.name ?? 'arquivo'}</span>
     </a>
   );
@@ -78,7 +111,7 @@ function MencaoPicker({ termo, membros, onEscolher }) {
     <div className="mencao-picker">
       {mostraTodos && (
         <button type="button" className="mencao-picker-item" onClick={() => onEscolher('everyone')}>
-          <span className="mencao-picker-icone">📢</span>
+          <span className="mencao-picker-icone"><Icon name="users" size={16} /></span>
           <div>
             <span className="mencao-picker-nome">@everyone</span>
             <span className="mencao-picker-dica">avisa todo mundo do servidor</span>
@@ -120,7 +153,9 @@ function SlashMenu({ lista, ativo, onEscolher }) {
 function Reacoes({ reactions, meuId, onReagir, onAbrirEmoji }) {
   if (!reactions?.length) {
     return (
-      <button type="button" className="reacao-add" title="Reagir" onClick={onAbrirEmoji}>☺+</button>
+      <button type="button" className="reacao-add" title="Reagir" onClick={onAbrirEmoji}>
+        <Icon name="smile" size={14} />
+      </button>
     );
   }
   return (
@@ -137,7 +172,9 @@ function Reacoes({ reactions, meuId, onReagir, onAbrirEmoji }) {
           <span className="reacao-conta">{r.count}</span>
         </button>
       ))}
-      <button type="button" className="reacao-add" title="Reagir" onClick={onAbrirEmoji}>☺+</button>
+      <button type="button" className="reacao-add" title="Reagir" onClick={onAbrirEmoji}>
+        <Icon name="smile" size={14} />
+      </button>
     </div>
   );
 }
@@ -171,6 +208,7 @@ export default function ChatView({
   onAlternarMembros,
   membrosVisiveis = true,
   inserirNoCampo,
+  naoLidasAoAbrir = 0,
 }) {
   const [draft, setDraft] = useState('');
   const [anexoPendente, setAnexoPendente] = useState(null);
@@ -185,9 +223,11 @@ export default function ChatView({
   const [pinsAbertos, setPinsAbertos] = useState(false);
   const [pins, setPins] = useState([]);
   const [destacada, setDestacada] = useState(null);
+  const [marcadorId, setMarcadorId] = useState(null);
   const scrollRef = useRef(null);
   const bottomRef = useRef(null);
   const stickToBottom = useRef(true);
+  const posicionouNaoLida = useRef(false);
   const lastTypingSent = useRef(0);
   const arquivoRef = useRef(null);
   const campoRef = useRef(null);
@@ -195,14 +235,29 @@ export default function ChatView({
 
   const listaSlash = useMemo(() => (onRodarComando ? sugestoes(draft) : []), [draft, onRodarComando]);
 
-  // So arrasta pro fim se a pessoa ja estava no fim - nao rouba a leitura
-  // de quem subiu pra ler mensagem antiga.
+  // Canal com não lida: abre em cima da primeira mensagem não lida (com um
+  // divisor "novas mensagens"), não sempre no fim - só desce pro fim quando
+  // já tava tudo lido mesmo. Uma vez posicionado, o resto do scroll volta a
+  // ser o normal (gruda no fim só se a pessoa já tava lá).
   useLayoutEffect(() => {
+    if (!posicionouNaoLida.current && naoLidasAoAbrir > 0 && messages.length > 0) {
+      const indice = Math.max(0, messages.length - naoLidasAoAbrir);
+      const alvo = messages[indice];
+      posicionouNaoLida.current = true;
+      if (alvo) {
+        setMarcadorId(alvo.id);
+        stickToBottom.current = false;
+        scrollRef.current?.querySelector(`[data-msg="${alvo.id}"]`)?.scrollIntoView({ block: 'start' });
+        return;
+      }
+    }
     if (stickToBottom.current) bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages, channel?.id]);
+  }, [messages, channel?.id, naoLidasAoAbrir]);
 
   useEffect(() => {
-    stickToBottom.current = true;
+    stickToBottom.current = naoLidasAoAbrir === 0;
+    posicionouNaoLida.current = false;
+    setMarcadorId(null);
     setDraft('');
     setAnexoPendente(null);
     setErroAnexo(null);
@@ -362,11 +417,7 @@ export default function ChatView({
     setMencaoTermo(null);
   }
 
-  async function escolherArquivo(e) {
-    const arquivo = e.target.files?.[0];
-    e.target.value = '';
-    if (!arquivo) return;
-
+  async function enviarArquivoParaAnexo(arquivo) {
     setErroAnexo(null);
     setEnviandoAnexo(true);
     try {
@@ -377,6 +428,23 @@ export default function ChatView({
     } finally {
       setEnviandoAnexo(false);
     }
+  }
+
+  function escolherArquivo(e) {
+    const arquivo = e.target.files?.[0];
+    e.target.value = '';
+    if (arquivo) enviarArquivoParaAnexo(arquivo);
+  }
+
+  /** Colar print (Ctrl+V) vira anexo igual escolher um arquivo - só não deixa
+      colar o texto normal (link, etc.) se vier junto com uma imagem. */
+  function handlePaste(e) {
+    const arquivo = [...e.clipboardData?.items ?? []]
+      .find((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      ?.getAsFile();
+    if (!arquivo) return;
+    e.preventDefault();
+    enviarArquivoParaAnexo(arquivo);
   }
 
   function escolherGif(gif) {
@@ -393,33 +461,33 @@ export default function ChatView({
       itens.push({
         tipo: 'sub',
         label: 'Adicionar reação',
-        icone: '☺',
+        icone: <Icon name="smile" size={15} />,
         itens: EMOJIS_RAPIDOS.map((emoji) => ({
           key: emoji, label: emoji, onClick: () => onReagir(message.id, emoji),
         })),
       });
     }
-    itens.push({ label: 'Responder', icone: '↩', onClick: () => { setRespondendo(message); campoRef.current?.focus(); } });
+    itens.push({ label: 'Responder', icone: <Icon name="reply" size={15} />, onClick: () => { setRespondendo(message); campoRef.current?.focus(); } });
     if (meuTexto && onEditarMensagem && message.content) {
-      itens.push({ label: 'Editar', icone: '✎', onClick: () => iniciarEdicao(message) });
+      itens.push({ label: 'Editar', icone: <Icon name="pencil" size={15} />, onClick: () => iniciarEdicao(message) });
     }
     if (onFixarMensagem && podeModerar) {
       itens.push({
         label: message.pinnedAt ? 'Desafixar' : 'Fixar mensagem',
-        icone: '📌',
+        icone: <Icon name="pin" size={15} />,
         onClick: () => onFixarMensagem(message.id, !message.pinnedAt),
       });
     }
     itens.push({ tipo: 'sep' });
     itens.push({
       label: 'Copiar texto',
-      icone: '⧉',
+      icone: <Icon name="copy" size={15} />,
       onClick: () => navigator.clipboard?.writeText(message.content ?? '').catch(() => {}),
     });
     if (message.attachment) {
       itens.push({
         label: 'Copiar link do anexo',
-        icone: '🔗',
+        icone: <Icon name="link" size={15} />,
         onClick: () => navigator.clipboard?.writeText(
           new URL(message.attachment.url, window.location.origin).href,
         ).catch(() => {}),
@@ -434,7 +502,7 @@ export default function ChatView({
     if ((meuTexto || podeModerar) && onApagarMensagem) {
       itens.push({ tipo: 'sep' });
       itens.push({
-        label: 'Excluir mensagem', icone: '🗑', perigo: true,
+        label: 'Excluir mensagem', icone: <Icon name="trash" size={15} />, perigo: true,
         onClick: () => onApagarMensagem(message.id),
       });
     }
@@ -469,14 +537,14 @@ export default function ChatView({
           </>
         )}
         <div className="chat-head-acoes">
-          <button className="icon-btn" title="Mensagens fixadas" onClick={abrirPins}>📌</button>
+          <button className="icon-btn" title="Mensagens fixadas" onClick={abrirPins}><Icon name="pin" /></button>
           {onAlternarMembros && (
             <button
               className={`icon-btn ${membrosVisiveis ? 'ativo' : ''}`}
               title={membrosVisiveis ? 'Esconder membros' : 'Mostrar membros'}
               onClick={onAlternarMembros}
             >
-              👥
+              <Icon name="users" />
             </button>
           )}
         </div>
@@ -494,7 +562,7 @@ export default function ChatView({
                   onClick={() => { setPinsAbertos(false); irPara(p.id); }}
                 >
                   <div className="pin-autor">{p.author.username}</div>
-                  <div className="pin-texto">{p.content || '📎 anexo'}</div>
+                  <div className="pin-texto">{p.content || 'anexo'}</div>
                 </button>
               ))}
             </div>
@@ -524,6 +592,9 @@ export default function ChatView({
           return (
             <div key={message.id}>
               {showDivider && <div className="day-divider"><span>{day}</span></div>}
+              {message.id === marcadorId && (
+                <div className="novas-mensagens-divider"><span>NOVAS MENSAGENS</span></div>
+              )}
               <div
                 data-msg={message.id}
                 className={[
@@ -542,7 +613,7 @@ export default function ChatView({
                       {nomeExibido(members?.find((m) => m.id === message.replyTo.authorId))
                         || message.replyTo.username}
                     </span>
-                    <span className="reply-texto">{message.replyTo.content || '📎 anexo'}</span>
+                    <span className="reply-texto">{message.replyTo.content || 'anexo'}</span>
                   </div>
                 )}
 
@@ -568,7 +639,7 @@ export default function ChatView({
                         {nomeExibido(membro) || message.author.username}
                       </button>
                       <span className="time">{timeOf(message.createdAt)}</span>
-                      {message.pinnedAt && <span className="msg-fixada-selo" title="fixada">📌</span>}
+                      {message.pinnedAt && <Icon name="pin" size={11} className="msg-fixada-selo" title="fixada" />}
                     </div>
                   )}
 
@@ -579,6 +650,7 @@ export default function ChatView({
                     </div>
                   )}
                   {message.attachment && <Anexo anexo={message.attachment} />}
+                  {message.content && <LinkPreview texto={message.content} />}
 
                   {onReagir && !message.pending && (
                     <Reacoes
@@ -615,7 +687,7 @@ export default function ChatView({
                         title="Reagir"
                         onClick={() => setEmojiPara(emojiPara === message.id ? null : message.id)}
                       >
-                        ☺
+                        <Icon name="smile" />
                       </button>
                     )}
                     <button
@@ -623,10 +695,10 @@ export default function ChatView({
                       title="Responder"
                       onClick={() => { setRespondendo(message); campoRef.current?.focus(); }}
                     >
-                      ↩
+                      <Icon name="reply" />
                     </button>
                     {meuTexto && onEditarMensagem && message.content && (
-                      <button className="icon-btn" title="Editar" onClick={() => iniciarEdicao(message)}>✎</button>
+                      <button className="icon-btn" title="Editar" onClick={() => iniciarEdicao(message)}><Icon name="pencil" /></button>
                     )}
                     {(meuTexto || podeModerar) && onApagarMensagem && (
                       <button
@@ -634,7 +706,7 @@ export default function ChatView({
                         title="Excluir"
                         onClick={() => onApagarMensagem(message.id)}
                       >
-                        🗑
+                        <Icon name="trash" />
                       </button>
                     )}
                     <button
@@ -642,7 +714,7 @@ export default function ChatView({
                       title="Mais"
                       onClick={(e) => menu.abrirCom(() => itensDaMensagem(message))(e)}
                     >
-                      ⋯
+                      <Icon name="more" />
                     </button>
                   </div>
                 )}
@@ -674,7 +746,7 @@ export default function ChatView({
                 title="Remover anexo"
                 onClick={() => setAnexoPendente(null)}
               >
-                x
+                <Icon name="x" size={13} />
               </button>
             </>
           )}
@@ -685,7 +757,7 @@ export default function ChatView({
         <div className="composer-contexto">
           <span className="composer-contexto-texto"><strong>{contextoComposer.rotulo}</strong></span>
           <span>{contextoComposer.extra}</span>
-          <button type="button" className="icon-btn" title="Cancelar" onClick={cancelarContexto}>x</button>
+          <button type="button" className="icon-btn" title="Cancelar" onClick={cancelarContexto}><Icon name="x" size={13} /></button>
         </div>
       )}
 
@@ -702,7 +774,7 @@ export default function ChatView({
           title="Enviar arquivo"
           onClick={() => arquivoRef.current?.click()}
         >
-          +
+          <Icon name="plus" size={18} />
         </button>
 
         <div className="composer-campo-wrap">
@@ -717,6 +789,7 @@ export default function ChatView({
             value={draft}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={editando ? 'Edite a mensagem e aperte Enter' : (placeholder ?? `Mensagem em #${channel.name}`)}
             rows={1}
             maxLength={4000}

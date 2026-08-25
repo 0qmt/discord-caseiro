@@ -1,6 +1,6 @@
 {
   "name": "discord-caseiro-desktop",
-  "version": "0.2.2",
+  "version": "0.2.6",
   "private": true,
   "description": "Cliente de desktop do Discord Caseiro",
   "main": "src/main.js",
@@ -25,8 +25,9 @@
       "src/**/*"
     ],
     "publish": {
-      "provider": "generic",
-      "url": "https://registry-absinthe-dehydrate.ngrok-free.dev/updates"
+      "provider": "github",
+      "owner": "0qmt",
+      "repo": "discord-caseiro"
     },
     "win": {
       "target": [

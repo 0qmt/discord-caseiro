@@ -17,10 +17,14 @@ import ConfirmDialog from './components/ConfirmDialog.jsx';
 import ContextMenu, { useContextMenu } from './components/ContextMenu.jsx';
 import DMSidebar from './components/DMSidebar.jsx';
 import GuildBar from './components/GuildBar.jsx';
+import Icon from './components/Icon.jsx';
 import MemberList, { itensDoMembro } from './components/MemberList.jsx';
+import GuildSettingsModal from './components/GuildSettingsModal.jsx';
+import OrbitApp from './skins/orbit/OrbitApp.jsx';
 import Modal from './components/Modal.jsx';
 import ProfileCard from './components/ProfileCard.jsx';
 import ProfileEditor from './components/ProfileEditor.jsx';
+import ReportBugModal from './components/ReportBugModal.jsx';
 import RolesModal from './components/RolesModal.jsx';
 import SettingsScreen from './components/SettingsScreen.jsx';
 import { itensDeStatus } from './components/UserPanel.jsx';
@@ -185,6 +189,21 @@ export default function App() {
   const [messages, setMessages] = useState({});
   const [channelState, setChannelState] = useState({});
   const [unread, setUnread] = useState({});
+  // Quantas mensagens estavam não lidas quando cada canal foi aberto - é o
+  // que decide se a tela abre em cima da primeira não lida ou no fim do
+  // chat (ver selectChannel). Fica até trocar de canal e voltar.
+  const [marcadorNaoLidas, setMarcadorNaoLidas] = useState({});
+
+  // Pele visual alternativa ("versão de teste" nas configurações): mesmo
+  // estado/lógica de sempre, só troca quem desenha a tela - ver
+  // skins/orbit/OrbitApp.jsx. Guardado, senão a cada refresh voltava pro
+  // clássico sem avisar.
+  const [interfaceTeste, setInterfaceTeste] = useState(
+    () => localStorage.getItem('discord-caseiro:interface-teste') === '1',
+  );
+  useEffect(() => {
+    localStorage.setItem('discord-caseiro:interface-teste', interfaceTeste ? '1' : '0');
+  }, [interfaceTeste]);
 
   // Mensagens diretas vivem paralelas aos servidores: mesma forma dos estados
   // acima (mensagens/estado do canal/nao-lidas), so que por dmChannelId.
@@ -249,11 +268,36 @@ export default function App() {
   const guildMembroDeMim = guild?.members.find((m) => m.id === me?.id) ?? null;
   const podeGerenciarMensagens = temPermissao(guildMembroDeMim, guild, PERM.GERENCIAR_MENSAGENS);
   const podeGerenciarCanais = temPermissao(guildMembroDeMim, guild, PERM.GERENCIAR_CANAIS);
+  const podeGerenciarServidor = temPermissao(guildMembroDeMim, guild, PERM.GERENCIAR_SERVIDOR);
   const minhaAtividade = presencas[me?.id]?.activity ?? null;
 
   useEffect(() => {
     if (atualizacaoPendente && !voice.channelId) window.location.reload();
   }, [atualizacaoPendente, voice.channelId]);
+
+  /**
+   * Detecta sozinho quando um deploy novo saiu, sem precisar que alguém
+   * clique em "Recarregar todo mundo" nas configurações: de tempos em
+   * tempos busca a index.html de novo e compara o arquivo do bundle
+   * (o nome muda a cada build, o Vite grava um hash nele) com o que essa
+   * aba já tem carregado. Mudou = tem versão nova, mostra o mesmo aviso.
+   */
+  useEffect(() => {
+    const scriptAtual = document.querySelector('script[type="module"]')?.getAttribute('src');
+    if (!scriptAtual) return;
+    const checar = async () => {
+      try {
+        const resposta = await fetch('/', { cache: 'no-store' });
+        const html = await resposta.text();
+        const [, scriptNovo] = html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/) ?? [];
+        if (scriptNovo && scriptNovo !== scriptAtual) setAtualizacaoPendente(true);
+      } catch {
+        // sem internet/servidor fora do ar por um instante - tenta de novo depois
+      }
+    };
+    const intervalo = setInterval(checar, 3 * 60 * 1000);
+    return () => clearInterval(intervalo);
+  }, []);
 
   // Quem estávamos assistindo parou de transmitir (ou saiu): volta pra grade
   // em vez de deixar um quadro preto na tela.
@@ -386,6 +430,13 @@ export default function App() {
         setGuild((prev) => (prev && prev.id === channel.guildId
           ? { ...prev, channels: prev.channels.map((c) => (c.id === channel.id ? channel : c)) }
           : prev)),
+
+      // Nome, ícone, descrição ou "é público" mudaram - o próprio evento já
+      // vem com o servidor inteiro, não precisa buscar de novo.
+      'guild:updated': (guild) => {
+        setGuilds((prev) => prev.map((g) => (g.id === guild.id ? { ...g, ...guild } : g)));
+        setGuild((prev) => (prev && prev.id === guild.id ? { ...prev, ...guild } : prev));
+      },
 
       'role:updated': ({ guildId }) => refreshGuildIfActive(guildId),
       'role:deleted': ({ guildId }) => refreshGuildIfActive(guildId),
@@ -576,7 +627,7 @@ export default function App() {
       {
         tipo: 'sub',
         label: silenciado ? 'Silenciado' : 'Notificações',
-        icone: silenciado ? '🔕' : '🔔',
+        icone: <Icon name={silenciado ? 'bell-off' : 'bell'} size={15} />,
         itens: [
           ...NIVEIS.map((n) => ({
             key: n.id,
@@ -651,6 +702,16 @@ export default function App() {
     // Não-lidas de verdade: vêm da marca de leitura guardada no servidor, e
     // não do que aconteceu nesta aba - senão o contador zeraria a cada F5.
     api.naoLidas(activeGuildId).then(({ unread }) => {
+      // O canal que abre sozinho ao entrar no servidor não passa pelo
+      // selectChannel (que é quem guarda isso ao clicar) - sem isso aqui,
+      // reabrir o app numa não-lida sempre cairia direto no fim do chat.
+      setMarcadorNaoLidas((prev) => {
+        const next = { ...prev };
+        for (const [channelId, count] of Object.entries(unread)) {
+          if (next[channelId] === undefined) next[channelId] = count;
+        }
+        return next;
+      });
       setUnread((prev) => {
         const next = { ...prev };
         for (const [channelId, count] of Object.entries(unread)) {
@@ -768,6 +829,10 @@ export default function App() {
   }
 
   const selectChannel = (channelId) => {
+    // Guarda quantas mensagens estavam não lidas ANTES de marcar como lido -
+    // é o que deixa a tela abrir bem em cima delas em vez de pular direto
+    // pro fim (só quando já está tudo lido é que faz sentido abrir no fim).
+    setMarcadorNaoLidas((prev) => ({ ...prev, [channelId]: unread[channelId]?.count ?? 0 }));
     setActiveChannelId(channelId);
     setCallMaximizada(false);   // igual ao Discord: olhar pro chat encolhe a call
     setSendError(null);
@@ -838,6 +903,7 @@ export default function App() {
     try {
       const saida = await comando.run({
         argumento, me, guild, voice, voiceActions, presenceActions, api,
+        activeChannelId: dmMode ? null : activeChannelId,
       });
       if (saida?.texto) {
         if (dmMode) sendDmMessage(saida.texto, null);
@@ -929,7 +995,7 @@ export default function App() {
       },
       {
         label: voiceActions.estaSilenciadoLocal(participante.socketId) ? 'Ouvir de novo' : 'Silenciar só pra mim',
-        icone: '🔇',
+        icone: <Icon name="mic-off" size={15} />,
         onClick: () => voiceActions.alternarSilencioLocal(participante.socketId),
       },
     ];
@@ -938,7 +1004,7 @@ export default function App() {
     // no canal sem abrir o vídeo de ninguém.
     if (participante.state.screen) {
       extras.push({
-        label: 'Assistir transmissão', icone: '📺',
+        label: 'Assistir transmissão', icone: <Icon name="monitor" size={15} />,
         onClick: () => { setCallMaximizada(true); setTelaAssistida(participante.socketId); },
       });
     }
@@ -949,7 +1015,7 @@ export default function App() {
       extras.push({ tipo: 'sep' });
       extras.push({
         label: participante.state.serverMuted ? 'Tirar silêncio do servidor' : 'Silenciar no servidor',
-        icone: '🔇',
+        icone: <Icon name="mic-off" size={15} />,
         onClick: () => voiceActions.moderar(participante.socketId, {
           serverMuted: !participante.state.serverMuted,
         }),
@@ -958,7 +1024,7 @@ export default function App() {
     if (mandaNele && temPermissao(guildMembroDeMim, guild, PERM.ENSURDECER_MEMBROS)) {
       extras.push({
         label: participante.state.serverDeafened ? 'Deixar ouvir de novo' : 'Ensurdecer no servidor',
-        icone: '🎧',
+        icone: <Icon name="headphones" size={15} />,
         onClick: () => voiceActions.moderar(participante.socketId, {
           serverDeafened: !participante.state.serverDeafened,
         }),
@@ -971,7 +1037,7 @@ export default function App() {
       extras.push({
         tipo: 'sub',
         label: 'Mover para',
-        icone: '➡',
+        icone: <Icon name="arrow-right" size={15} />,
         itens: outrosCanaisDeVoz.map((c) => ({
           key: c.id, label: c.name, onClick: () => voiceActions.mover(participante.socketId, c.id),
         })),
@@ -981,12 +1047,12 @@ export default function App() {
     extras.push({ tipo: 'sep' });
     if (mandaNele && temPermissao(guildMembroDeMim, guild, PERM.MOVER_MEMBROS)) {
       extras.push({
-        label: 'Desconectar da chamada', icone: '📴', perigo: true,
+        label: 'Desconectar da chamada', icone: <Icon name="power" size={15} />, perigo: true,
         onClick: () => voiceActions.expulsar(participante.socketId),
       });
     } else {
       extras.push({
-        label: 'Votar pra expulsar da call', icone: '✋',
+        label: 'Votar pra expulsar da call', icone: <Icon name="hand" size={15} />,
         onClick: () => voiceActions.votarExpulsao(participante.socketId),
       });
     }
@@ -1000,7 +1066,7 @@ export default function App() {
     if (canal.type === 'text') {
       itens.push({
         label: 'Marcar como lido',
-        icone: '✓',
+        icone: <Icon name="check" size={15} />,
         onClick: () => {
           socketRef.current?.emit('channel:read', { channelId: canal.id });
           setUnread((prev) => {
@@ -1013,9 +1079,9 @@ export default function App() {
     }
     if (canal.type === 'text') itens.push(...itensDeNotificacao('channel', canal.id));
     if (podeGerenciarCanais) {
-      itens.push({ label: 'Editar canal', icone: '✎', onClick: () => setModal({ type: 'editar-canal', canal }) });
+      itens.push({ label: 'Editar canal', icone: <Icon name="pencil" size={15} />, onClick: () => setModal({ type: 'editar-canal', canal }) });
     }
-    itens.push({ label: 'Convidar pessoas', icone: '➕', onClick: () => setModal({ type: 'invite' }) });
+    itens.push({ label: 'Convidar pessoas', icone: <Icon name="plus" size={15} />, onClick: () => setModal({ type: 'invite' }) });
     itens.push({ tipo: 'sep' });
     itens.push({
       label: 'Copiar ID',
@@ -1024,7 +1090,7 @@ export default function App() {
     });
     if (podeGerenciarCanais) {
       itens.push({ tipo: 'sep' });
-      itens.push({ label: 'Excluir canal', icone: '🗑', perigo: true, onClick: () => deleteChannel(canal) });
+      itens.push({ label: 'Excluir canal', icone: <Icon name="trash" size={15} />, perigo: true, onClick: () => deleteChannel(canal) });
     }
     return itens;
   });
@@ -1033,11 +1099,11 @@ export default function App() {
     if (!podeGerenciarCanais) return [{ tipo: 'titulo', label: categoria.name }];
     return [
       { tipo: 'titulo', label: categoria.name },
-      { label: 'Novo canal aqui', icone: '➕', onClick: () => setModal({ type: 'create-channel', channelType: 'text', categoryId: categoria.id }) },
+      { label: 'Novo canal aqui', icone: <Icon name="plus" size={15} />, onClick: () => setModal({ type: 'create-channel', channelType: 'text', categoryId: categoria.id }) },
       { tipo: 'sep' },
       {
         label: 'Excluir categoria',
-        icone: '🗑',
+        icone: <Icon name="trash" size={15} />,
         perigo: true,
         onClick: () => setModal({
           type: 'confirm',
@@ -1055,7 +1121,7 @@ export default function App() {
     const itens = [{ tipo: 'titulo', label: guild.name }];
     itens.push({
       label: 'Marcar tudo como lido',
-      icone: '✓',
+      icone: <Icon name="check" size={15} />,
       onClick: () => {
         for (const c of guild.channels) {
           if (c.type === 'text') socketRef.current?.emit('channel:read', { channelId: c.id });
@@ -1065,15 +1131,18 @@ export default function App() {
         ));
       },
     });
-    itens.push({ label: 'Convidar pessoas', icone: '➕', onClick: () => setModal({ type: 'invite' }) });
+    itens.push({ label: 'Convidar pessoas', icone: <Icon name="plus" size={15} />, onClick: () => setModal({ type: 'invite' }) });
     itens.push(...itensDeNotificacao('guild', guild.id));
     if (podeGerenciarCanais) {
       itens.push({ tipo: 'sep' });
       itens.push({ label: 'Criar canal', icone: '#', onClick: () => setModal({ type: 'create-channel', channelType: 'text' }) });
-      itens.push({ label: 'Criar categoria', icone: '🗂', onClick: () => setModal({ type: 'criar-categoria' }) });
+      itens.push({ label: 'Criar categoria', icone: <Icon name="folder-plus" size={15} />, onClick: () => setModal({ type: 'criar-categoria' }) });
+    }
+    if (podeGerenciarServidor) {
+      itens.push({ label: 'Configurações do servidor', icone: <Icon name="settings" size={15} />, onClick: () => setModal({ type: 'editar-servidor' }) });
     }
     if (guild.role === 'owner' || guild.role === 'admin') {
-      itens.push({ label: 'Cargos', icone: '🏷', onClick: () => setModal({ type: 'cargos' }) });
+      itens.push({ label: 'Cargos', icone: <Icon name="tag" size={15} />, onClick: () => setModal({ type: 'cargos' }) });
     }
     itens.push({ tipo: 'sep' });
     itens.push({
@@ -1085,7 +1154,7 @@ export default function App() {
       itens.push({ tipo: 'sep' });
       itens.push({
         label: 'Sair do servidor',
-        icone: '🚪',
+        icone: <Icon name="door-exit" size={15} />,
         perigo: true,
         onClick: () => setModal({
           type: 'confirm',
@@ -1220,7 +1289,7 @@ export default function App() {
   if (!me) return <AuthView onAuthenticated={setMe} />;
 
   return (
-    <div className={`app ${membrosVisiveis && !dmMode ? '' : 'sem-membros'}`}>
+    <>
       {atualizacaoPendente && (
         <div className="banner-atualizacao">
           {voice.channelId
@@ -1232,6 +1301,62 @@ export default function App() {
         </div>
       )}
 
+      {interfaceTeste ? (
+        <OrbitApp
+          me={me}
+          guilds={guilds}
+          guild={guild}
+          activeGuildId={activeGuildId}
+          dmMode={dmMode}
+          dms={dms}
+          activeDm={activeDm}
+          activeDmId={activeDmId}
+          onlineIds={onlineIds}
+          activeChannel={activeChannel}
+          messages={messages[activeChannelId] ?? []}
+          naoLidasAoAbrir={marcadorNaoLidas[activeChannelId] ?? 0}
+          dmMessages={dmMessages[activeDmId] ?? []}
+          typingUsers={typingUsers}
+          sendError={sendError}
+          connected={connected}
+          voice={voice}
+          voiceActions={voiceActions}
+          callMaximizada={callMaximizada}
+          voiceVotacoes={voiceVotacoes}
+          onSelectGuild={(guildId) => { setDmMode(false); setActiveGuildId(guildId); }}
+          onOpenDms={() => setDmMode(true)}
+          onSelectChannel={selectChannel}
+          onSelectDm={selectDm}
+          onToggleVoiceChannel={alternarCanalDeVoz}
+          onSend={sendMessage}
+          onSendDm={sendDmMessage}
+          onTyping={() => socketRef.current?.emit('typing:start', { channelId: activeChannelId })}
+          onNovaConversa={() => setModal({ type: 'nova-conversa' })}
+          onCreateGuild={() => setModal({ type: 'create-guild' })}
+          onJoinGuild={() => setModal({ type: 'join' })}
+          onReportarBug={() => setModal({ type: 'reportar-bug' })}
+          onOpenSettings={() => setConfiguracoesAbertas(true)}
+          onOpenProfile={(userId) => setModal({ type: 'profile', userId })}
+          onMinimizarCall={() => setCallMaximizada(false)}
+          onExpulsarDaCall={voiceActions.expulsar}
+          onVotarExpulsaoDaCall={voiceActions.votarExpulsao}
+          telaAssistida={telaAssistida}
+          onAssistir={setTelaAssistida}
+          onPararDeAssistir={() => setTelaAssistida(null)}
+          onVoltarClassico={() => setInterfaceTeste(false)}
+          presencas={presencas}
+          membrosVisiveis={membrosVisiveis}
+          onAlternarMembros={() => setMembrosVisiveis((v) => !v)}
+          onPromote={(member, role) => api.setMemberRole(guild.id, member.id, role).catch(() => {})}
+          onKick={acoesDoMembro.expulsar}
+          podeChamarParaCall={Boolean(voice.channelId)}
+          onChamarParaCall={(member) => voiceActions.convidar(member.id)}
+          onMenuDoMembro={menuDoMembro}
+          voiceRooms={voiceRooms}
+          onMenuDoParticipanteDeVoz={menuDoParticipanteDeVoz}
+        />
+      ) : (
+        <div className={`app ${membrosVisiveis && !dmMode ? '' : 'sem-membros'}`}>
       <GuildBar
         guilds={guilds}
         activeGuildId={activeGuildId}
@@ -1242,6 +1367,7 @@ export default function App() {
         onOpenDms={() => setDmMode(true)}
         onCreate={() => setModal({ type: 'create-guild' })}
         onJoin={() => setModal({ type: 'join' })}
+        onReportarBug={() => setModal({ type: 'reportar-bug' })}
       />
 
       {dmMode ? (
@@ -1369,6 +1495,7 @@ export default function App() {
             onAlternarMembros={() => setMembrosVisiveis((v) => !v)}
             membrosVisiveis={membrosVisiveis}
             inserirNoCampo={inserirNoCampo}
+            naoLidasAoAbrir={marcadorNaoLidas[activeChannelId] ?? 0}
           />
         )}
       </div>
@@ -1385,6 +1512,8 @@ export default function App() {
         onChamarParaCall={(member) => voiceActions.convidar(member.id)}
         onMenuDoMembro={menuDoMembro}
       />
+        </div>
+      )}
 
       <ContextMenu estado={menuContexto.estado} onFechar={menuContexto.fechar} />
 
@@ -1392,6 +1521,10 @@ export default function App() {
         <div className="aviso-flutuante" role="status" onClick={() => setAviso(null)}>
           {aviso}
         </div>
+      )}
+
+      {modal?.type === 'reportar-bug' && (
+        <ReportBugModal onClose={() => setModal(null)} />
       )}
 
       {modal?.type === 'nota' && (
@@ -1413,6 +1546,14 @@ export default function App() {
 
       {modal?.type === 'cargos' && guild && (
         <RolesModal guild={guild} onClose={() => setModal(null)} onErro={setAviso} />
+      )}
+
+      {modal?.type === 'editar-servidor' && guild && (
+        <GuildSettingsModal
+          guild={guild}
+          onClose={() => setModal(null)}
+          onSaved={(_atualizado, { manterAberto } = {}) => { if (!manterAberto) setModal(null); }}
+        />
       )}
 
       {modal?.type === 'apelido' && (
@@ -1499,9 +1640,11 @@ export default function App() {
           onClose={() => setConfiguracoesAbertas(false)}
           onLogout={() => { setConfiguracoesAbertas(false); pedirLogout(); }}
           onEditarPerfil={() => setModal({ type: 'edit-profile' })}
+          interfaceTeste={interfaceTeste}
+          onAlternarInterfaceTeste={setInterfaceTeste}
         />
       )}
-    </div>
+    </>
   );
 }
 

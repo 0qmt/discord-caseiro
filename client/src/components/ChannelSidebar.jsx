@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Avatar from './Avatar.jsx';
 import UserPanel from './UserPanel.jsx';
 import VoicePanel from './VoicePanel.jsx';
+import Icon from './Icon.jsx';
 
 /**
  * Agrupa canais por categoria, mantendo a ordem: primeiro os soltos (sem
@@ -17,7 +18,7 @@ function agrupar(canais, categorias) {
   return { soltos, grupos };
 }
 
-function LinhaDeVoz({ participantes, falando, meId, onMenuDoParticipante }) {
+export function LinhaDeVoz({ participantes, falando, meId, onMenuDoParticipante }) {
   if (participantes.length === 0) return null;
   return (
     <ul className="voice-members">
@@ -30,12 +31,14 @@ function LinhaDeVoz({ participantes, falando, meId, onMenuDoParticipante }) {
           <Avatar user={p.user} size={22} className="small" />
           <span className="voice-nome">{p.user.username}{p.user.id === meId && ' (voce)'}</span>
           {p.state.screen && (
-            <span className="compartilhando-badge" title="compartilhando a tela">🖥 ao vivo</span>
+            <span className="compartilhando-badge" title="compartilhando a tela">
+              <Icon name="monitor" size={11} /> ao vivo
+            </span>
           )}
-          {p.state.camera && <span title="câmera ligada">🎥</span>}
-          {p.state.deafened && <span title="não está ouvindo ninguém">🔇👂</span>}
-          {!p.state.hasMic && <span title="entrou só pra ouvir, sem microfone">👂</span>}
-          {p.state.hasMic && p.state.muted && <span title="mutado">🔇</span>}
+          {p.state.camera && <Icon name="camera" size={13} title="câmera ligada" />}
+          {p.state.deafened && <Icon name="headphones-off" size={13} title="não está ouvindo ninguém" />}
+          {!p.state.hasMic && <Icon name="headphones" size={13} title="entrou só pra ouvir, sem microfone" />}
+          {p.state.hasMic && p.state.muted && <Icon name="mic-off" size={13} title="mutado" />}
         </li>
       ))}
     </ul>
@@ -115,7 +118,7 @@ export default function ChannelSidebar({
             title={!estouAqui ? 'Entrar na chamada'
               : callMaximizada ? 'Minimizar a chamada' : 'Ver a chamada'}
           >
-            <span className="hash">🔊</span>
+            <span className="hash"><Icon name="volume" size={16} /></span>
             <span className="channel-label">{channel.name}</span>
             {participantes.length > 0 && (
               <span className="badge small">{participantes.length}</span>
@@ -139,9 +142,11 @@ export default function ChannelSidebar({
     <aside className="channel-sidebar">
       <header className="sidebar-head" onContextMenu={onMenuDaGuild}>
         <span className="guild-name">{guild?.name ?? 'Nenhum servidor'}</span>
-        <button className="icon-btn" title="Opções do servidor" onClick={onMenuDaGuild}>⌄</button>
+        <button className="icon-btn" title="Opções do servidor" onClick={onMenuDaGuild}>
+          <Icon name="settings" size={15} />
+        </button>
         {canManage && (
-          <button className="icon-btn" title="Gerar convite" onClick={onOpenInvite}>+</button>
+          <button className="icon-btn" title="Gerar convite" onClick={onOpenInvite}><Icon name="plus" /></button>
         )}
       </header>
 
@@ -150,7 +155,7 @@ export default function ChannelSidebar({
           <div className="group-head">
             <span>Canais de texto</span>
             {canManage && (
-              <button className="icon-btn" title="Novo canal de texto" onClick={() => onCreateChannel('text')}>+</button>
+              <button className="icon-btn" title="Novo canal de texto" onClick={() => onCreateChannel('text')}><Icon name="plus" /></button>
             )}
           </div>
           {textoSoltos.map(renderCanalDeTexto)}
@@ -160,7 +165,7 @@ export default function ChannelSidebar({
           <div className="channel-group" key={cat.id}>
             <div className="group-head" onContextMenu={onMenuDaCategoria?.(cat)}>
               <button className="group-toggle" onClick={() => alternarCategoria(cat.id)}>
-                <span className={`group-seta ${colapsadas.has(cat.id) ? 'fechada' : ''}`}>⌄</span>
+                <span className={`group-seta ${colapsadas.has(cat.id) ? 'fechada' : ''}`}><Icon name="arrow-right" size={11} className="seta-baixo" /></span>
                 {cat.name}
               </button>
               {canManage && (
@@ -169,7 +174,7 @@ export default function ChannelSidebar({
                   title="Novo canal aqui"
                   onClick={() => onCreateChannel('text', cat.id)}
                 >
-                  +
+                  <Icon name="plus" />
                 </button>
               )}
             </div>
@@ -181,7 +186,7 @@ export default function ChannelSidebar({
           <div className="group-head">
             <span>Canais de voz</span>
             {canManage && (
-              <button className="icon-btn" title="Novo canal de voz" onClick={() => onCreateChannel('voice')}>+</button>
+              <button className="icon-btn" title="Novo canal de voz" onClick={() => onCreateChannel('voice')}><Icon name="plus" /></button>
             )}
           </div>
           {voiceChannels.map(renderCanalDeVoz)}

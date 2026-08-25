@@ -910,6 +910,45 @@ async function main() {
   check('configuracao padrao nao fica guardada a toa',
     !prefsLimpas.data?.settings?.some((s) => s.scopeId === guild.id));
 
+  console.log('\ntema de perfil');
+  const semTema = await api('GET', `/api/users/${alice.user.id}`, { token: bob.token });
+  check('sem tema definido vem null', semTema.data?.profile?.themePrimary === null
+    && semTema.data?.profile?.themeAccent === null, JSON.stringify(semTema.data?.profile));
+
+  const temaInvalido = await api('PATCH', '/api/users/me', {
+    token: alice.token, body: { themePrimary: 'azul', themeAccent: '#123456' },
+  });
+  check('cor fora do formato #rrggbb e recusada', temaInvalido.status === 400, `-> ${temaInvalido.status}`);
+
+  const temaOk = await api('PATCH', '/api/users/me', {
+    token: alice.token, body: { themePrimary: '#1A2350', themeAccent: '#5A4FCF' },
+  });
+  check('define as duas cores do tema', temaOk.status === 200
+    && temaOk.data?.user?.themePrimary === '#1a2350' && temaOk.data?.user?.themeAccent === '#5a4fcf',
+    JSON.stringify(temaOk.data?.user));
+
+  const temaNoPerfil = await api('GET', `/api/users/${alice.user.id}`, { token: bob.token });
+  check('tema aparece no perfil pra quem divide servidor',
+    temaNoPerfil.data?.profile?.themePrimary === '#1a2350', JSON.stringify(temaNoPerfil.data?.profile));
+
+  const temaRemovido = await api('PATCH', '/api/users/me', {
+    token: alice.token, body: { themePrimary: null, themeAccent: null },
+  });
+  check('remover o tema volta pra null', temaRemovido.data?.user?.themePrimary === null
+    && temaRemovido.data?.user?.themeAccent === null, JSON.stringify(temaRemovido.data?.user));
+
+  const posicaoOk = await api('PATCH', '/api/users/me', {
+    token: alice.token, body: { themePrimary: '#000000', themeAccent: '#ff0000', themePosition: 30 },
+  });
+  check('define a posicao do degrade', posicaoOk.data?.user?.themePosition === 30,
+    JSON.stringify(posicaoOk.data?.user));
+
+  const posicaoForaDoLimite = await api('PATCH', '/api/users/me', {
+    token: alice.token, body: { themePosition: 150 },
+  });
+  check('posicao fora de 0-100 e recusada', posicaoForaDoLimite.status === 400,
+    `-> ${posicaoForaDoLimite.status}`);
+
   console.log('\npresenca: status e jogo');
   const statusChegou = waitFor(bobSocket, 'presence:update', 4000);
   aliceSocket.emit('presence:set', { status: 'dnd', activity: 'Jogando Stardew Valley' });

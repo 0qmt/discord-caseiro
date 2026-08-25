@@ -201,6 +201,10 @@ export class VoiceClient {
     } catch {
       // Sem a lista do servidor seguimos com o STUN padrão.
     }
+    // Ajuda a diagnosticar "fica negociando": mostra se o TURN self-hosted
+    // veio na lista ou se sobrou só o STUN público (aí ninguém atrás de NAT
+    // fechado consegue conectar).
+    console.log('[voz] servidores de ICE:', this.iceServers.map((s) => s.urls));
 
     const resposta = await emitAck(this.socket, 'voice:join', { channelId });
     if (resposta?.error) {
@@ -307,19 +311,40 @@ export class VoiceClient {
 
     pc.onicecandidate = ({ candidate }) => {
       if (candidate) this.sinalizar(socketId, { candidate });
+      // "typ host" = rede local, "typ srflx" = STUN (NAT simples), "typ relay"
+      // = TURN. Quando ninguém consegue conectar direto (NAT fechado dos dois
+      // lados), só um candidato "relay" salva a chamada - se ele nunca
+      // aparecer aqui, o problema é o TURN, não a rede da outra pessoa.
+      console.log(
+        `[voz] candidato ICE pra ${socketId}:`,
+        candidate ? `tipo ${candidate.type}` : '(fim da coleta)',
+      );
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[voz] ICE com ${socketId}: ${pc.iceConnectionState}`);
+    };
+
+    pc.onicegatheringstatechange = () => {
+      console.log(`[voz] coleta de candidatos com ${socketId}: ${pc.iceGatheringState}`);
     };
 
     pc.ontrack = ({ track, transceiver }) => {
       // Pela posição da linha de mídia: vale para os dois lados, e vale
       // mesmo quando o ontrack dispara antes de adotarmos os transceivers.
       const slot = SLOTS[pc.getTransceivers().indexOf(transceiver)] ?? 'audio';
+      console.log(`[voz] recebendo ${slot} de ${socketId} (track ${track.id}, enabled=${track.enabled})`);
       peer.media = { ...peer.media, [slot]: new MediaStream([track]) };
       if (slot === 'audio') this.observarFala(socketId, peer.media.audio);
       this.avisar();
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed') pc.restartIce();
+      console.log(`[voz] conexão com ${socketId}: ${pc.connectionState}`);
+      if (pc.connectionState === 'failed') {
+        console.log(`[voz] tentando de novo com ${socketId} (restartIce)`);
+        pc.restartIce();
+      }
       this.avisar();
     };
 
@@ -362,6 +387,7 @@ export class VoiceClient {
 
   async aoSinal({ from, payload }) {
     let peer = this.peers.get(from);
+    console.log(`[voz] sinal de ${from}:`, payload.description?.type ?? (payload.candidate ? 'candidate' : '?'));
 
     if (payload.description) {
       if (payload.description.type === 'offer') {
@@ -384,7 +410,8 @@ export class VoiceClient {
     if (payload.candidate && peer) {
       // ICE pode chegar antes do SDP; nesse caso fica na fila.
       if (peer.pc.remoteDescription) {
-        await peer.pc.addIceCandidate(payload.candidate).catch(() => {});
+        await peer.pc.addIceCandidate(payload.candidate)
+          .catch((err) => console.warn(`[voz] candidato de ${from} recusado:`, err.message));
       } else {
         peer.pendentes.push(payload.candidate);
       }

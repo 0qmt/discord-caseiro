@@ -1,8 +1,188 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import Avatar from './Avatar.jsx';
+import ColorPicker from './ColorPicker.jsx';
 import { getSaidaAudio, setSaidaAudio } from '../lib/audioOutput.js';
 import { ehDesktop, estadoDaPermissao, notificar, pedirPermissaoDeNotificacao } from '../lib/notificar.js';
+import {
+  aplicarGradienteApp, aplicarTemaApp, reaplicarTemaSalvo, removerTemaApp,
+  salvarTemaAppCor, salvarTemaAppGradiente, temaAppSalvo,
+} from '../lib/temaApp.js';
+
+const COR_TEMA_PADRAO = '#5865f2';
+const INTENSIDADE_PADRAO = 50;
+const GRAD_COR1_PADRAO = '#1c1033';
+const GRAD_COR2_PADRAO = '#4b2ea3';
+const GRAD_ANGULO_PADRAO = 135;
+
+/**
+ * Cor (ou gradiente) do app inteiro, igual à aba "Temas" do Discord de
+ * verdade: escolhe, o app inteiro já muda na hora (é só CSS, não precisa
+ * salvar pra ver) e dá pra navegar à vontade assim, pré-visualizando.
+ * "Aplicar" é o que fixa de verdade (fica depois de fechar/recarregar);
+ * saindo daqui sem aplicar, volta pro que já estava valendo antes.
+ */
+function SecaoTemas() {
+  const salvo = temaAppSalvo();
+  const [modo, setModo] = useState(salvo?.tipo ?? 'cor');
+
+  // modo "cor": `cor: null` = nenhum tema ainda, só começa a valer quando
+  // a pessoa escolhe de verdade no seletor.
+  const [cor, setCor] = useState(salvo?.tipo === 'cor' ? salvo.cor : null);
+  const [intensidade, setIntensidade] = useState(salvo?.tipo === 'cor' ? salvo.intensidade : INTENSIDADE_PADRAO);
+
+  // modo "gradiente": já começa com um par bonito, porque trocar pra essa
+  // aba já é a pessoa dizendo "quero ver como fica" - igual escolher um
+  // tema pronto na galeria do cartão de perfil.
+  const [cor1, setCor1] = useState(salvo?.tipo === 'gradiente' ? salvo.cor1 : GRAD_COR1_PADRAO);
+  const [cor2, setCor2] = useState(salvo?.tipo === 'gradiente' ? salvo.cor2 : GRAD_COR2_PADRAO);
+  const [angulo, setAngulo] = useState(salvo?.tipo === 'gradiente' ? salvo.angulo : GRAD_ANGULO_PADRAO);
+
+  const [seletorAberto, setSeletorAberto] = useState(null); // null | 'solida' | 'grad1' | 'grad2'
+
+  useEffect(() => {
+    if (modo === 'gradiente') aplicarGradienteApp(cor1, cor2, angulo);
+    else aplicarTemaApp(cor, intensidade);
+  }, [modo, cor, intensidade, cor1, cor2, angulo]);
+
+  // Saiu da tela sem clicar em "Aplicar": desfaz a prévia e volta pro que
+  // já estava valendo (o tema salvo, ou o padrão do app).
+  useEffect(() => reaplicarTemaSalvo, []);
+
+  const mudouDoSalvo = modo === 'gradiente'
+    ? (salvo?.tipo !== 'gradiente' || cor1 !== salvo.cor1 || cor2 !== salvo.cor2 || angulo !== salvo.angulo)
+    : (salvo?.tipo === 'gradiente' ? Boolean(cor) : cor !== (salvo?.cor ?? null) || (Boolean(cor) && intensidade !== (salvo?.intensidade ?? INTENSIDADE_PADRAO)));
+  const jaEhPadrao = !salvo;
+
+  return (
+    <section className="settings-secao">
+      <h2>Temas</h2>
+      <p className="hint">
+        Escolha uma cor ou um gradiente pro app inteiro. Você já vê o resultado agora, navegando
+        à vontade — só fica valendo de verdade depois que clicar em "Aplicar tema".
+      </p>
+
+      <div className="tema-app-modos">
+        <button type="button" className={modo === 'cor' ? 'ativo' : ''} onClick={() => setModo('cor')}>
+          Cor sólida
+        </button>
+        <button type="button" className={modo === 'gradiente' ? 'ativo' : ''} onClick={() => setModo('gradiente')}>
+          Gradiente
+        </button>
+      </div>
+
+      {modo === 'cor' ? (
+        <div className="tema-app-escolha">
+          <div className="tema-cor-campo">
+            <button
+              type="button"
+              className="tema-cor-botao"
+              style={{ background: cor ?? 'var(--bg-3)' }}
+              onClick={() => setSeletorAberto(seletorAberto === 'solida' ? null : 'solida')}
+            />
+            <span>Cor do tema</span>
+            {seletorAberto === 'solida' && (
+              <ColorPicker
+                valor={cor ?? COR_TEMA_PADRAO}
+                onEscolher={setCor}
+                onFechar={() => setSeletorAberto(null)}
+              />
+            )}
+          </div>
+          {seletorAberto === 'solida' && <div className="click-fora" onClick={() => setSeletorAberto(null)} />}
+
+          {cor && (
+            <label className="tema-posicao">
+              Intensidade
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={intensidade}
+                onChange={(e) => setIntensidade(Number(e.target.value))}
+              />
+            </label>
+          )}
+        </div>
+      ) : (
+        <div className="tema-app-escolha">
+          <div
+            className="tema-app-preview-gradiente"
+            style={{ backgroundImage: `linear-gradient(${angulo}deg, ${cor1}, ${cor2})` }}
+          />
+
+          <div className="tema-cores">
+            <div className="tema-cor-campo">
+              <button
+                type="button"
+                className="tema-cor-botao"
+                style={{ background: cor1 }}
+                onClick={() => setSeletorAberto(seletorAberto === 'grad1' ? null : 'grad1')}
+              />
+              <span>Cor 1</span>
+              {seletorAberto === 'grad1' && (
+                <ColorPicker valor={cor1} onEscolher={setCor1} onFechar={() => setSeletorAberto(null)} />
+              )}
+            </div>
+
+            <div className="tema-cor-campo">
+              <button
+                type="button"
+                className="tema-cor-botao"
+                style={{ background: cor2 }}
+                onClick={() => setSeletorAberto(seletorAberto === 'grad2' ? null : 'grad2')}
+              />
+              <span>Cor 2</span>
+              {seletorAberto === 'grad2' && (
+                <ColorPicker valor={cor2} onEscolher={setCor2} onFechar={() => setSeletorAberto(null)} />
+              )}
+            </div>
+          </div>
+          {seletorAberto && <div className="click-fora" onClick={() => setSeletorAberto(null)} />}
+
+          <label className="tema-posicao">
+            Ângulo ({angulo}°)
+            <input
+              type="range"
+              min={0}
+              max={360}
+              value={angulo}
+              onChange={(e) => setAngulo(Number(e.target.value))}
+            />
+          </label>
+        </div>
+      )}
+
+      <div className="settings-acoes">
+        <button
+          className="primary"
+          onClick={() => {
+            if (modo === 'gradiente') salvarTemaAppGradiente(cor1, cor2, angulo);
+            else salvarTemaAppCor(cor, intensidade);
+          }}
+          disabled={(modo === 'cor' && !cor) || !mudouDoSalvo}
+        >
+          Aplicar tema
+        </button>
+        <button
+          onClick={() => {
+            removerTemaApp();
+            aplicarTemaApp(null, 0);
+            setModo('cor');
+            setCor(null);
+            setIntensidade(INTENSIDADE_PADRAO);
+            setCor1(GRAD_COR1_PADRAO);
+            setCor2(GRAD_COR2_PADRAO);
+            setAngulo(GRAD_ANGULO_PADRAO);
+          }}
+          disabled={jaEhPadrao && !mudouDoSalvo}
+        >
+          Usar padrão
+        </button>
+      </div>
+    </section>
+  );
+}
 
 /**
  * Estado da permissão de notificação, e o botão pra pedir.
@@ -91,7 +271,9 @@ function formatarBuild(iso) {
  * correspondem a algo real do app — nada de imitar "Cobrança" do Discord sem
  * ter o que mostrar nela.
  */
-export default function SettingsScreen({ me, souDono, onClose, onLogout, onEditarPerfil }) {
+export default function SettingsScreen({
+  me, souDono, onClose, onLogout, onEditarPerfil, interfaceTeste, onAlternarInterfaceTeste,
+}) {
   const [aba, setAba] = useState('conta');
 
   useEffect(() => {
@@ -134,6 +316,18 @@ export default function SettingsScreen({ me, souDono, onClose, onLogout, onEdita
             onClick={() => setAba('notificacoes')}
           >
             Notificações
+          </button>
+          <button
+            className={`settings-item ${aba === 'temas' ? 'ativo' : ''}`}
+            onClick={() => setAba('temas')}
+          >
+            Temas
+          </button>
+          <button
+            className={`settings-item ${aba === 'versao-teste' ? 'ativo' : ''}`}
+            onClick={() => setAba('versao-teste')}
+          >
+            Versão de teste
           </button>
           {souDono && (
             <button
@@ -183,6 +377,28 @@ export default function SettingsScreen({ me, souDono, onClose, onLogout, onEdita
         {aba === 'voz' && <SecaoVoz />}
 
         {aba === 'notificacoes' && <SecaoNotificacoes />}
+
+        {aba === 'temas' && <SecaoTemas />}
+
+        {aba === 'versao-teste' && (
+          <section className="settings-secao">
+            <h2>Versão de teste</h2>
+            <p className="hint">
+              Um visual novo do app, em construção — vai ganhar mais recursos e ficar mais bonito
+              aos poucos. Suas mensagens e servidores são os mesmos dos dois lados, é só a tela
+              que muda; dá pra voltar pra clássica a qualquer momento, inclusive por um botão
+              dentro da própria versão de teste.
+            </p>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={interfaceTeste}
+                onChange={(e) => onAlternarInterfaceTeste(e.target.checked)}
+              />
+              Ativar a versão de teste
+            </label>
+          </section>
+        )}
 
         {aba === 'servidor' && souDono && <SecaoServidor />}
 
