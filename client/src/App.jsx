@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, clearToken, getToken } from './api.js';
 import { createSocket, emitAck } from './socket.js';
-import { PERM, podeAgirSobre as podeAgirSobreMembro, temPermissao } from './lib/cargos.js';
+import { nomeExibido, PERM, podeAgirSobre as podeAgirSobreMembro, temPermissao } from './lib/cargos.js';
 import { mensagemMenciona, textoLegivel } from './lib/mencoes.js';
+import { useArrastar } from './lib/arrastar.js';
+import { itensDeMensagem } from './lib/menuDeMensagem.jsx';
 import {
   chaveDe, configDe, deveNotificar, DURACOES_DE_SILENCIO, NIVEIS, PARA_SEMPRE,
 } from './lib/notificacoes.js';
@@ -19,13 +21,13 @@ import DMSidebar from './components/DMSidebar.jsx';
 import GuildBar from './components/GuildBar.jsx';
 import Icon from './components/Icon.jsx';
 import MemberList, { itensDoMembro } from './components/MemberList.jsx';
-import GuildSettingsModal from './components/GuildSettingsModal.jsx';
+import EncaminharModal from './components/EncaminharModal.jsx';
+import GuildSettingsScreen from './components/GuildSettingsScreen.jsx';
 import OrbitApp from './skins/orbit/OrbitApp.jsx';
 import Modal from './components/Modal.jsx';
 import ProfileCard from './components/ProfileCard.jsx';
 import ProfileEditor from './components/ProfileEditor.jsx';
 import ReportBugModal from './components/ReportBugModal.jsx';
-import RolesModal from './components/RolesModal.jsx';
 import SettingsScreen from './components/SettingsScreen.jsx';
 import { itensDeStatus } from './components/UserPanel.jsx';
 import VoiceStage, { temVideoDeOutros, VoiceAudioSink } from './components/VoiceStage.jsx';
@@ -224,6 +226,20 @@ export default function App() {
   // Tela cheia, separada do resto dos modais - fica aberta por baixo mesmo
   // se a pessoa abrir o editor de perfil de dentro dela.
   const [configuracoesAbertas, setConfiguracoesAbertas] = useState(false);
+  /*
+   * As configurações do SERVIDOR moram fora do `modal` de propósito: elas
+   * abrem diálogos de confirmação (expulsar, banir), e se dividissem o mesmo
+   * estado a confirmação substituiria a tela inteira em vez de aparecer por
+   * cima dela - a pessoa confirmaria um banimento e cairia de volta no chat.
+   */
+  const [configServidor, setConfigServidor] = useState(null); // null | { aba }
+  /*
+   * Um estado de arrasto só pro app inteiro. A barra de canais e a lista de
+   * membros são componentes irmãos, e arrastar alguém de uma pra outra só
+   * funciona se as duas olharem pro MESMO estado - com um `useArrastar` em
+   * cada, a barra não enxergaria a pessoa vindo da lista.
+   */
+  const arrasto = useArrastar();
   // Se a call ocupa o lugar do chat (igual ao Discord) ou nao. So o audio
   // continua tocando quando ela nao esta maximizada - quem cuida disso e o
   // VoiceAudioSink, montado sempre, independente deste estado.
@@ -269,6 +285,8 @@ export default function App() {
   const podeGerenciarMensagens = temPermissao(guildMembroDeMim, guild, PERM.GERENCIAR_MENSAGENS);
   const podeGerenciarCanais = temPermissao(guildMembroDeMim, guild, PERM.GERENCIAR_CANAIS);
   const podeGerenciarServidor = temPermissao(guildMembroDeMim, guild, PERM.GERENCIAR_SERVIDOR);
+  const podeBanir = temPermissao(guildMembroDeMim, guild, PERM.BANIR);
+  const podeMoverNaCall = temPermissao(guildMembroDeMim, guild, PERM.MOVER_MEMBROS);
   const minhaAtividade = presencas[me?.id]?.activity ?? null;
 
   useEffect(() => {
@@ -448,9 +466,40 @@ export default function App() {
         if (activeGuildRef.current === guildId) { setActiveGuildId(null); setGuild(null); }
       },
 
+      // O dono apagou o servidor: some da barra na hora pra todo mundo que
+      // estava dentro, sem ninguém ficar olhando pra um servidor fantasma.
+      'guild:deleted': ({ guildId }) => {
+        setGuilds((prev) => prev.filter((g) => g.id !== guildId));
+        if (activeGuildRef.current === guildId) {
+          setActiveGuildId(null);
+          setGuild(null);
+          setModal(null);
+          setConfigServidor(null);
+          setAviso('Esse servidor foi excluído pelo dono.');
+        }
+      },
+
       'message:new': ({ guildId, message }) => {
         upsertMessage(message.channelId, message);
         const estouVendoEsseCanal = !dmModeRef.current && message.channelId === activeChannelRef.current;
+
+        /*
+         * Mensagem que chega com o canal aberto na frente já nasce lida.
+         *
+         * Sem isso a marca de leitura ficava parada no instante em que o
+         * canal foi ABERTO: tudo que chegasse depois continuava "não lido"
+         * pro servidor por mais que estivesse na tela, e ao voltar pro canal
+         * o app rolava lá pra cima, pra mensagens que a pessoa já tinha
+         * acabado de ler.
+         *
+         * `document.hasFocus()` é o que separa "está lendo" de "deixou o app
+         * aberto atrás de outra janela" - nesse segundo caso a mensagem
+         * continua não lida, que é o certo.
+         */
+        if (estouVendoEsseCanal && document.hasFocus()) {
+          socketRef.current?.emit('channel:read', { channelId: message.channelId });
+        }
+
         if (!estouVendoEsseCanal && message.author.id !== me.id) {
           setUnread((prev) => ({
             ...prev,
@@ -873,6 +922,169 @@ export default function App() {
     emitAck(socketRef.current, 'message:pin', { messageId, pinned })
       .then((r) => { if (r?.error) setSendError(r.error); });
 
+  /*
+   * Voltar o foco pra janela com um canal aberto marca ele como lido.
+   *
+   * É o par do que acontece em `message:new`: lá, mensagem que chega com a
+   * janela na frente já nasce lida; aqui se cobre o caminho inverso - as que
+   * chegaram enquanto o app estava atrás de outra janela e agora estão na
+   * tela, sendo lidas de fato.
+   */
+  useEffect(() => {
+    const aoFocar = () => {
+      const canalId = activeChannelRef.current;
+      if (!canalId || dmModeRef.current) return;
+      socketRef.current?.emit('channel:read', { channelId: canalId });
+      setUnread((prev) => {
+        if (!prev[canalId]) return prev;
+        const next = { ...prev };
+        delete next[canalId];
+        return next;
+      });
+    };
+    window.addEventListener('focus', aoFocar);
+    return () => window.removeEventListener('focus', aoFocar);
+  }, []);
+
+/** Aplica uma ordem nova de canais: otimista na tela, depois manda pro servidor. */
+  async function aplicarNovaOrdem(nova, categoriaPorId) {
+    setGuild((prev) => (prev ? { ...prev, channels: nova } : prev));
+    const ordem = nova.map((c) => ({ id: c.id, categoryId: categoriaPorId(c) }));
+    try {
+      await api.reordenarCanais(guild.id, ordem);
+    } catch (err) {
+      setAviso(err.message);
+      // Deu ruim: pede a versão de verdade em vez de deixar a tela mentindo.
+      api.getGuild(guild.id).then(({ guild: real }) => setGuild(real)).catch(() => {});
+    }
+  }
+
+  /**
+   * Soltar um canal em cima de outro: tira da posição de origem e enfia
+   * antes ou depois do destino - conforme a METADE da linha em que o mouse
+   * estava (ver lib/arrastar.js) - e manda a lista inteira nova pro
+   * servidor. É a mesma barrinha do Discord: em cima da linha significa
+   * "fica acima dela", embaixo significa "fica abaixo".
+   *
+   * A ordem é aplicada na tela na hora (otimista) porque o servidor devolve
+   * a guild inteira - esperar a volta faria o canal piscar de volta pro
+   * lugar antigo antes de assentar no novo.
+   *
+   * Remove o arrastado ANTES de achar o índice do destino, de propósito:
+   * assim o índice do destino já vem certo no MUNDO PÓS-REMOÇÃO, sem
+   * precisar corrigir deslocamento na mão pra cada direção do arrasto.
+   */
+  async function reordenarCanais(idArrastado, idDestino, metade = 'depois') {
+    if (!guild) return;
+    const lista = [...guild.channels];
+    const de = lista.findIndex((c) => c.id === idArrastado);
+    if (de < 0) return;
+    const [item] = lista.splice(de, 1);
+
+    const paraIdx = lista.findIndex((c) => c.id === idDestino);
+    if (paraIdx < 0) return;
+    const insercao = metade === 'antes' ? paraIdx : paraIdx + 1;
+    lista.splice(insercao, 0, item);
+
+    // O canal arrastado herda a categoria de onde caiu - é o que faz
+    // arrastar pra dentro de uma categoria funcionar no mesmo gesto.
+    const categoriaDestino = guild.channels.find((c) => c.id === idDestino)?.categoryId ?? null;
+    aplicarNovaOrdem(lista, (c) => (c.id === idArrastado ? categoriaDestino : (c.categoryId ?? null)));
+  }
+
+  /**
+   * Soltar na zona depois do último canal de um tipo: joga o canal pro fim
+   * daquele tipo sem precisar acertar o pixel exato da última vaga - é o
+   * "se eu quiser mover pro último, qualquer área depois do último já
+   * serve", igual mover um carro pra última vaga da garagem sem precisar
+   * encostar exatamente nela.
+   *
+   * Sai de qualquer categoria ao cair aqui: o fim da lista é sempre o fim
+   * "solto", nunca dentro de uma categoria específica.
+   */
+  async function moverParaFim(idArrastado, tipoAlvo) {
+    if (!guild) return;
+    const lista = [...guild.channels];
+    const de = lista.findIndex((c) => c.id === idArrastado);
+    if (de < 0) return;
+
+    const [item] = lista.splice(de, 1);
+    let posicao = lista.length;
+    for (let i = lista.length - 1; i >= 0; i -= 1) {
+      if (lista[i].type === tipoAlvo) { posicao = i + 1; break; }
+    }
+    lista.splice(posicao, 0, item);
+    aplicarNovaOrdem(lista, (c) => (c.id === idArrastado ? null : (c.categoryId ?? null)));
+  }
+
+  /**
+   * Puxar alguém pra um canal de voz arrastando.
+   *
+   * Quem já está numa call é MOVIDO (o servidor manda o cliente da pessoa
+   * trocar de sala); quem não está em nenhuma recebe um convite, porque
+   * arrastar alguém pra dentro de uma chamada sem avisar seria sequestro.
+   */
+  function puxarParaCall(carga, canal) {
+    // Já está numa call: dá pra mover direto, sem pedir licença - é o que a
+    // permissão de mover membros permite fazer.
+    const jaNaCall = Object.values(voiceRooms).flat().find((p) => p.user.id === carga.userId);
+    if (jaNaCall) {
+      voiceActions.mover(jaNaCall.socketId, canal.id);
+      return;
+    }
+
+    /*
+     * Não está em call nenhuma: só dá pra convidar, e o servidor convida
+     * sempre pra call de QUEM CHAMA (ver voice:convidar) - não pra um canal
+     * escolhido. Então isso só funciona se eu já estiver no canal de destino;
+     * fora disso o certo é dizer o que falta em vez de mandar um convite que
+     * levaria a pessoa pro lugar errado.
+     */
+    if (voice.channelId !== canal.id) {
+      setAviso(`Entre em #${canal.name} primeiro pra poder chamar alguém pra lá.`);
+      return;
+    }
+    voiceActions.convidar(carga.userId);
+    setAviso(`Convite enviado pra ${carga.nome}.`);
+  }
+
+  /**
+   * Marcar como não lido a partir de uma mensagem.
+   *
+   * Manda a marca pro instante logo ANTES dela (1ms), pra que ela própria
+   * volte a contar como não lida - marcar no createdAt exato deixaria a
+   * mensagem escolhida do lado lido, e a contagem começaria na seguinte.
+   */
+  function marcarComoNaoLido(message) {
+    const canalId = message.channelId ?? activeChannelId;
+    socketRef.current?.emit('channel:read', { channelId: canalId, ate: message.createdAt - 1 });
+    api.naoLidas(activeGuildId)
+      .then(({ unread }) => {
+        const info = unread?.[canalId];
+        if (info) setUnread((prev) => ({ ...prev, [canalId]: { ...info, guildId: activeGuildId } }));
+      })
+      .catch(() => {});
+    setAviso('Marcado como não lido.');
+  }
+
+  /**
+   * Encaminhar: manda o conteúdo pro destino escolhido sem sair de onde se
+   * está. Não leva `replyToId` - a mensagem citada não existe do outro lado.
+   */
+  async function encaminharMensagem(destino, message) {
+    const payload = { content: message.content ?? '', attachment: message.attachment ?? null };
+    const evento = destino.tipo === 'dm' ? 'dm:send' : 'message:send';
+    const alvo = destino.tipo === 'dm'
+      ? { dmChannelId: destino.id, ...payload }
+      : { channelId: destino.id, ...payload };
+
+    const r = await emitAck(socketRef.current, evento, {
+      ...alvo,
+      nonce: `fw-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    });
+    if (r?.error) throw new Error(r.error);
+  }
+
   function apagarMensagem(messageId) {
     setModal({
       type: 'confirm',
@@ -1116,6 +1328,25 @@ export default function App() {
     ];
   });
 
+  /*
+   * Menu de mensagem da versão de teste. A pele clássica monta o dela dentro
+   * do ChatView (que tem responder/editar no próprio estado); aqui em cima
+   * só existe o que dá pra fazer de fora, então responder e editar ficam de
+   * fora em vez de aparecerem sem funcionar.
+   */
+  const menuDaMensagem = (message) => menuContexto.abrirCom(() => itensDeMensagem({
+    message,
+    meId: me.id,
+    podeModerar: podeGerenciarMensagens,
+    canalId: activeChannelId,
+    onReagir: reagir,
+    onFixarMensagem: fixarMensagem,
+    onApagar: apagarMensagem,
+    onEncaminhar: (m) => setModal({ type: 'encaminhar', mensagem: m }),
+    onMarcarNaoLido: marcarComoNaoLido,
+    onDenunciar: (m) => setModal({ type: 'reportar-bug', mensagem: m }),
+  }));
+
   const menuDaGuild = menuContexto.abrirCom(() => {
     if (!guild) return [];
     const itens = [{ tipo: 'titulo', label: guild.name }];
@@ -1139,10 +1370,14 @@ export default function App() {
       itens.push({ label: 'Criar categoria', icone: <Icon name="folder-plus" size={15} />, onClick: () => setModal({ type: 'criar-categoria' }) });
     }
     if (podeGerenciarServidor) {
-      itens.push({ label: 'Configurações do servidor', icone: <Icon name="settings" size={15} />, onClick: () => setModal({ type: 'editar-servidor' }) });
+      itens.push({ label: 'Configurações do servidor', icone: <Icon name="settings" size={15} />, onClick: () => setConfigServidor({ aba: 'perfil' }) });
     }
     if (guild.role === 'owner' || guild.role === 'admin') {
-      itens.push({ label: 'Cargos', icone: <Icon name="tag" size={15} />, onClick: () => setModal({ type: 'cargos' }) });
+      itens.push({ label: 'Cargos', icone: <Icon name="tag" size={15} />, onClick: () => setConfigServidor({ aba: 'cargos' }) });
+      itens.push({ label: 'Membros', icone: <Icon name="users" size={15} />, onClick: () => setConfigServidor({ aba: 'membros' }) });
+    }
+    if (podeBanir) {
+      itens.push({ label: 'Banimentos', icone: <Icon name="ban" size={15} />, onClick: () => setConfigServidor({ aba: 'banimentos' }) });
     }
     itens.push({ tipo: 'sep' });
     itens.push({
@@ -1345,6 +1580,7 @@ export default function App() {
           onPararDeAssistir={() => setTelaAssistida(null)}
           onVoltarClassico={() => setInterfaceTeste(false)}
           presencas={presencas}
+          minhaAtividade={minhaAtividade}
           membrosVisiveis={membrosVisiveis}
           onAlternarMembros={() => setMembrosVisiveis((v) => !v)}
           onPromote={(member, role) => api.setMemberRole(guild.id, member.id, role).catch(() => {})}
@@ -1354,6 +1590,26 @@ export default function App() {
           onMenuDoMembro={menuDoMembro}
           voiceRooms={voiceRooms}
           onMenuDoParticipanteDeVoz={menuDoParticipanteDeVoz}
+          onMenuDaGuild={menuDaGuild}
+          onMenuDaMensagem={menuDaMensagem}
+          acoesDaMensagem={{
+            onReagir: reagir,
+            onEncaminhar: (m) => setModal({ type: 'encaminhar', mensagem: m }),
+          }}
+          podeOrdenarCanais={podeGerenciarCanais}
+          podeMoverNaCall={podeMoverNaCall}
+          onReordenarCanais={reordenarCanais}
+          onPuxarParaCall={puxarParaCall}
+          onMoverParaFim={moverParaFim}
+          arrasto={arrasto}
+          aoArrastarMembro={(membro) => arrasto.comecar({
+            tipo: 'membro',
+            id: membro.id,
+            userId: membro.id,
+            nome: nomeExibido(membro),
+            rotulo: nomeExibido(membro),
+            icone: '🔊',
+          })}
         />
       ) : (
         <div className={`app ${membrosVisiveis && !dmMode ? '' : 'sem-membros'}`}>
@@ -1406,6 +1662,12 @@ export default function App() {
           onMenuDaGuild={menuDaGuild}
           onMenuDaCategoria={menuDaCategoria}
           onMenuDoParticipanteDeVoz={menuDoParticipanteDeVoz}
+          podeOrdenarCanais={podeGerenciarCanais}
+          podeMoverNaCall={podeMoverNaCall}
+          onReordenarCanais={reordenarCanais}
+          onPuxarParaCall={puxarParaCall}
+          onMoverParaFim={moverParaFim}
+          arrasto={arrasto}
           onAbrirMenuDeStatus={menuDeStatus}
           meuStatus={meuStatus}
           minhaAtividade={minhaAtividade}
@@ -1447,6 +1709,8 @@ export default function App() {
               onReagir={reagir}
               onEditarMensagem={editarMensagem}
               onApagarMensagem={apagarMensagem}
+              onEncaminhar={(m) => setModal({ type: 'encaminhar', mensagem: m })}
+              onDenunciar={(m) => setModal({ type: 'reportar-bug', mensagem: m })}
               onRodarComando={rodarComando}
               inserirNoCampo={inserirNoCampo}
               icon={<Avatar user={activeDm.otherUser} size={22} className="small" />}
@@ -1490,6 +1754,9 @@ export default function App() {
             onEditarMensagem={editarMensagem}
             onApagarMensagem={apagarMensagem}
             onFixarMensagem={fixarMensagem}
+            onEncaminhar={(m) => setModal({ type: 'encaminhar', mensagem: m })}
+            onMarcarNaoLido={marcarComoNaoLido}
+            onDenunciar={(m) => setModal({ type: 'reportar-bug', mensagem: m })}
             podeModerar={podeGerenciarMensagens}
             onRodarComando={rodarComando}
             onAlternarMembros={() => setMembrosVisiveis((v) => !v)}
@@ -1501,6 +1768,16 @@ export default function App() {
       </div>
 
       <MemberList
+        membroArrastavel={podeMoverNaCall || Boolean(voice.channelId)}
+        aoArrastarMembro={(membro) => arrasto.comecar({
+          tipo: 'membro',
+          id: membro.id,
+          userId: membro.id,
+          nome: nomeExibido(membro),
+          rotulo: nomeExibido(membro),
+          icone: '🔊',
+        })}
+        aoSoltarMembro={arrasto.terminar}
         guild={dmMode ? null : guild}
         presencas={presencas}
         meId={me.id}
@@ -1524,7 +1801,17 @@ export default function App() {
       )}
 
       {modal?.type === 'reportar-bug' && (
-        <ReportBugModal onClose={() => setModal(null)} />
+        <ReportBugModal mensagemDenunciada={modal.mensagem} onClose={() => setModal(null)} />
+      )}
+
+      {modal?.type === 'encaminhar' && (
+        <EncaminharModal
+          mensagem={modal.mensagem}
+          guilds={guilds}
+          dms={dms}
+          onEnviar={encaminharMensagem}
+          onClose={() => setModal(null)}
+        />
       )}
 
       {modal?.type === 'nota' && (
@@ -1544,15 +1831,19 @@ export default function App() {
         <CriarCategoriaModal guildId={guild?.id} onClose={() => setModal(null)} onErro={setAviso} />
       )}
 
-      {modal?.type === 'cargos' && guild && (
-        <RolesModal guild={guild} onClose={() => setModal(null)} onErro={setAviso} />
-      )}
-
-      {modal?.type === 'editar-servidor' && guild && (
-        <GuildSettingsModal
+      {/* Cargos, membros, convites, banimentos, auditoria e excluir: tudo numa
+          tela cheia só, no molde da tela de configurações do usuário. O item
+          do menu decide em qual seção ela abre. */}
+      {configServidor && guild && (
+        <GuildSettingsScreen
           guild={guild}
-          onClose={() => setModal(null)}
-          onSaved={(_atualizado, { manterAberto } = {}) => { if (!manterAberto) setModal(null); }}
+          me={me}
+          abaInicial={configServidor.aba}
+          onClose={() => setConfigServidor(null)}
+          onErro={setAviso}
+          onConfirmar={(pedido) => setModal({ type: 'confirm', ...pedido })}
+          onGuildAtualizada={() => {}}
+          onGuildExcluida={() => setConfigServidor(null)}
         />
       )}
 
@@ -1617,6 +1908,7 @@ export default function App() {
           userId={modal.userId}
           guild={guild}
           reloadToken={profileToken}
+          atividade={presencas[modal.userId]?.activity ?? null}
           onClose={() => setModal(null)}
           onEdit={() => setModal({ type: 'edit-profile' })}
         />

@@ -950,12 +950,39 @@ async function main() {
     `-> ${posicaoForaDoLimite.status}`);
 
   console.log('\npresenca: status e jogo');
+  // A atividade virou objeto ({ tipo, nome, detalhe, desde, imagem }) pra
+  // caber "há quanto tempo" e a capa; string ainda entra, e vira tipo
+  // 'custom' - e essa forma antiga é o que o app de desktop desatualizado
+  // continua mandando, por isso o teste cobre as duas.
   const statusChegou = waitFor(bobSocket, 'presence:update', 4000);
   aliceSocket.emit('presence:set', { status: 'dnd', activity: 'Jogando Stardew Valley' });
   const presenca = await statusChegou.catch(() => null);
-  check('status e atividade chegam pros outros em tempo real',
-    presenca?.status === 'dnd' && presenca?.activity === 'Jogando Stardew Valley',
+  check('status e atividade (string antiga) chegam pros outros em tempo real',
+    presenca?.status === 'dnd'
+      && presenca?.activity?.nome === 'Jogando Stardew Valley'
+      && presenca?.activity?.tipo === 'custom',
     JSON.stringify(presenca));
+
+  const jogoChegou = waitFor(bobSocket, 'presence:update', 4000);
+  const desdeTeste = Date.now() - 5 * 60_000;
+  aliceSocket.emit('presence:set', {
+    activity: { tipo: 'jogo', nome: 'Stardew Valley', desde: desdeTeste },
+  });
+  const comJogo = await jogoChegou.catch(() => null);
+  check('atividade estruturada preserva tipo e inicio',
+    comJogo?.activity?.tipo === 'jogo'
+      && comJogo?.activity?.nome === 'Stardew Valley'
+      && comJogo?.activity?.desde === desdeTeste,
+    JSON.stringify(comJogo?.activity));
+
+  const musicaChegou = waitFor(bobSocket, 'presence:update', 4000);
+  aliceSocket.emit('presence:set', {
+    activity: { tipo: 'musica', nome: 'Uma Musica', detalhe: 'Um Artista' },
+  });
+  const comMusica = await musicaChegou.catch(() => null);
+  check('musica chega com artista separado',
+    comMusica?.activity?.tipo === 'musica' && comMusica?.activity?.detalhe === 'Um Artista',
+    JSON.stringify(comMusica?.activity));
 
   const ficouInvisivel = waitFor(bobSocket, 'presence:update', 4000);
   aliceSocket.emit('presence:set', { status: 'invisible' });

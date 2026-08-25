@@ -211,8 +211,20 @@ export function registerVoiceHandlers(io, socket) {
     const meuRegistro = membros?.get(socket.id);
     const alvo = membros?.get(String(socketId ?? ''));
     if (!meuRegistro || !alvo) return;
-    if (!can(meuRegistro.guildId, user.id, PERM.MOVER_MEMBROS)) return;
-    if (!podeAgirSobre(meuRegistro.guildId, user.id, alvo.user.id)) return;
+
+    /*
+     * Arrastar a si mesmo pra outro canal de voz vale sempre, sem cargo
+     * nenhum: é o mesmo que sair e entrar na outra sala, coisa que qualquer
+     * um já pode fazer clicando. Exigir permissão aqui só tornaria o gesto
+     * mais chato que o clique, sem proteger nada.
+     *
+     * Mover OS OUTROS continua exigindo a permissão e a hierarquia.
+     */
+    const souEu = String(socketId ?? '') === socket.id;
+    if (!souEu) {
+      if (!can(meuRegistro.guildId, user.id, PERM.MOVER_MEMBROS)) return;
+      if (!podeAgirSobre(meuRegistro.guildId, user.id, alvo.user.id)) return;
+    }
 
     const destino = q.get(
       'SELECT * FROM channels WHERE id = ? AND guild_id = ? AND type = ?',

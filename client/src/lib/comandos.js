@@ -81,7 +81,12 @@ export const COMANDOS = [
     descricao: 'Define na mão o que aparece como sua atividade',
     exemplo: '/jogando Minecraft',
     run: ({ argumento, presenceActions }) => {
-      presenceActions.definir({ activity: argumento || null, manual: true });
+      // Tipo 'jogo' (e não 'custom') pra ganhar o "Jogando" na frente e o
+      // contador de tempo, igual ao que a detecção automática produz.
+      presenceActions.definir({
+        activity: argumento ? { tipo: 'jogo', nome: argumento, desde: Date.now() } : null,
+        manual: true,
+      });
       return {
         aviso: argumento
           ? `Agora aparece "Jogando ${argumento}" pra todo mundo.`

@@ -5,7 +5,7 @@ import { detectImageKind } from '../lib/imageKind.js';
 import Avatar from './Avatar.jsx';
 import Modal from './Modal.jsx';
 
-const MAX_MB = 8;
+const MAX_MB = 20;
 
 const loadImage = (src) =>
   new Promise((resolve, reject) => {

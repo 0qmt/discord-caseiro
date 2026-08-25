@@ -1,10 +1,15 @@
 import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api.js';
+import AcoesDaMensagem from '../../components/AcoesDaMensagem.jsx';
+import { AtividadeResumo } from '../../components/Atividade.jsx';
 import Avatar from '../../components/Avatar.jsx';
-import { Anexo, Conteudo, shouldGroup } from '../../components/ChatView.jsx';
+import { Anexo, Conteudo, ItemFixado, Reacoes, shouldGroup } from '../../components/ChatView.jsx';
 import { corDoMembro, nomeExibido } from '../../lib/cargos.js';
+import { cropStyle } from '../../lib/cropStyle.js';
+import { useMensagensNovas } from '../../lib/mensagensNovas.js';
+import GifPicker from '../../components/GifPicker.jsx';
 import Icon from '../../components/Icon.jsx';
-import { LinhaDeVoz } from '../../components/ChannelSidebar.jsx';
+import { IndicadorDeSolte, LinhaDeVoz } from '../../components/ChannelSidebar.jsx';
 import LinkPreview from '../../components/LinkPreview.jsx';
 import MemberList from '../../components/MemberList.jsx';
 import VoicePanel from '../../components/VoicePanel.jsx';
@@ -49,7 +54,7 @@ function ServerRail({ guilds, activeGuildId, dmMode, onSelectGuild, onOpenDms, o
           onClick={() => onSelectGuild(g.id)}
         >
           {g.iconUrl
-            ? <span className="orbit-server-icon-img"><img src={g.iconUrl} alt="" /></span>
+            ? <span className="orbit-server-icon-img"><img key={g.iconUrl} src={g.iconUrl} alt="" style={cropStyle(g.iconCrop)} /></span>
             : g.name.slice(0, 2).toUpperCase()}
         </button>
       ))}
@@ -69,7 +74,12 @@ function ServerRail({ guilds, activeGuildId, dmMode, onSelectGuild, onOpenDms, o
 
 function ChannelSidebar({
   guild, activeChannelId, onSelectChannel, onToggleVoiceChannel, voice, voiceActions, voiceRooms,
-  me, connected, onOpenSettings, onOpenProfile, onMenuDoParticipanteDeVoz,
+  me, connected, onOpenSettings, onOpenProfile, onMenuDoParticipanteDeVoz, onMenuDaGuild,
+  // arrastar: reordenar canal e puxar gente pra uma call - mesmo mecanismo
+  // da pele clássica (ver ChannelSidebar.jsx), só que aqui em cima dos
+  // botões `orbit-channel-row`.
+  podeOrdenarCanais = false, podeMoverNaCall = false, onReordenarCanais, onPuxarParaCall, onMoverParaFim, arrasto,
+  minhaAtividade,
 }) {
   const [fechadas, setFechadas] = useState(() => new Set());
   const { soltos, grupos, voz } = useMemo(
@@ -89,35 +99,120 @@ function ChannelSidebar({
     return next;
   });
 
+  /*
+   * Soltar um canal em cima de outro troca os dois de lugar e manda a ordem
+   * inteira pro servidor. Só quem pode gerenciar canais arrasta.
+   */
+  const soltarCanal = (channel) => arrasto.soltarEm(
+    `canal:${channel.id}`,
+    (carga) => carga.tipo === 'canal' && carga.id !== channel.id && carga.channelType === channel.type,
+    (carga, metade) => onReordenarCanais?.(carga.id, channel.id, metade),
+    { comMetade: true },
+  );
+
+  /** Puxar alguém pra um canal de voz: participante de outra call ou membro da lista. */
+  const soltarPessoa = (channel) => arrasto.soltarEm(
+    `voz:${channel.id}`,
+    (carga) => (carga.tipo === 'voz-participante' || carga.tipo === 'membro')
+      && carga.channelId !== channel.id,
+    (carga) => onPuxarParaCall?.(carga, channel),
+  );
+
+  /*
+   * Zona depois do último canal de um tipo: solta ali e o canal vai pro fim
+   * daquele tipo, sem precisar acertar o pixel da última vaga.
+   */
+  const soltarNoFim = (tipo) => arrasto.soltarEm(
+    `fim:${tipo}`,
+    (carga) => carga.tipo === 'canal' && carga.channelType === tipo,
+    (carga) => onMoverParaFim?.(carga.id, tipo),
+  );
+
+  // Só ganham altura ENQUANTO se arrasta um canal - o resto do tempo ficam
+  // com altura zero (ver CSS), pra não engordar o espaço entre as seções.
+  const arrastandoCanal = arrasto.arrastando?.tipo === 'canal';
+
+  /*
+   * O arrasto sai do BOTÃO, não de um wrapper - `orbit-channel-row` é ele
+   * mesmo o elemento clicável inteiro (não tem filho <button> competindo),
+   * então o mesmo elemento serve de fonte do arrasto sem o problema que
+   * `.channel-btn` tinha na pele clássica.
+   */
+  const arrastavelDoCanal = (channel) => (podeOrdenarCanais ? {
+    draggable: true,
+    onDragStart: arrasto.comecar({
+      tipo: 'canal',
+      id: channel.id,
+      channelType: channel.type,
+      rotulo: channel.name,
+      icone: channel.type === 'voice' ? '🔊' : '#',
+    }),
+    onDragEnd: arrasto.terminar,
+  } : null);
+
   const linhaCanal = (c) => (
-    <button
-      key={c.id}
-      className={`orbit-channel-row ${activeChannelId === c.id ? 'orbit-channel-selected' : ''}`}
-      onClick={() => onSelectChannel(c.id)}
-    >
-      <Icon name="hash" size={17} />
-      <span className="orbit-truncate">{c.name}</span>
-    </button>
+    <div key={c.id} className="linha-de-canal">
+      {arrasto.pairandoEm(`canal:${c.id}`) && (
+        <IndicadorDeSolte posicao={arrasto.metadeEm(`canal:${c.id}`)} />
+      )}
+      <div {...soltarCanal(c)}>
+        <button
+          className={`orbit-channel-row ${activeChannelId === c.id ? 'orbit-channel-selected' : ''} ${arrasto.arrastando?.id === c.id ? 'sendo-arrastado' : ''}`}
+          onClick={() => onSelectChannel(c.id)}
+          {...arrastavelDoCanal(c)}
+        >
+          <Icon name="hash" size={17} />
+          <span className="orbit-truncate">{c.name}</span>
+        </button>
+      </div>
+    </div>
   );
 
   const linhaVoz = (c) => {
     const dentro = voice.channelId === c.id;
     const participantes = voiceRooms[c.id] ?? [];
+    // Um canal de voz recebe duas coisas diferentes: outro canal de voz (pra
+    // trocar de ordem) e uma pessoa (pra ser puxada pra cá).
+    const receber = soltarPessoa(c) ?? soltarCanal(c);
+    const recebendoPessoa = arrasto.pairandoEm(`voz:${c.id}`);
+
     return (
-      <div key={c.id}>
-        <button
-          className={`orbit-channel-row ${dentro ? 'orbit-channel-selected' : ''}`}
-          onClick={() => onToggleVoiceChannel(c.id)}
-        >
-          <Icon name="headphones" size={16} />
-          <span className="orbit-truncate">{c.name}</span>
-          {participantes.length > 0 && <span className="orbit-member-count">{participantes.length}</span>}
-        </button>
+      <div key={c.id} className="linha-de-canal">
+        {arrasto.pairandoEm(`canal:${c.id}`) && (
+          <IndicadorDeSolte posicao={arrasto.metadeEm(`canal:${c.id}`)} />
+        )}
+        <div {...receber}>
+          <button
+            className={[
+              'orbit-channel-row',
+              dentro ? 'orbit-channel-selected' : '',
+              recebendoPessoa ? 'recebendo-pessoa' : '',
+              arrasto.arrastando?.id === c.id ? 'sendo-arrastado' : '',
+            ].filter(Boolean).join(' ')}
+            onClick={() => onToggleVoiceChannel(c.id)}
+            {...arrastavelDoCanal(c)}
+          >
+            <Icon name="headphones" size={16} />
+            <span className="orbit-truncate">{c.name}</span>
+            {participantes.length > 0 && <span className="orbit-member-count">{participantes.length}</span>}
+          </button>
+        </div>
         <LinhaDeVoz
           participantes={participantes}
           falando={falando}
           meId={me.id}
           onMenuDoParticipante={onMenuDoParticipanteDeVoz}
+          podeArrastar={(p) => p.user.id === me.id || podeMoverNaCall}
+          aoArrastar={(p) => arrasto.comecar({
+            tipo: 'voz-participante',
+            id: p.socketId,
+            userId: p.user.id,
+            channelId: c.id,
+            rotulo: p.user.username,
+            icone: '🔊',
+          })}
+          aoSoltarArrasto={arrasto.terminar}
+          previa={recebendoPessoa ? arrasto.arrastando : null}
         />
       </div>
     );
@@ -125,9 +220,15 @@ function ChannelSidebar({
 
   return (
     <aside className="orbit-channel-sidebar">
-      <div className="orbit-server-header">
-        <span>{guild?.name ?? 'Nenhum servidor'}</span>
-      </div>
+      <button
+        className="orbit-server-header orbit-server-header-botao"
+        title="Opções do servidor"
+        onClick={onMenuDaGuild}
+        onContextMenu={onMenuDaGuild}
+      >
+        <span className="orbit-truncate">{guild?.name ?? 'Nenhum servidor'}</span>
+        <Icon name="chevron-down" size={15} />
+      </button>
       <div className="orbit-channel-list">
         {soltos.map(linhaCanal)}
         {grupos.map(({ cat, canais }) => (
@@ -139,11 +240,32 @@ function ChannelSidebar({
             {!fechadas.has(cat.id) && <div className="orbit-group-body">{canais.map(linhaCanal)}</div>}
           </section>
         ))}
+        {/* Zona de soltar depois do último canal de texto: só existe no DOM
+            enquanto se arrasta um canal - ver o comentário equivalente em
+            ChannelSidebar.jsx (o `gap` do flex-column soma dos dois lados
+            de qualquer item, mesmo vazio, e isso dobrava o respiro entre as
+            seções o tempo todo, mesmo sem arrasto nenhum acontecendo). */}
+        {arrastandoCanal && (
+          <div className="linha-de-canal">
+            {arrasto.pairandoEm('fim:text') && <IndicadorDeSolte posicao="antes" />}
+            <div className="zona-fim-canais" {...soltarNoFim('text')} />
+          </div>
+        )}
+
         {voz.length > 0 && (
           <section>
             <span className="orbit-group-label orbit-group-label-static">CANAIS DE VOZ</span>
             <div className="orbit-group-body">{voz.map(linhaVoz)}</div>
           </section>
+        )}
+
+        {/* Essa cresce (`preenche`): é a última coisa da lista, então
+            qualquer espaço vazio até o fim da barra vira zona de soltar. */}
+        {arrastandoCanal && (
+          <div className="linha-de-canal preenche">
+            {arrasto.pairandoEm('fim:voice') && <IndicadorDeSolte posicao="antes" />}
+            <div className="zona-fim-canais" {...soltarNoFim('voice')} />
+          </div>
         )}
       </div>
 
@@ -153,7 +275,11 @@ function ChannelSidebar({
         <Avatar user={me} size={32} onClick={() => onOpenProfile(me.id)} />
         <div className="orbit-user-panel-info">
           <p className="orbit-truncate">{me.username}</p>
-          <p className="orbit-user-panel-status">{connected ? 'online' : 'reconectando...'}</p>
+          <p className="orbit-user-panel-status">
+            {connected && minhaAtividade
+              ? <AtividadeResumo atividade={minhaAtividade} />
+              : (connected ? 'online' : 'reconectando...')}
+          </p>
         </div>
         <button className="orbit-icon-button" title="Configurações" onClick={onOpenSettings}>
           <Icon name="settings" size={17} />
@@ -168,7 +294,13 @@ function Composer({ placeholder, onSend, onTyping }) {
   const [anexo, setAnexo] = useState(null);
   const [enviandoAnexo, setEnviandoAnexo] = useState(false);
   const [erro, setErro] = useState(null);
+  const [gifAberto, setGifAberto] = useState(false);
   const arquivoRef = useRef(null);
+
+  function escolherGif(gif) {
+    setAnexo({ url: gif.url, type: 'gif', name: null });
+    setGifAberto(false);
+  }
 
   async function anexarArquivo(arquivo) {
     if (!arquivo) return;
@@ -238,6 +370,19 @@ function Composer({ placeholder, onSend, onTyping }) {
           placeholder={placeholder}
           rows={1}
         />
+        {/* Dentro da mesma barra do campo - embutido, não um botão solto ao
+            lado, igual ao Discord. */}
+        <div className="orbit-composer-gif-wrap">
+          <button
+            type="button"
+            className={`orbit-composer-gif ${gifAberto ? 'ativo' : ''}`}
+            title="Enviar GIF"
+            onClick={() => setGifAberto((v) => !v)}
+          >
+            GIF
+          </button>
+          {gifAberto && <GifPicker onEscolher={escolherGif} onFechar={() => setGifAberto(false)} />}
+        </div>
         <button className="orbit-send-button" aria-label="Enviar mensagem" onClick={enviar}>
           <Icon name="send" size={16} />
         </button>
@@ -254,14 +399,28 @@ function Composer({ placeholder, onSend, onTyping }) {
  * mouse - exatamente como o Discord de verdade, pra não empilhar foto e
  * nome repetido a cada linha.
  */
-function LinhaDeMensagem({ m, agrupada, onOpenProfile, membros, meuId, roles }) {
+function LinhaDeMensagem({ m, agrupada, onOpenProfile, membros, meuId, roles, nova, onMenu, acoes }) {
   const membro = membros?.find((mb) => mb.id === m.author.id);
   const cor = corDoMembro(membro, roles);
   return (
     <article
       data-msg={m.id}
-      className={`orbit-message-row ${m.pending ? 'orbit-pending' : ''} ${agrupada ? 'orbit-agrupada' : ''}`}
+      onContextMenu={onMenu?.(m)}
+      className={[
+        'orbit-message-row',
+        m.pending ? 'orbit-pending' : '',
+        agrupada ? 'orbit-agrupada' : '',
+        nova ? 'nova' : '',
+      ].filter(Boolean).join(' ')}
     >
+      {acoes && !m.pending && (
+        <AcoesDaMensagem
+          message={m}
+          onReagir={acoes.onReagir}
+          onEncaminhar={acoes.onEncaminhar}
+          onMais={onMenu?.(m)}
+        />
+      )}
       {agrupada
         ? <span className="orbit-message-hora-fixa">{horaCurta(m.createdAt)}</span>
         : <Avatar user={m.author} size={38} onClick={() => onOpenProfile(m.author.id)} />}
@@ -292,15 +451,27 @@ function LinhaDeMensagem({ m, agrupada, onOpenProfile, membros, meuId, roles }) 
         </p>
         <Anexo anexo={m.attachment} />
         <LinkPreview texto={m.content} />
+        {acoes?.onReagir && !m.pending && (
+          <Reacoes
+            reactions={m.reactions}
+            meuId={meuId}
+            onReagir={(emoji) => acoes.onReagir(m.id, emoji)}
+            // A carinha abre o menu da mensagem, que já tem a fileira de
+            // reação no topo - assim o Orbit não precisa de um seletor de
+            // emoji próprio só pra oferecer os mesmos seis.
+            onAbrirEmoji={onMenu?.(m)}
+          />
+        )}
       </div>
     </article>
   );
 }
 
 const ListaDeMensagens = forwardRef(function ListaDeMensagens(
-  { mensagens, onOpenProfile, membros, meuId, roles, marcadorId, onScroll },
+  { mensagens, onOpenProfile, membros, meuId, roles, marcadorId, onScroll, chave, onMenuDaMensagem, acoesDaMensagem },
   ref,
 ) {
+  const novas = useMensagensNovas(mensagens, chave);
   let ultimoDia = null;
   return (
     <div className="orbit-messages" ref={ref} onScroll={onScroll}>
@@ -324,7 +495,17 @@ const ListaDeMensagens = forwardRef(function ListaDeMensagens(
             {m.id === marcadorId && (
               <div className="orbit-novas-mensagens"><span>NOVAS MENSAGENS</span></div>
             )}
-            <LinhaDeMensagem m={m} agrupada={agrupada} onOpenProfile={onOpenProfile} membros={membros} meuId={meuId} roles={roles} />
+            <LinhaDeMensagem
+              m={m}
+              agrupada={agrupada}
+              nova={novas.has(m.id)}
+              onMenu={onMenuDaMensagem}
+              acoes={acoesDaMensagem}
+              onOpenProfile={onOpenProfile}
+              membros={membros}
+              meuId={meuId}
+              roles={roles}
+            />
           </div>
         );
       })}
@@ -387,12 +568,9 @@ function CabecalhoDeCanal({ channel, membrosVisiveis, onAlternarMembros }) {
           <div className="orbit-popover">
             <h4>Mensagens fixadas</h4>
             {pins.length === 0 && <p className="orbit-muted">Nada fixado neste canal ainda.</p>}
-            {pins.map((p) => (
-              <div key={p.id} className="orbit-popover-item">
-                <strong>{p.author.username}</strong>
-                <p>{p.content || 'anexo'}</p>
-              </div>
-            ))}
+            {/* Mesmo item da pele clássica: avatar de quem mandou e
+                miniatura quando a fixada é uma foto. */}
+            {pins.map((p) => <ItemFixado key={p.id} pin={p} onIr={() => setPinsAbertos(false)} />)}
           </div>
         </>
       )}
@@ -426,6 +604,7 @@ function CabecalhoDeCanal({ channel, membrosVisiveis, onAlternarMembros }) {
 function ChatMain({
   channel, messages, onSend, onTyping, typingUsers, onOpenProfile, error,
   membrosVisiveis, onAlternarMembros, membros, meuId, roles, naoLidasAoAbrir = 0,
+  onMenuDaMensagem, acoesDaMensagem,
 }) {
   const [marcadorId, setMarcadorId] = useState(null);
   const scrollRef = useRef(null);
@@ -471,6 +650,9 @@ function ChatMain({
           ref={scrollRef}
           onScroll={aoRolar}
           mensagens={messages}
+          chave={channel?.id}
+          onMenuDaMensagem={onMenuDaMensagem}
+          acoesDaMensagem={acoesDaMensagem}
           onOpenProfile={onOpenProfile}
           membros={membros}
           meuId={meuId}
@@ -531,7 +713,7 @@ function DmMain({ activeDm, messages, onSend, onOpenProfile }) {
         <h1>{activeDm.otherUser.username}</h1>
       </header>
       <div className="orbit-message-area">
-        <ListaDeMensagens mensagens={messages} onOpenProfile={onOpenProfile} />
+        <ListaDeMensagens mensagens={messages} chave={activeDm.id} onOpenProfile={onOpenProfile} />
         <Composer placeholder={`Mensagem para @${activeDm.otherUser.username}`} onSend={onSend} />
       </div>
     </section>
@@ -548,9 +730,10 @@ export default function OrbitApp({
   onMinimizarCall, onExpulsarDaCall, onVotarExpulsaoDaCall,
   telaAssistida, onAssistir, onPararDeAssistir,
   onVoltarClassico,
-  presencas, membrosVisiveis, onAlternarMembros, onPromote, onKick,
+  presencas, minhaAtividade, membrosVisiveis, onAlternarMembros, onPromote, onKick,
   podeChamarParaCall, onChamarParaCall, onMenuDoMembro, onReportarBug,
-  voiceRooms, onMenuDoParticipanteDeVoz, naoLidasAoAbrir,
+  voiceRooms, onMenuDoParticipanteDeVoz, naoLidasAoAbrir, onMenuDaGuild, onMenuDaMensagem, acoesDaMensagem,
+  podeOrdenarCanais, podeMoverNaCall, onReordenarCanais, onPuxarParaCall, onMoverParaFim, arrasto, aoArrastarMembro,
 }) {
   const semServidor = !dmMode && guilds.length === 0;
 
@@ -598,6 +781,14 @@ export default function OrbitApp({
           connected={connected}
           onOpenSettings={onOpenSettings}
           onOpenProfile={onOpenProfile}
+          onMenuDaGuild={onMenuDaGuild}
+          minhaAtividade={minhaAtividade}
+          podeOrdenarCanais={podeOrdenarCanais}
+          podeMoverNaCall={podeMoverNaCall}
+          onReordenarCanais={onReordenarCanais}
+          onPuxarParaCall={onPuxarParaCall}
+          onMoverParaFim={onMoverParaFim}
+          arrasto={arrasto}
         />
       )}
 
@@ -645,6 +836,8 @@ export default function OrbitApp({
           meuId={me.id}
           roles={guild?.roles}
           naoLidasAoAbrir={naoLidasAoAbrir}
+          onMenuDaMensagem={onMenuDaMensagem}
+          acoesDaMensagem={acoesDaMensagem}
         />
       ) : (
         <section className="orbit-chat-main orbit-chat-empty">
@@ -664,6 +857,9 @@ export default function OrbitApp({
           podeChamarParaCall={podeChamarParaCall}
           onChamarParaCall={onChamarParaCall}
           onMenuDoMembro={onMenuDoMembro}
+          membroArrastavel={podeMoverNaCall || Boolean(voice.channelId)}
+          aoArrastarMembro={aoArrastarMembro}
+          aoSoltarMembro={arrasto?.terminar}
         />
       )}
     </div>

@@ -199,6 +199,15 @@ function Tile({
         </span>
       )}
       {qualidade && <span className="voice-tile-qualidade">{qualidade}</span>}
+      {/*
+        * Nenhum botão daqui usa a classe "faint": ela some com opacity:0
+        * sempre, só reaparecendo sob `.channel-row:hover`/`.member:hover`
+        * (ver styles.css) - nenhum dos dois é ancestral aqui. O CONTAINER
+        * `.voice-tile-acoes` já tem seu PRÓPRIO fade (opacity 0→1 no hover
+        * do tile / tela cheia); com "faint" também no botão, o botão ficava
+        * preso em opacity:0 pra sempre, PARENTE visível ou não - era por
+        * isso que tela cheia e PiP nunca apareciam, mesmo passando o mouse.
+        */}
       <span className="voice-tile-acoes">
         {socketId && (
           <AcaoExpulsar
@@ -210,8 +219,8 @@ function Tile({
         )}
         {ehTela && (
           <>
-            <button className="icon-btn faint" title="Abrir em janela flutuante" onClick={abrirPopup}><Icon name="picture-in-picture" size={13} /></button>
-            <button className="icon-btn faint" title="Tela cheia" onClick={alternarTelaCheia}><Icon name="expand" size={14} /></button>
+            <button className="icon-btn" title="Abrir em janela flutuante" onClick={abrirPopup}><Icon name="picture-in-picture" size={13} /></button>
+            <button className="icon-btn" title="Tela cheia" onClick={alternarTelaCheia}><Icon name="expand" size={14} /></button>
           </>
         )}
       </span>
@@ -227,12 +236,12 @@ function Tile({
 function AcaoExpulsar({ podeExpulsar, votacao, onExpulsar, onVotarExpulsao }) {
   if (podeExpulsar) {
     return (
-      <button className="icon-btn faint perigo" title="Expulsar da chamada" onClick={onExpulsar}><Icon name="ban" size={13} /></button>
+      <button className="icon-btn perigo" title="Expulsar da chamada" onClick={onExpulsar}><Icon name="ban" size={13} /></button>
     );
   }
   return (
     <button
-      className="icon-btn faint"
+      className="icon-btn"
       title={votacao ? `Votar expulsão (${votacao.votos}/${votacao.necessario})` : 'Votar para expulsar da chamada'}
       onClick={onVotarExpulsao}
     >

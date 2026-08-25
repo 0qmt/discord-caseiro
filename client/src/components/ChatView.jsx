@@ -4,6 +4,10 @@ import { corDoMembro, nomeExibido } from '../lib/cargos.js';
 import { lerComando, sugestoes } from '../lib/comandos.js';
 import { linkify } from '../lib/linkify.js';
 import { codificarMencoes, mensagemMenciona } from '../lib/mencoes.js';
+import { itensDeImagem } from '../lib/menuDeImagem.jsx';
+import { EMOJIS_RAPIDOS, itensDeMensagem } from '../lib/menuDeMensagem.jsx';
+import { useMensagensNovas } from '../lib/mensagensNovas.js';
+import AcoesDaMensagem from './AcoesDaMensagem.jsx';
 import Avatar from './Avatar.jsx';
 import ContextMenu, { useContextMenu } from './ContextMenu.jsx';
 import GifPicker from './GifPicker.jsx';
@@ -16,9 +20,6 @@ const timeOf = (ts) =>
 
 const dayOf = (ts) =>
   new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-
-/** Os que aparecem no atalho de reagir, sem abrir seletor nenhum. */
-const EMOJIS_RAPIDOS = ['👍', '❤️', '😂', '🔥', '😮', '😢', '🎉', '👀'];
 
 /** Mensagens seguidas da mesma pessoa em ate 5 min viram um bloco so. */
 export function shouldGroup(previous, message) {
@@ -64,8 +65,19 @@ export function Conteudo({ texto, membros, meuId }) {
 
 export function Anexo({ anexo }) {
   const [aberta, setAberta] = useState(false);
+  // O menu vive dentro do próprio anexo: assim vale igual nas duas peles,
+  // sem cada tela ter que montar e posicionar o dela.
+  const menu = useContextMenu();
+
   if (!anexo) return null;
+
   if (anexo.type === 'image' || anexo.type === 'gif') {
+    const itens = itensDeImagem({
+      src: anexo.url,
+      nome: anexo.name,
+      onVer: () => setAberta(true),
+    });
+
     return (
       <>
         <img
@@ -74,10 +86,12 @@ export function Anexo({ anexo }) {
           alt={anexo.name ?? 'imagem'}
           loading="lazy"
           onClick={() => setAberta(true)}
+          onContextMenu={menu.abrirCom(itens)}
         />
         {aberta && (
           <ImageLightbox src={anexo.url} nome={anexo.name} onClose={() => setAberta(false)} />
         )}
+        <ContextMenu estado={menu.estado} onFechar={menu.fechar} />
       </>
     );
   }
@@ -149,8 +163,47 @@ function SlashMenu({ lista, ativo, onEscolher }) {
   );
 }
 
-/** Uma reação: mostra o emoji, quantos reagiram, e destaca se você é um deles. */
-function Reacoes({ reactions, meuId, onReagir, onAbrirEmoji }) {
+/**
+ * Uma linha da lista de fixadas.
+ *
+ * Mostra a foto de quem mandou e, quando a mensagem é uma imagem, uma
+ * miniatura dela. Antes toda mensagem com anexo virava a palavra "anexo", e
+ * uma lista de cinco fixadas ficava com cinco linhas idênticas - impossível
+ * saber qual era qual sem clicar uma por uma.
+ *
+ * Exportado porque a versão de teste mostra a mesma lista.
+ */
+export function ItemFixado({ pin, onIr }) {
+  const imagem = pin.attachment && (pin.attachment.type === 'image' || pin.attachment.type === 'gif')
+    ? pin.attachment
+    : null;
+
+  return (
+    <button type="button" className="pin-item" onClick={onIr}>
+      <Avatar user={pin.author} size={28} className="small" />
+      <span className="pin-corpo">
+        <span className="pin-autor">{pin.author.username}</span>
+        <span className="pin-texto">
+          {pin.content || (imagem ? (imagem.name ?? 'imagem') : (pin.attachment?.name ?? 'anexo'))}
+        </span>
+      </span>
+      {/* Sem `loading="lazy"` de propósito: dentro do popover o navegador
+          trata a miniatura como fora da tela e adia o carregamento pra
+          sempre - o resultado era um quadrado cinza que nunca virava foto.
+          São no máximo 50 imagens de 44px, carregar direto não pesa. */}
+      {imagem && <img className="pin-miniatura" src={imagem.url} alt="" />}
+    </button>
+  );
+}
+
+/**
+ * Uma reação: mostra o emoji, quantos reagiram, e destaca se você é um deles.
+ *
+ * Exportado porque a versão de teste (Orbit) mostra as mesmas reações - sem
+ * isso ela guardava a reação no servidor e não desenhava nada na tela, que
+ * pra quem clica é indistinguível de "o botão não funciona".
+ */
+export function Reacoes({ reactions, meuId, onReagir, onAbrirEmoji }) {
   if (!reactions?.length) {
     return (
       <button type="button" className="reacao-add" title="Reagir" onClick={onAbrirEmoji}>
@@ -202,6 +255,9 @@ export default function ChatView({
   onEditarMensagem,
   onApagarMensagem,
   onFixarMensagem,
+  onEncaminhar,
+  onMarcarNaoLido,
+  onDenunciar,
   podeModerar = false,
   onRodarComando,
   // Botões do topo (só o chat de servidor usa).
@@ -234,6 +290,23 @@ export default function ChatView({
   const menu = useContextMenu();
 
   const listaSlash = useMemo(() => (onRodarComando ? sugestoes(draft) : []), [draft, onRodarComando]);
+
+  const novas = useMensagensNovas(messages, channel?.id);
+
+  /*
+   * Apagar com a mensagem saindo antes de sumir. A classe entra direto no nó
+   * (e não por state) porque o dado dela já foi embora no instante seguinte -
+   * guardar a mensagem morta no estado só pra animar sairia bem mais caro.
+   * Só vale pra quem apagou; mensagem apagada por outra pessoa chega pelo
+   * socket já sem o nó pra animar.
+   */
+  const apagarComSaida = (id) => {
+    const no = scrollRef.current?.querySelector(`[data-msg="${id}"]`);
+    if (!no) return onApagarMensagem(id);
+    no.classList.add('saindo');
+    setTimeout(() => onApagarMensagem(id), 160);
+    return undefined;
+  };
 
   // Canal com não lida: abre em cima da primeira mensagem não lida (com um
   // divisor "novas mensagens"), não sempre no fim - só desce pro fim quando
@@ -454,59 +527,24 @@ export default function ChatView({
 
   /** Itens do menu de contexto de uma mensagem (seção 6 da spec). */
   function itensDaMensagem(message) {
-    const meuTexto = message.author.id === meId;
-    const itens = [];
-
-    if (onReagir) {
-      itens.push({
-        tipo: 'sub',
-        label: 'Adicionar reação',
-        icone: <Icon name="smile" size={15} />,
-        itens: EMOJIS_RAPIDOS.map((emoji) => ({
-          key: emoji, label: emoji, onClick: () => onReagir(message.id, emoji),
-        })),
-      });
-    }
-    itens.push({ label: 'Responder', icone: <Icon name="reply" size={15} />, onClick: () => { setRespondendo(message); campoRef.current?.focus(); } });
-    if (meuTexto && onEditarMensagem && message.content) {
-      itens.push({ label: 'Editar', icone: <Icon name="pencil" size={15} />, onClick: () => iniciarEdicao(message) });
-    }
-    if (onFixarMensagem && podeModerar) {
-      itens.push({
-        label: message.pinnedAt ? 'Desafixar' : 'Fixar mensagem',
-        icone: <Icon name="pin" size={15} />,
-        onClick: () => onFixarMensagem(message.id, !message.pinnedAt),
-      });
-    }
-    itens.push({ tipo: 'sep' });
-    itens.push({
-      label: 'Copiar texto',
-      icone: <Icon name="copy" size={15} />,
-      onClick: () => navigator.clipboard?.writeText(message.content ?? '').catch(() => {}),
+    return itensDeMensagem({
+      message,
+      meId,
+      podeModerar,
+      canalId: channel?.id,
+      onReagir,
+      onResponder: (m) => { setRespondendo(m); campoRef.current?.focus(); },
+      // Só o autor edita: sem essa checagem o item aparecia na mensagem dos
+      // outros, e o servidor recusaria depois de a pessoa já ter digitado.
+      onEditar: message.author.id === meId && onEditarMensagem && message.content
+        ? () => iniciarEdicao(message)
+        : null,
+      onFixarMensagem,
+      onApagar: onApagarMensagem ? apagarComSaida : null,
+      onEncaminhar,
+      onMarcarNaoLido,
+      onDenunciar,
     });
-    if (message.attachment) {
-      itens.push({
-        label: 'Copiar link do anexo',
-        icone: <Icon name="link" size={15} />,
-        onClick: () => navigator.clipboard?.writeText(
-          new URL(message.attachment.url, window.location.origin).href,
-        ).catch(() => {}),
-      });
-    }
-    itens.push({
-      label: 'Copiar ID',
-      icone: '#',
-      onClick: () => navigator.clipboard?.writeText(message.id).catch(() => {}),
-    });
-
-    if ((meuTexto || podeModerar) && onApagarMensagem) {
-      itens.push({ tipo: 'sep' });
-      itens.push({
-        label: 'Excluir mensagem', icone: <Icon name="trash" size={15} />, perigo: true,
-        onClick: () => onApagarMensagem(message.id),
-      });
-    }
-    return itens;
   }
 
   if (!channel) {
@@ -554,17 +592,7 @@ export default function ChatView({
             <div className="pins-popover">
               <h4>Mensagens fixadas</h4>
               {pins.length === 0 && <p className="pins-vazio">Nada fixado neste canal ainda.</p>}
-              {pins.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="pin-item"
-                  onClick={() => { setPinsAbertos(false); irPara(p.id); }}
-                >
-                  <div className="pin-autor">{p.author.username}</div>
-                  <div className="pin-texto">{p.content || 'anexo'}</div>
-                </button>
-              ))}
+              {pins.map((p) => <ItemFixado key={p.id} pin={p} onIr={() => { setPinsAbertos(false); irPara(p.id); }} />)}
             </div>
           </>
         )}
@@ -601,6 +629,7 @@ export default function ChatView({
                   'message', 'msg',
                   grouped ? 'grouped' : '',
                   message.pending ? 'pending' : '',
+                  novas.has(message.id) ? 'nova' : '',
                   destacada === message.id ? 'destacada' : '',
                   meId && mensagemMenciona(message.content, meId) ? 'mencionado' : '',
                 ].filter(Boolean).join(' ')}
@@ -680,43 +709,16 @@ export default function ChatView({
                 </div>
 
                 {!message.pending && (
-                  <div className="msg-acoes">
-                    {onReagir && (
-                      <button
-                        className="icon-btn"
-                        title="Reagir"
-                        onClick={() => setEmojiPara(emojiPara === message.id ? null : message.id)}
-                      >
-                        <Icon name="smile" />
-                      </button>
-                    )}
-                    <button
-                      className="icon-btn"
-                      title="Responder"
-                      onClick={() => { setRespondendo(message); campoRef.current?.focus(); }}
-                    >
-                      <Icon name="reply" />
-                    </button>
-                    {meuTexto && onEditarMensagem && message.content && (
-                      <button className="icon-btn" title="Editar" onClick={() => iniciarEdicao(message)}><Icon name="pencil" /></button>
-                    )}
-                    {(meuTexto || podeModerar) && onApagarMensagem && (
-                      <button
-                        className="icon-btn perigo"
-                        title="Excluir"
-                        onClick={() => onApagarMensagem(message.id)}
-                      >
-                        <Icon name="trash" />
-                      </button>
-                    )}
-                    <button
-                      className="icon-btn"
-                      title="Mais"
-                      onClick={(e) => menu.abrirCom(() => itensDaMensagem(message))(e)}
-                    >
-                      <Icon name="more" />
-                    </button>
-                  </div>
+                  <AcoesDaMensagem
+                    message={message}
+                    onReagir={onReagir}
+                    onAbrirEmoji={onReagir
+                      ? () => setEmojiPara(emojiPara === message.id ? null : message.id)
+                      : null}
+                    onResponder={(m) => { setRespondendo(m); campoRef.current?.focus(); }}
+                    onEncaminhar={onEncaminhar}
+                    onMais={(e) => menu.abrirCom(() => itensDaMensagem(message))(e)}
+                  />
                 )}
               </div>
             </div>
@@ -794,18 +796,20 @@ export default function ChatView({
             rows={1}
             maxLength={4000}
           />
-        </div>
-
-        <div className="composer-gif-wrap">
-          <button
-            type="button"
-            className={`icon-btn composer-gif ${gifAberto ? 'ativo' : ''}`}
-            title="Enviar GIF"
-            onClick={() => setGifAberto((v) => !v)}
-          >
-            GIF
-          </button>
-          {gifAberto && <GifPicker onEscolher={escolherGif} onFechar={() => setGifAberto(false)} />}
+          {/* Dentro da mesma barra do campo, não uma caixa separada do lado -
+              é isso que faz ler como "embutido no chat" igual ao Discord,
+              em vez de mais um botão solto ao lado do de enviar. */}
+          <div className="composer-gif-wrap">
+            <button
+              type="button"
+              className={`composer-gif ${gifAberto ? 'ativo' : ''}`}
+              title="Enviar GIF"
+              onClick={() => setGifAberto((v) => !v)}
+            >
+              GIF
+            </button>
+            {gifAberto && <GifPicker onEscolher={escolherGif} onFechar={() => setGifAberto(false)} />}
+          </div>
         </div>
 
         <button className="primary" type="submit" disabled={(!draft.trim() && !anexoPendente) || enviandoAnexo}>

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { NOMES_DE_PERMISSAO, PERM } from '../lib/cargos.js';
-import Modal from './Modal.jsx';
 
 const CORES = [
   '#f23f43', '#e67e22', '#f0b232', '#23a559', '#1abc9c',
@@ -9,13 +8,16 @@ const CORES = [
 ];
 
 /**
- * Tela de cargos: criar, colorir, marcar permissões e apagar.
+ * Cargos: criar, colorir, marcar permissões e apagar.
  *
  * Não deixa mexer no bit de administrador do @everyone porque isso
  * transformaria o servidor inteiro em dono - o servidor recusa de qualquer
  * jeito, mas esconder o botão evita a pessoa tentar e achar que quebrou.
+ *
+ * Mora como seção (e não mais como modal próprio) porque agora vive dentro
+ * das configurações do servidor, junto de membros, banimentos e o resto.
  */
-export default function RolesModal({ guild, onClose, onErro }) {
+export default function SecaoCargos({ guild, onErro }) {
   const [roles, setRoles] = useState(guild.roles ?? []);
   const [selecionadoId, setSelecionadoId] = useState(guild.roles?.[0]?.id ?? null);
   const [salvando, setSalvando] = useState(false);
@@ -72,7 +74,12 @@ export default function RolesModal({ guild, onClose, onErro }) {
   };
 
   return (
-    <Modal title="Cargos do servidor" onClose={onClose} wide>
+    <section className="settings-secao larga">
+      <h2>Cargos</h2>
+      <p className="settings-subtitulo">
+        Use cargos pra agrupar gente e dar permissões de uma vez. Quem tem um cargo
+        acima na lista manda em quem tem cargo abaixo.
+      </p>
       <div className="cargos-layout">
         <div className="cargos-lista">
           <button className="cargos-novo" onClick={criar}>+ Criar cargo</button>
@@ -157,6 +164,6 @@ export default function RolesModal({ guild, onClose, onErro }) {
           )}
         </div>
       </div>
-    </Modal>
+    </section>
   );
 }

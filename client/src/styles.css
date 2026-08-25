@@ -33,12 +33,32 @@
   --text-dim: #949ba4;
 
   --accent: #5865f2;         /* blurple */
+  /* Link tem cor própria, e não --accent: o blurple é quase a mesma cor do
+     fundo de menção, então link e menção viravam a mesma mancha azul no
+     meio do texto. Esse azul mais claro é o que o Discord usa, e é o que
+     faz "isso aqui é clicável" ler de longe. */
+  --link: #00a8fc;
   --accent-hover: #4752c4;
   --danger: #f23f43;
   --ok: #23a559;
   --idle: #f0b232;
 
   --radius: 8px;
+
+  /* Curvas de animação. As embutidas do CSS (`ease-out` e cia) são fracas
+     demais pra UI - essas são as curvas fortes de sempre, então todo lugar
+     que anima puxa daqui em vez de inventar um cubic-bezier na mão.
+     `ease-in` não aparece em lugar nenhum de propósito: ela começa devagar
+     justo no instante em que a pessoa está olhando, e faz tudo parecer mais
+     lento do que é. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);      /* entrar e sair */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);  /* mover na tela */
+
+  /* Durações. Nada de UI passa de 300ms: um menu de 180ms parece mais
+     responsivo que o mesmo menu em 400ms. */
+  --dur-toque: 120ms;   /* resposta de clique, hover, cor */
+  --dur-popover: 160ms; /* menu de contexto, popover, dica */
+  --dur-modal: 220ms;   /* modal, lightbox, painel */
 }
 
 * { box-sizing: border-box; }
@@ -48,15 +68,15 @@ html, body, #root { height: 100%; overflow: hidden; }
 /* Barra de rolagem escura em tudo - a padrão do sistema (branca) destoava
    muito do resto do app. Chrome/Electron usam os -webkit-*; Firefox usa as
    propriedades padrão logo abaixo.
-   `forced-color-adjust: none` é o que importa de verdade aqui: com "cores
-   forçadas"/alto contraste ligado no Windows, o Chromium ignora TODO o CSS
-   de scrollbar (mesmo estando certo, como confirmamos) e desenha a barra
-   nativa branca com setinhas por cima - isso aqui pede pra não fazer isso
-   só nessa parte, sem mexer em acessibilidade do resto da página. */
+   IMPORTANTE: `scrollbar-color` exige duas cores sólidas - `--bg-3` é um
+   token de `background` (gradientes/textura de tema), não uma cor válida.
+   Com valor inválido o Chromium recente descarta a propriedade inteira e
+   cai pro scrollbar nativo do Windows (o branco com setinhas), ignorando
+   até o ::-webkit-scrollbar que já estava certo. Por isso aqui vai cor
+   sólida mesmo, batendo com o ::-webkit-scrollbar-thumb abaixo. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--bg-3) transparent;
-  forced-color-adjust: none;
+  scrollbar-color: #1a1b1e transparent;
 }
 
 *::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -315,15 +335,34 @@ button.link {
   box-shadow: 0 1px 0 rgba(0, 0, 0, .2);
 }
 
+.guild-name-botao {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--text);
+  background: none;
+}
+.guild-name-botao:hover { background: var(--bg-3); }
+.guild-name-botao .icon { flex-shrink: 0; color: var(--text-dim); }
+
 .guild-name {
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+  text-align: left;
 }
 
-.channel-scroll { flex: 1; overflow-y: auto; padding: 12px 8px; }
+/* flex-column (e não bloco simples): é o que deixa a última zona de soltar
+   (`.zona-fim-canais.preenche`) crescer e ocupar o espaço vazio que sobra
+   embaixo do último canal, em vez de ficar do tamanho do conteúdo só. */
+.channel-scroll { flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 12px 8px; }
 
 .group-head {
   display: flex;
@@ -567,8 +606,8 @@ button.link {
 .author { font-size: 16px; font-weight: 600; }
 .time { color: var(--text-dim); font-size: 11px; }
 .content { white-space: pre-wrap; overflow-wrap: anywhere; }
-.content a { color: var(--accent); text-decoration: underline; }
-.content a:hover { color: #fff; }
+.content a { color: var(--link); text-decoration: none; }
+.content a:hover { text-decoration: underline; }
 
 .typing-line { height: 20px; padding: 0 18px; color: var(--text-dim); font-size: 12px; }
 
@@ -619,6 +658,9 @@ button.link {
   max-height: 180px;
   background: var(--bg-3);
   border-color: transparent;
+  /* Abre espaço à direita pro ícone de GIF embutido (ver .composer-gif-wrap)
+     não cobrir o texto digitado. */
+  padding-right: 52px;
 }
 
 /* Menção destacada no texto de uma mensagem já enviada */
@@ -684,20 +726,31 @@ button.link {
   font-weight: 700;
 }
 
-.composer-gif-wrap { position: relative; flex: none; }
+/*
+ * Embutido DENTRO da barra do campo (position:absolute ancorado no
+ * `.composer-campo-wrap`), não mais uma caixa própria ao lado com gap -
+ * é a diferença entre "mais um botão solto perto do de enviar" e "faz
+ * parte da barra de digitar", que é como o Discord de verdade faz.
+ */
+.composer-gif-wrap {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: 2;
+}
 
 .composer-gif {
-  flex: none;
-  height: 38px;
-  padding: 0 10px;
-  border-radius: var(--radius);
-  background: var(--bg-3);
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-dim);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: .02em;
 }
 
-.composer-gif:hover, .composer-gif.ativo { background: var(--accent); color: #fff; }
+.composer-gif:hover, .composer-gif.ativo { background: var(--bg-2); color: var(--text); }
 
 /* Anexo (imagem, video, audio, arquivo) dentro de uma mensagem ou pendente no composer */
 .link-preview {
@@ -774,6 +827,12 @@ button.link {
   font-weight: 600;
 }
 .lightbox-acoes button:hover, .lightbox-acoes a:hover { background: rgba(255, 255, 255, .15); }
+/* O menu de contexto vive com z-index 61 (ver componentes.css), e o
+   visualizador está em 100 - sem subir o menu aqui dentro ele abriria por
+   trás da foto, invisível. */
+.lightbox-menu .ctx-backdrop { z-index: 110; }
+.lightbox-menu .ctx-menu { z-index: 111; }
+
 .lightbox-zoom-nivel { min-width: 42px; text-align: center; font-size: 12px; color: #ddd; }
 .lightbox-separador { width: 1px; height: 20px; background: rgba(255, 255, 255, .25); }
 
@@ -1046,7 +1105,204 @@ button.avatar:hover .avatar-inner { filter: brightness(1.12); }
 
 .profile-body { padding: 10px 20px 22px; }
 
+/* ------------------------- encaminhar e denunciar -------------------------- */
+
+.encaminhar-previa {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  background: var(--bg-3);
+}
+.encaminhar-previa strong { font-size: 13px; }
+.encaminhar-previa p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  /* Prévia é lembrete, não leitura: 2 linhas bastam pra reconhecer qual
+     mensagem é, sem o modal virar uma rolagem só. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.encaminhar-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+
+.encaminhar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+}
+.encaminhar-item:hover:not(:disabled) { background: var(--hover); }
+.encaminhar-item:disabled { opacity: .55; cursor: default; }
+
+.encaminhar-hash {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--bg-3);
+  color: var(--text-dim);
+}
+
+.encaminhar-nome { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.encaminhar-nome strong { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.encaminhar-nome .hint { margin: 0; }
+
+.encaminhar-estado { flex: none; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.encaminhar-item:hover:not(:disabled) .encaminhar-estado { color: var(--accent-hover); }
+
+.denuncia-previa {
+  padding: 10px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  border-left: 3px solid var(--danger);
+  background: var(--bg-3);
+}
+.denuncia-previa strong { font-size: 13px; }
+.denuncia-previa p { margin: 3px 0 0; font-size: 13px; color: var(--text-dim); overflow-wrap: anywhere; }
+
 /* ------------------------- configurações do servidor ------------------------- */
+
+/* Membros, cargos, convites e auditoria são listas - precisam de mais largura
+   que um formulário de duas linhas. */
+.settings-secao.larga { max-width: 860px; }
+
+/* Ícone do servidor no topo do menu lateral, no lugar do avatar da pessoa. */
+.guild-icone-mini {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--bg-3);
+  font-weight: 700;
+}
+.guild-icone-mini img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+.settings-item.perigo { color: var(--danger); }
+.settings-item.perigo:hover { background: rgba(242, 63, 67, .12); color: var(--danger); }
+.settings-item.perigo.ativo { background: var(--danger); color: #fff; }
+
+/* ------------------------------ listas de gente --------------------------- */
+
+.membros-busca { max-width: 320px; margin-bottom: 14px; }
+
+.membros-tabela { display: flex; flex-direction: column; gap: 4px; }
+
+.membro-linha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-3);
+}
+
+.membro-linha-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.membro-linha-info strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.membro-linha-info .hint { margin: 0; }
+
+.membro-linha-acoes { display: flex; align-items: center; gap: 6px; flex: none; flex-wrap: wrap; }
+
+/* Botão de linha: menor que o .primary, que ocupa a largura toda. */
+.botao-fino {
+  width: auto;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.botao-fino:hover { background: var(--hover); color: var(--text); }
+.botao-fino.perigo { color: var(--danger); }
+.botao-fino.perigo:hover { background: var(--danger); color: #fff; }
+select.botao-fino { margin: 0; border: none; height: auto; }
+
+/* ------------------------------- auditoria -------------------------------- */
+
+.auditoria-lista { display: flex; flex-direction: column; gap: 2px; }
+
+.auditoria-linha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+}
+.auditoria-linha:nth-child(odd) { background: rgba(255, 255, 255, .02); }
+
+.auditoria-icone {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--bg-3);
+  color: var(--text-dim);
+}
+
+.auditoria-texto { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; font-size: 14px; }
+.auditoria-texto .hint { margin: 0; }
+.auditoria-quando { flex: none; font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+
+/* ---------------------------- excluir servidor ---------------------------- */
+
+.zona-perigo {
+  padding: 16px;
+  border: 1px solid rgba(242, 63, 67, .4);
+  border-radius: 8px;
+  background: rgba(242, 63, 67, .06);
+}
+.zona-perigo p { margin: 0 0 14px; font-size: 14px; line-height: 1.5; }
+.zona-perigo label { margin-bottom: 14px; }
+
+.convites-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.convites-form label { flex: 1; min-width: 120px; }
+.convites-form button { height: 38px; white-space: nowrap; }
+
+.convites-lista { display: flex; flex-direction: column; gap: 6px; }
+
+.convite-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-3);
+}
+.convite-item-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.convite-item-code { font-weight: 700; letter-spacing: .04em; font-family: monospace; }
+.convite-item-acoes { display: flex; gap: 4px; flex-shrink: 0; }
 
 .guild-icone-campo { display: flex; justify-content: center; margin-bottom: 18px; }
 

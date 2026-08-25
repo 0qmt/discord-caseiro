@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { cargosDoMembro } from '../lib/cargos.js';
 import { cropStyle } from '../lib/cropStyle.js';
 import { estiloGradiente } from '../lib/cor.js';
+import Atividade from './Atividade.jsx';
 import Avatar from './Avatar.jsx';
 import Modal from './Modal.jsx';
 
@@ -48,7 +49,7 @@ const ROLE_LABEL = { owner: 'dono', admin: 'admin', member: 'membro' };
 const dataLonga = (ts) =>
   new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
-export default function ProfileCard({ userId, guild, reloadToken, onClose, onEdit }) {
+export default function ProfileCard({ userId, guild, reloadToken, onClose, onEdit, atividade = null }) {
   const [profile, setProfile] = useState(null);
   const [error, setError] = useState(null);
 
@@ -112,6 +113,13 @@ export default function ProfileCard({ userId, guild, reloadToken, onClose, onEdi
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {atividade && (
+              <div className="profile-field">
+                <span className="profile-label">Agora</span>
+                <Atividade atividade={atividade} />
               </div>
             )}
 

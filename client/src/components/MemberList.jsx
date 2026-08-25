@@ -1,4 +1,5 @@
 import { corDoMembro, nomeExibido, PERM, podeAgirSobre, temPermissao } from '../lib/cargos.js';
+import { AtividadeResumo } from './Atividade.jsx';
 import Avatar from './Avatar.jsx';
 import StatusDot from './StatusDot.jsx';
 import Icon from './Icon.jsx';
@@ -17,15 +18,19 @@ export const DURACOES_DE_CASTIGO = [
 
 function MemberRow({
   member, presenca, cor, canManage, isMe, onPromote, onKick, onOpen,
-  podeChamarParaCall, onChamarParaCall, onMenu,
+  podeChamarParaCall, onChamarParaCall, onMenu, arrastavel, aoArrastar, aoSoltarArrasto,
 }) {
   const online = presenca?.online ?? false;
   const atividade = presenca?.activity ?? null;
 
   return (
     <li
-      className={`member ${online ? '' : 'offline'}`}
+      className={`member ${online ? '' : 'offline'} ${arrastavel ? 'arrastavel' : ''}`}
       onContextMenu={onMenu}
+      draggable={arrastavel || undefined}
+      onDragStart={arrastavel ? aoArrastar : undefined}
+      onDragEnd={arrastavel ? aoSoltarArrasto : undefined}
+      title={arrastavel ? 'Arraste pra um canal de voz pra chamar' : undefined}
     >
       <Avatar
         user={member}
@@ -38,14 +43,25 @@ function MemberRow({
       </Avatar>
 
       <div className="member-linhas">
+        {/*
+          * O nome também recebe draggable+handlers diretamente, e não só o
+          * <li> ancestor - mesmo motivo do channel-btn: é um <button>, e
+          * arrastar a partir de um botão de texto não herda o arrasto do
+          * pai, cai pra seleção de texto. A foto funcionava porque a <img>
+          * dentro dela é arrastável nativamente no Chrome; o nome, sendo só
+          * texto num botão, não tem esse comportamento nativo nenhum.
+          */}
         <button
           className={`member-name ${cor ? 'colorido' : ''}`}
           style={cor ? { color: cor } : undefined}
           onClick={() => onOpen(member)}
+          draggable={arrastavel || undefined}
+          onDragStart={arrastavel ? aoArrastar : undefined}
+          onDragEnd={arrastavel ? aoSoltarArrasto : undefined}
         >
           {nomeExibido(member)}{isMe && ' (voce)'}
         </button>
-        {atividade && <span className="member-atividade" title={atividade}>{atividade}</span>}
+        {atividade && <AtividadeResumo atividade={atividade} className="member-atividade" />}
       </div>
 
       {ROLE_LABEL[member.role] && <span className={`role ${member.role}`}>{ROLE_LABEL[member.role]}</span>}
@@ -86,6 +102,8 @@ function MemberRow({
 export default function MemberList({
   guild, presencas, meId, onPromote, onKick, onOpenProfile,
   podeChamarParaCall = false, onChamarParaCall, onMenuDoMembro, visivel = true,
+  // Arrastar alguém pra um canal de voz pra puxar pra call.
+  membroArrastavel = false, aoArrastarMembro, aoSoltarMembro,
 }) {
   if (!guild || !visivel) return null;
 
@@ -110,6 +128,9 @@ export default function MemberList({
       podeChamarParaCall={podeChamarParaCall}
       onChamarParaCall={onChamarParaCall}
       onMenu={onMenuDoMembro?.(member, { euMembro, guild })}
+      arrastavel={membroArrastavel && member.id !== meId}
+      aoArrastar={aoArrastarMembro?.(member)}
+      aoSoltarArrasto={aoSoltarMembro}
     />
   );
 

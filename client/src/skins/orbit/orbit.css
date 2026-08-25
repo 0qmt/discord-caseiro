@@ -32,7 +32,14 @@
 
 .orbit-shell * { box-sizing: border-box; }
 .orbit-shell p, .orbit-shell h1, .orbit-shell h2, .orbit-shell h3 { margin: 0; }
+/* Link herdava a cor do texto e sumia no meio da mensagem - o `:not` deixa
+   os links de dentro do conteúdo azuis sem pintar os que são casca de
+   botão (ícone da barra, ação de anexo). */
 .orbit-shell a { color: inherit; text-decoration: none; }
+.orbit-shell .orbit-message-text a,
+.orbit-shell .content a { color: var(--link); }
+.orbit-shell .orbit-message-text a:hover,
+.orbit-shell .content a:hover { text-decoration: underline; }
 .orbit-shell img { display: block; max-width: 100%; }
 /* font-family (não o atalho "font") de propósito: o atalho reseta size/weight
    junto, e como "inherit" sempre teria a mesma especificidade de qualquer
@@ -97,6 +104,7 @@
 }
 
 .orbit-server-icon {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -117,7 +125,7 @@
 .orbit-server-icon.orbit-subtle { background: var(--o-muted); color: var(--o-muted-fg); }
 .orbit-server-icon.orbit-alerta { background: var(--o-muted); color: #f0b232; }
 .orbit-server-icon.orbit-alerta:hover { background: #f0b232; color: #1a1305; }
-.orbit-server-icon-img { display: block; width: 100%; height: 100%; }
+.orbit-server-icon-img { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; }
 .orbit-server-icon-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 .orbit-rail-divider { width: 32px; height: 1px; background: var(--o-border); flex: none; }
@@ -145,6 +153,15 @@
   font-size: 15px;
 }
 
+button.orbit-server-header-botao {
+  width: 100%;
+  background: none;
+  color: var(--o-fg);
+  transition: background .1s;
+}
+button.orbit-server-header-botao:hover { background: var(--o-accent); }
+button.orbit-server-header-botao .icon { flex-shrink: 0; color: var(--o-muted-fg); }
+
 .orbit-channel-list { flex: 1; overflow-y: auto; padding: 14px 10px; display: flex; flex-direction: column; gap: 18px; }
 
 .orbit-group-label {
@@ -168,6 +185,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Largura explícita: o botão virou filho de um <div> de arrasto (ver
+     OrbitApp.jsx), e sem isso ele voltaria a encolher pro tamanho do
+     conteúdo em vez de ocupar a barra inteira, já que só o item direto do
+     flex-column (agora o div) herda o stretch automático. */
+  width: 100%;
   padding: 7px 9px;
   border-radius: 6px;
   color: var(--o-muted-fg);
@@ -176,6 +198,14 @@
 }
 .orbit-channel-row:hover { background: color-mix(in srgb, var(--o-accent) 70%, transparent); color: var(--o-fg); }
 .orbit-channel-row.orbit-channel-selected { background: var(--o-accent); color: var(--o-fg); }
+.orbit-channel-row.recebendo-pessoa { background: color-mix(in srgb, var(--o-primary) 30%, transparent); box-shadow: inset 0 0 0 1px var(--o-primary); }
+
+/* Repinta com os tokens do Orbit as classes de arrasto que vêm do CSS
+   compartilhado (componentes.css), pra não chegar com o cinza da pele
+   clássica. */
+.orbit-shell .indicador-de-solte { background: var(--o-primary); }
+.orbit-shell .voz-previa-bolinha { border-color: var(--o-primary); }
+.orbit-shell .voice-members li.voz-previa { color: var(--o-primary); }
 .orbit-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .orbit-member-count { border-radius: 4px; background: var(--o-muted); padding: 1px 6px; font-size: 10px; color: var(--o-muted-fg); }
 
@@ -320,7 +350,38 @@
 }
 .orbit-novas-mensagens::before, .orbit-novas-mensagens::after { content: ''; height: 1px; flex: 1; background: #f23f43; }
 
-.orbit-message-row { display: flex; flex-wrap: wrap; gap: 12px; padding: 2px 8px; border-radius: 6px; }
+/* `position: relative` é o que ancora a barra de ações (.msg-acoes, que é
+   absoluta) na própria mensagem - sem isso ela se penduraria no primeiro
+   ancestral posicionado e apareceria longe da linha certa. */
+.orbit-message-row { position: relative; display: flex; flex-wrap: wrap; gap: 12px; padding: 2px 8px; border-radius: 6px; }
+
+/* A barra vem do CSS compartilhado (componentes.css); aqui só se repinta
+   com os tokens do Orbit, senão ela chega com o cinza da pele clássica. */
+.orbit-shell .msg-acoes { background: var(--o-popover); box-shadow: 0 0 0 1px var(--o-border), 0 2px 6px rgba(0, 0, 0, .35); }
+.orbit-shell .msg-acoes .icon-btn { color: var(--o-muted-fg); }
+.orbit-shell .msg-acoes .icon-btn:hover { background: var(--o-accent); color: var(--o-fg); }
+.orbit-shell .msg-acao-emoji:hover { background: var(--o-accent); }
+
+/* Reações vêm do componente compartilhado; aqui só se repinta com os tokens
+   do Orbit, senão elas chegam com o cinza da pele clássica. */
+.orbit-shell .reacao,
+.orbit-shell .reacao-add {
+  background: var(--o-accent);
+  border: 1px solid transparent;
+  color: var(--o-muted-fg);
+}
+.orbit-shell .reacao:hover,
+.orbit-shell .reacao-add:hover { border-color: var(--o-muted-fg); color: var(--o-fg); }
+.orbit-shell .reacao.minha {
+  background: color-mix(in srgb, var(--o-primary) 24%, transparent);
+  border-color: var(--o-primary);
+  color: var(--o-fg);
+}
+
+/* Lista de fixadas: o item vem da pele clássica, o fundo é o do Orbit. */
+.orbit-shell .pin-item { background: var(--o-accent); color: var(--o-fg); }
+.orbit-shell .pin-item:hover { background: var(--o-muted); }
+.orbit-shell .pin-item .pin-texto { color: var(--o-muted-fg); }
 .orbit-message-row:hover { background: color-mix(in srgb, var(--o-accent) 38%, transparent); }
 .orbit-message-row.orbit-pending { opacity: .6; }
 
@@ -425,6 +486,28 @@ p.orbit-message-text { margin: 1px 0 0; font-size: 14px; line-height: 1.5; white
   color: var(--o-muted-fg);
 }
 .orbit-composer-icon:hover { background: var(--o-accent); color: var(--o-fg); }
+
+/* Mais um ícone dentro da MESMA barra (`.orbit-composer` já é a pílula
+   inteira - anexar, campo, GIF e enviar são todos filhos flex dela), não
+   uma caixa própria do lado. */
+.orbit-composer-gif-wrap { position: relative; flex: none; }
+
+.orbit-composer-gif {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: none;
+  color: var(--o-muted-fg);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: .02em;
+}
+.orbit-composer-gif:hover, .orbit-composer-gif.ativo { background: var(--o-accent); color: var(--o-fg); }
+
+/* O seletor de GIF é componente compartilhado com a pele clássica; aqui só
+   repinta com os tokens do Orbit. */
+.orbit-shell .gif-picker { background: var(--o-card); border-color: var(--o-border); }
+.orbit-shell .gif-picker-item:hover { outline-color: var(--o-primary); }
 
 .orbit-anexo-preview {
   display: flex;

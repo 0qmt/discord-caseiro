@@ -167,6 +167,28 @@ CREATE TABLE IF NOT EXISTS guild_bans (
   PRIMARY KEY (guild_id, user_id)
 );
 
+-- Registro de auditoria: quem fez o que no servidor.
+--
+-- `actor_label` e `target_label` guardam o NOME de quem agiu e de quem levou
+-- a acao no momento em que ela aconteceu, de proposito. Se guardasse so o id
+-- e fosse buscar o nome na hora de exibir, uma pessoa que saiu do servidor
+-- viraria uma linha em branco no historico - e historico que apaga sozinho
+-- nao serve pra nada. O id fica junto pra quando ainda der pra resolver.
+--
+-- `detalhe` e texto livre (ex.: o motivo do banimento, o cargo mexido).
+CREATE TABLE IF NOT EXISTS audit_log (
+  id           TEXT PRIMARY KEY,
+  guild_id     TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+  actor_id     TEXT NOT NULL,
+  actor_label  TEXT NOT NULL,
+  acao         TEXT NOT NULL,
+  target_id    TEXT,
+  target_label TEXT,
+  detalhe      TEXT,
+  created_at   INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_guild      ON audit_log(guild_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_channel  ON messages(channel_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reactions_message ON message_reactions(message_id);
 CREATE INDEX IF NOT EXISTS idx_roles_guild       ON roles(guild_id, position DESC);

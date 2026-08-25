@@ -44,6 +44,44 @@ const online = new Map();
 const presencas = new Map();
 
 const STATUS_VALIDOS = new Set(['online', 'idle', 'dnd', 'invisible']);
+const TIPOS_DE_ATIVIDADE = new Set(['jogo', 'musica', 'custom']);
+
+/** Só imagem embutida: URL de fora aqui viraria um jeito de rastrear quem viu. */
+const IMAGEM_OK = (v) => typeof v === 'string' && v.startsWith('data:image/') && v.length <= 24_000;
+
+/**
+ * Peneira a atividade que o cliente manda.
+ *
+ * Aceita as duas formas: o objeto novo ({ tipo, nome, detalhe, desde,
+ * imagem }) e a string antiga - versão velha do app de desktop continua
+ * mandando string, e derrubar a atividade dela por causa disso seria uma
+ * regressão silenciosa pra quem não atualizou.
+ */
+function atividadeValida(bruta) {
+  if (bruta === null) return null;
+
+  if (typeof bruta === 'string') {
+    const texto = bruta.trim().slice(0, 64);
+    return texto ? { tipo: 'custom', nome: texto, detalhe: null, desde: null, imagem: null } : null;
+  }
+
+  if (typeof bruta !== 'object') return null;
+  const nome = String(bruta.nome ?? '').trim().slice(0, 80);
+  if (!nome) return null;
+
+  const desde = Number(bruta.desde);
+  return {
+    tipo: TIPOS_DE_ATIVIDADE.has(bruta.tipo) ? bruta.tipo : 'custom',
+    nome,
+    detalhe: String(bruta.detalhe ?? '').trim().slice(0, 80) || null,
+    // Só instante no passado e recente: um `desde` no futuro (ou de anos
+    // atrás) viraria "jogando há -3 min" ou "há 400 dias" na tela.
+    desde: Number.isFinite(desde) && desde > Date.now() - 7 * 24 * 3600_000 && desde <= Date.now()
+      ? desde
+      : null,
+    imagem: IMAGEM_OK(bruta.imagem) ? bruta.imagem : null,
+  };
+}
 
 const presencaDe = (userId) => presencas.get(userId) ?? { status: 'online', activity: null };
 
@@ -399,22 +437,34 @@ export function attachRealtime(httpServer) {
         // activity === null limpa de proposito (fechou o jogo); undefined mantem.
         activity: activity === undefined
           ? atual.activity
-          : (activity === null ? null : String(activity).trim().slice(0, 64) || null),
+          : atividadeValida(activity),
       };
-      const mudou = novo.status !== atual.status || novo.activity !== atual.activity;
+      const mudou = novo.status !== atual.status
+        || JSON.stringify(novo.activity) !== JSON.stringify(atual.activity);
       presencas.set(user.id, novo);
       if (mudou) io.emit('presence:update', presencaPublica(user.id));
     });
 
     /* ------------------------ marcar como lido ----------------------- */
 
-    socket.on('channel:read', ({ channelId } = {}) => {
+    /*
+     * `ate` opcional: normalmente marca tudo como lido ate agora, mas o
+     * "marcar como nao lido" manda o instante logo ANTES da mensagem
+     * escolhida - dali pra frente tudo volta a contar como nao lido.
+     *
+     * So aceita marca no passado. Sem esse limite, um cliente com relogio
+     * adiantado (ou de ma fe) marcaria como lido mensagem que ainda nem
+     * chegou, e o contador nunca mais subiria naquele canal.
+     */
+    socket.on('channel:read', ({ channelId, ate } = {}) => {
       const id = String(channelId ?? '');
       if (!id) return;
+      const agora = Date.now();
+      const marca = Number.isFinite(ate) ? Math.min(Number(ate), agora) : agora;
       q.run(
         `INSERT INTO read_state (user_id, channel_id, last_read_at) VALUES (?, ?, ?)
          ON CONFLICT(user_id, channel_id) DO UPDATE SET last_read_at = excluded.last_read_at`,
-        user.id, id, Date.now(),
+        user.id, id, marca,
       );
     });
 

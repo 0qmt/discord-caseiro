@@ -1,6 +1,6 @@
 {
   "name": "discord-caseiro-desktop",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "private": true,
   "description": "Cliente de desktop do Discord Caseiro",
   "main": "src/main.js",

@@ -229,13 +229,34 @@ ipcMain.on('app:notificar', (evento, payload = {}) => {
 // vezes (recarregar a pagina faz isso) sem acumular timer.
 let pararVigiaDeJogo = null;
 
+/**
+ * Ícone do executável, como data URI - é a "foto do jogo".
+ *
+ * Sai do próprio .exe em vez de baixar de alguma API de capas: funciona
+ * offline, não precisa de chave de serviço nenhum, e é o mesmo ícone que a
+ * pessoa vê na barra de tarefas. Fica pequeno (32px) de propósito: vira
+ * texto base64 que trafega por WebSocket junto da presença, e capa grande
+ * ali seria peso a troco de nada.
+ */
+async function iconeDoExecutavel(caminho) {
+  try {
+    // 'large' (48px) e não 'normal' (32px): o cartão do perfil desenha a capa
+    // em 48px, e subir uma imagem de 32 pra 48 deixa ela borrada.
+    const img = await app.getFileIcon(caminho, { size: 'large' });
+    if (!img || img.isEmpty()) return null;
+    return img.resize({ width: 48, height: 48 }).toDataURL();
+  } catch {
+    return null;
+  }
+}
+
 ipcMain.on('app:vigiar-jogo', (evento) => {
   if (!veioDaNossaPagina(evento)) return;
   if (pararVigiaDeJogo) return;
-  pararVigiaDeJogo = jogos.vigiar((nome) => {
+  pararVigiaDeJogo = jogos.vigiar((atividade) => {
     if (!janela || janela.isDestroyed()) return;
-    janela.webContents.send('app:jogo', nome);
-  });
+    janela.webContents.send('app:jogo', atividade);
+  }, { buscarIcone: iconeDoExecutavel });
 });
 
 ipcMain.on('app:parar-vigia-jogo', () => {

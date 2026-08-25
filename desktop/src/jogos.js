@@ -1,4 +1,6 @@
 const { exec } = require('node:child_process');
+const { capaDaSteam } = require('./capas.js');
+const { lerMusica } = require('./musica.js');
 
 /**
  * Detecção de "o que a pessoa está jogando", no estilo do Discord.
@@ -106,32 +108,110 @@ function listarProcessos() {
   });
 }
 
-/** O primeiro conhecido que estiver rodando, ou null. */
+/**
+ * Caminho do executável de um processo pelo nome.
+ *
+ * É o único lugar que lê caminho de arquivo, e serve só pra pegar o ÍCONE do
+ * jogo (ver `iconeDoExecutavel` no main.js). O caminho nunca sai da máquina:
+ * o que vai pro servidor é a imagem já convertida, e só dela.
+ */
+function caminhoDoProcesso(nomeExe) {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') return resolve(null);
+    const seguro = String(nomeExe).replace(/[^a-z0-9_-]/gi, '');
+    if (!seguro) return resolve(null);
+    exec(
+      `powershell -NoProfile -NonInteractive -Command "(Get-Process -Name '${seguro}' -ErrorAction SilentlyContinue | Select-Object -First 1).Path"`,
+      { windowsHide: true, timeout: 6000 },
+      (erro, saida) => resolve(erro ? null : (String(saida).trim() || null)),
+    );
+  });
+}
+
+/**
+ * O primeiro conhecido que estiver rodando, ou null.
+ *
+ * Devolve o nome bonito E o executável que bateu - o executável é o que
+ * permite ir buscar o ícone depois.
+ */
 async function detectar() {
   const rodando = await listarProcessos();
   for (const nome of rodando) {
     const bonito = CONHECIDOS.get(nome);
-    if (bonito) return bonito;
+    if (bonito) return { nome: bonito, exe: nome };
   }
   return null;
 }
 
 /**
- * Vigia em segundo plano e chama `aoMudar(nomeOuNull)` só quando o resultado
- * muda - a interface não precisa saber que a checagem roda o tempo todo.
+ * Vigia jogo E música em segundo plano, e chama `aoMudar(atividade|null)` só
+ * quando o resultado muda de verdade.
+ *
+ * Jogo ganha do que está tocando: se a pessoa está jogando com música ao
+ * fundo, o que interessa mostrar é o jogo - a música vira o "de fundo" no
+ * sentido literal.
+ *
+ * `desde` é o pulo do gato do "há quanto tempo": marcado uma vez, quando a
+ * atividade COMEÇA, e preservado nas checagens seguintes. Se fosse recalculado
+ * a cada volta, o contador reiniciaria a cada 15 segundos e nunca passaria
+ * disso.
  */
-function vigiar(aoMudar) {
-  let ultimo;
+function vigiar(aoMudar, { buscarIcone } = {}) {
+  let ultima = null;
   let timer = null;
   let parado = false;
 
+  /** Duas atividades são "a mesma" quando o que aparece na tela é igual. */
+  const mesmaCoisa = (a, b) => a?.tipo === b?.tipo
+    && a?.nome === b?.nome
+    && a?.detalhe === b?.detalhe;
+
   const rodar = async () => {
-    const atual = await detectar();
-    if (parado) return;
-    if (atual !== ultimo) {
-      ultimo = atual;
-      aoMudar(atual);
+    const jogo = await detectar();
+    let atual = null;
+
+    if (jogo) {
+      atual = { tipo: 'jogo', nome: jogo.nome, detalhe: null, exe: jogo.exe };
+    } else {
+      const musica = await lerMusica();
+      if (musica) {
+        atual = {
+          tipo: 'musica',
+          nome: musica.titulo,
+          detalhe: musica.artista,
+          app: musica.app,
+        };
+      }
     }
+
+    if (parado) return;
+    if (mesmaCoisa(atual, ultima)) return;
+
+    if (atual) {
+      atual.desde = Date.now();
+      /*
+       * Capa só pra jogo, e só uma vez por atividade - buscar a cada ciclo
+       * seria caro à toa, já que a arte do mesmo jogo não muda.
+       *
+       * Arte oficial da Steam primeiro (bonita, grande, reconhecível); o
+       * ícone do executável entra quando o jogo não está na Steam - é o caso
+       * de Roblox, Fortnite, Minecraft e League, onde o ícone do .exe é
+       * justamente o logo oficial.
+       */
+      if (atual.tipo === 'jogo') {
+        atual.imagem = await capaDaSteam(atual.nome);
+        if (parado) return;
+        if (!atual.imagem && buscarIcone) {
+          const caminho = await caminhoDoProcesso(atual.exe);
+          if (parado) return;
+          atual.imagem = caminho ? await buscarIcone(caminho) : null;
+        }
+      }
+      delete atual.exe;
+    }
+
+    ultima = atual;
+    aoMudar(atual);
   };
 
   rodar();

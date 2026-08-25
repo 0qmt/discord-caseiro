@@ -5,6 +5,9 @@ import { restaurarTemaAppInicial } from './lib/temaApp.js';
 import './styles.css';
 import './componentes.css';
 import './cargos.css';
+// Por último de propósito: as animações encostam em classes definidas nos
+// arquivos acima, e vir depois evita depender de ordem de especificidade.
+import './animacoes.css';
 
 restaurarTemaAppInicial();
 

@@ -33,9 +33,17 @@ inviteRoutes.get('/:code', (req, res) => {
       code: invite.code,
       guild: { id: guild.id, name: guild.name, iconUrl: guild.icon_url ?? null, memberCount },
       alreadyMember: membership(guild.id, req.user.id) !== null,
+      // Avisa antes de a pessoa clicar em "entrar", em vez de deixar ela
+      // tomar um 403 na cara depois de aceitar.
+      banido: estaBanido(guild.id, req.user.id),
     },
   });
 });
+
+/** Ja levou ban desse servidor? */
+const estaBanido = (guildId, userId) => Boolean(
+  q.get('SELECT 1 FROM guild_bans WHERE guild_id = ? AND user_id = ?', guildId, userId),
+);
 
 /** Entrar no servidor usando o codigo. */
 inviteRoutes.post('/:code/join', (req, res) => {
@@ -44,6 +52,12 @@ inviteRoutes.post('/:code/join', (req, res) => {
 
   if (membership(invite.guild_id, req.user.id)) {
     return res.json({ guild: guildDetail(invite.guild_id, req.user.id), alreadyMember: true });
+  }
+
+  // Sem isso o banimento nao vale nada: a pessoa era expulsa e voltava com o
+  // mesmo convite no segundo seguinte. E aqui que o ban vira ban.
+  if (estaBanido(invite.guild_id, req.user.id)) {
+    return res.status(403).json({ error: 'voce esta banido desse servidor' });
   }
 
   q.run(

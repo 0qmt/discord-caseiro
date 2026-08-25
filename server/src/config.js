@@ -45,7 +45,7 @@ export const config = {
   uploadsDir: UPLOADS_DIR,
   updatesDir: UPDATES_DIR,
   reportsDir: REPORTS_DIR,
-  maxAvatarBytes: Number(process.env.MAX_AVATAR_MB ?? 8) * 1024 * 1024,
+  maxAvatarBytes: Number(process.env.MAX_AVATAR_MB ?? 20) * 1024 * 1024,
   maxAttachmentBytes: Number(process.env.MAX_ATTACHMENT_MB ?? 25) * 1024 * 1024,
   giphyApiKey: process.env.GIPHY_API_KEY || null,
   iceServers: [

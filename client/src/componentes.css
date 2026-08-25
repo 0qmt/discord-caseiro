@@ -72,6 +72,151 @@
 
 .ctx-sep { height: 1px; margin: 4px 0; background: var(--line); }
 
+/* ========================================================================== */
+/*  Arrastar e soltar na barra lateral                                        */
+/* ========================================================================== */
+
+/*
+ * `user-select: none` é o que conserta o efeito da captura de tela: sem ele,
+ * segurar o mouse em cima do canal virava SELEÇÃO DE TEXTO (o nome ficava
+ * pintado de azul) em vez de arrasto, porque o navegador não tinha motivo
+ * pra achar que ali começava um gesto de mover.
+ *
+ * O cursor `grab` é a outra metade: é o que diz que dá pra pegar, antes de a
+ * pessoa tentar.
+ */
+[draggable="true"] {
+  user-select: none;
+  -webkit-user-drag: element;
+  cursor: grab;
+}
+[draggable="true"]:active { cursor: grabbing; }
+
+/* O item que saiu do lugar fica fantasma - assim dá pra ver de onde ele veio
+   enquanto se procura onde soltar. */
+.sendo-arrastado { opacity: .4; }
+
+/*
+ * A plaquinha que segue o cursor (criada em lib/arrastar.js).
+ *
+ * O navegador tira uma foto dela no instante em que o arrasto começa, então
+ * ela precisa estar na página e visível - por isso mora fora da tela em vez
+ * de escondida com display:none, que faria o cursor sair sem imagem.
+ */
+.arrasto-fantasma {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .4);
+}
+
+/*
+ * Indicador de onde o item vai cair: uma barrinha fina, igual ao Discord -
+ * não um cartão fantasma com o nome dentro. A versão anterior (um cartão
+ * tracejado com ícone+nome) virava confuso perto da linha real: os dois
+ * liam como um bloco só, bagunçado, especialmente com pouco espaço vertical
+ * entre eles.
+ *
+ * `position: absolute` (fora do fluxo) e `pointer-events: none` continuam
+ * aqui pelo mesmo motivo de antes: sem eles a barra empurraria a linha-alvo
+ * pra baixo e/ou interceptaria o `dragover`, fazendo o alvo escapar de
+ * debaixo do cursor no meio do gesto.
+ */
+.indicador-de-solte {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Em cima da linha = vai ficar ACIMA dela; embaixo = vai ficar ABAIXO. */
+.indicador-de-solte.em-cima { top: -3px; }
+.indicador-de-solte.em-baixo { bottom: -3px; }
+
+/* Ancora o indicador (position:absolute) na linha certa, e não no
+   ancestral posicionado mais próximo que existir por aí. */
+.linha-de-canal { position: relative; }
+
+/*
+ * Zona de soltar no fim da lista: dá pra jogar um canal pro final sem
+ * precisar acertar o pixel exato da última vaga - qualquer ponto aqui
+ * embaixo já conta como "depois do último".
+ *
+ * O componente inteiro (`.linha-de-canal` desta zona) só é MONTADO no DOM
+ * enquanto se arrasta um canal de verdade (ver JSX) - não é CSS escondendo
+ * com altura zero. Isso importa: o `gap` de um flex-column soma dos DOIS
+ * lados de qualquer item ali dentro, mesmo com altura zero - uma zona
+ * sempre presente, mas "escondida" só por CSS, ainda dobrava o respiro
+ * entre os canais de texto e "CANAIS DE VOZ" (de 18px pra 64px) o tempo
+ * todo, mesmo sem nenhum arrasto acontecendo. Só desmontando de vez esse
+ * respiro extra desaparece por completo quando ocioso.
+ */
+.zona-fim-canais { min-height: 28px; }
+
+/*
+ * `.linha-de-canal.preenche` é quem de fato cresce até o fim da barra - ela
+ * é filha direta de `.channel-scroll`/`.orbit-channel-list` (flex-column),
+ * então é ELA que precisa de `flex: 1` (a `.zona-fim-canais` de dentro só
+ * segue o tamanho do pai).
+ */
+.linha-de-canal.preenche { flex: 1; display: flex; min-height: 40px; }
+.linha-de-canal.preenche .zona-fim-canais { flex: 1; }
+
+/* Canal de voz recebendo alguém: a moldura inteira acende, porque o que vai
+   mudar é o conteúdo da sala, não a posição dela na lista. */
+.channel-row.recebendo-pessoa {
+  background: rgba(88, 101, 242, .16);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* A pessoa prestes a entrar, no fim da lista da sala. */
+.voice-members li.voz-previa {
+  color: var(--accent-hover);
+  font-style: italic;
+  opacity: .9;
+}
+.voz-previa-bolinha {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px dashed var(--accent);
+}
+
+.voice-members li.arrastavel { cursor: grab; }
+.member.arrastavel { cursor: grab; }
+
+/* Fileira de reação rápida no topo do menu, igual ao Discord. */
+.ctx-reacoes {
+  display: flex;
+  gap: 2px;
+  padding: 2px 2px 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ctx-reacao {
+  flex: 1;
+  padding: 5px 0;
+  border-radius: 6px;
+  background: none;
+  font-size: 17px;
+  line-height: 1;
+}
+.ctx-reacao:hover { background: var(--hover); }
+
 /* Submenu encostado no item, do lado direito. */
 .ctx-sub { position: relative; }
 .ctx-sub > .ctx-item .ctx-seta { margin-left: auto; font-size: 16px; line-height: 1; }
@@ -151,6 +296,73 @@
   text-overflow: ellipsis;
 }
 
+/* ========================================================================== */
+/*  Atividade (jogando / ouvindo)                                             */
+/* ========================================================================== */
+
+/* Uma linha só - lista de membros e painel do usuário. O `display:block` é o
+   que faz o `text-overflow: ellipsis` valer num <span>. */
+.atividade-resumo {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Cartão completo - no perfil, onde tem espaço pra mostrar de verdade. */
+.atividade-cartao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--bg-3);
+}
+
+.atividade-capa {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-1);
+  color: var(--text-dim);
+}
+/* Capa de álbum é quadrada e redonda nas pontas; ícone de jogo já vem com
+   a silhueta dele, então fica sem arredondar demais. */
+.atividade-capa.musica { border-radius: 50%; }
+.atividade-capa img { width: 100%; height: 100%; object-fit: cover; }
+
+.atividade-texto { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+.atividade-rotulo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.atividade-nome {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atividade-detalhe {
+  font-size: 12.5px;
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atividade-tempo { font-size: 11.5px; color: var(--text-dim); }
+
 .member-name.colorido { font-weight: 600; }
 
 /* Escolher o próprio status. */
@@ -174,22 +386,51 @@
 .msg:hover { background: rgba(2, 2, 2, .07); }
 .msg.destacada { background: rgba(88, 101, 242, .12); }
 
+/*
+ * Barra de ações no canto da mensagem.
+ *
+ * Fica sempre montada e escondida por opacidade, e NÃO por `display: none`.
+ * `display` não é animável - alternar entre none e flex faz a barra pular
+ * pronta na tela, sem transição nenhuma por mais que se peça. Com opacidade
+ * + transform ela tem pra onde ir, e a animação existe (ver animacoes.css).
+ *
+ * `visibility` entra junto pra que, escondida, ela não receba clique nem
+ * apareça pra leitor de tela: opacidade zero sozinha continua sendo um alvo
+ * invisível por cima da mensagem.
+ */
 .msg-acoes {
   position: absolute;
   right: 14px;
   top: -14px;
-  display: none;
+  display: flex;
   gap: 2px;
   padding: 2px;
   border-radius: 6px;
   background: var(--bg-2);
   box-shadow: 0 0 0 1px rgba(4, 4, 5, .15), 0 1px 3px rgba(0, 0, 0, .25);
+  opacity: 0;
+  visibility: hidden;
 }
 
-.msg:hover .msg-acoes, .msg:focus-within .msg-acoes { display: flex; }
+.msg:hover .msg-acoes,
+.msg:focus-within .msg-acoes,
+.orbit-message-row:hover .msg-acoes,
+.orbit-message-row:focus-within .msg-acoes { opacity: 1; visibility: visible; }
+
 .msg-acoes .icon-btn { width: 30px; height: 30px; border-radius: 4px; font-size: 15px; }
 .msg-acoes .icon-btn:hover { background: var(--hover); }
 .msg-acoes .icon-btn.perigo:hover { background: var(--danger); color: #fff; }
+
+/* Emoji de atalho: mesma caixa dos ícones, pra barra não ficar dente de serra. */
+.msg-acao-emoji {
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  background: none;
+  font-size: 16px;
+  line-height: 1;
+}
+.msg-acao-emoji:hover { background: var(--hover); }
 
 /* Linha de cima quando a mensagem responde outra. */
 .reply-linha {
@@ -322,6 +563,9 @@
 }
 
 .pin-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   margin-bottom: 8px;
   padding: 8px;
@@ -332,8 +576,33 @@
 }
 
 .pin-item:hover { background: var(--hover); }
+.pin-item .avatar { flex: none; }
+
+/* min-width: 0 é o que deixa o texto encolher e usar reticências dentro do
+   flex - sem isso ele empurra a miniatura pra fora do popover. */
+.pin-corpo { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+
 .pin-item .pin-autor { font-weight: 600; font-size: 13px; }
-.pin-item .pin-texto { color: var(--text-soft); word-break: break-word; }
+.pin-item .pin-texto {
+  color: var(--text-soft);
+  font-size: 13px;
+  /* Duas linhas no máximo: a fixada é um atalho pra mensagem, não a
+     mensagem inteira repetida dentro do popover. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.pin-miniatura {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--bg-3);
+}
 .pins-vazio { color: var(--text-dim); font-size: 13px; }
 
 /* ========================================================================== */

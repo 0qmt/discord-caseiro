@@ -97,12 +97,23 @@ export const api = {
     return upload(`/guilds/${guildId}/icon`, form);
   },
   deleteGuildIcon: (guildId) => request('DELETE', `/guilds/${guildId}/icon`),
+  deleteGuild: (guildId) => request('DELETE', `/guilds/${guildId}`),
+
+  listBans: (guildId) => request('GET', `/guilds/${guildId}/bans`),
+  banirMembro: (guildId, userId, reason) =>
+    request('POST', `/guilds/${guildId}/bans/${userId}`, { reason }),
+  desbanir: (guildId, userId) => request('DELETE', `/guilds/${guildId}/bans/${userId}`),
+
+  auditoria: (guildId) => request('GET', `/guilds/${guildId}/audit`),
 
   naoLidas: (guildId) => request('GET', `/guilds/${guildId}/unread`),
   createChannel: (guildId, payload) => request('POST', `/guilds/${guildId}/channels`, payload),
   deleteChannel: (guildId, channelId) => request('DELETE', `/guilds/${guildId}/channels/${channelId}`),
+  reordenarCanais: (guildId, ordem) => request('PATCH', `/guilds/${guildId}/channels-ordem`, { ordem }),
 
-  createInvite: (guildId) => request('POST', `/guilds/${guildId}/invites`, {}),
+  createInvite: (guildId, opts = {}) => request('POST', `/guilds/${guildId}/invites`, opts),
+  listInvites: (guildId) => request('GET', `/guilds/${guildId}/invites`),
+  deleteInvite: (guildId, code) => request('DELETE', `/guilds/${guildId}/invites/${code}`),
   previewInvite: (code) => request('GET', `/invites/${code}`),
   joinInvite: (code) => request('POST', `/invites/${code}/join`, {}),
 

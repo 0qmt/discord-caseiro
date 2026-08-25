@@ -53,7 +53,43 @@ function usePosicaoSegura(estado) {
     });
   }, [estado]);
 
-  return [ref, pos];
+  /*
+   * Onde o menu deve "nascer" na animação de abertura: o ponto clicado, em
+   * coordenadas de dentro do próprio menu. Perto das bordas da tela o menu é
+   * empurrado pra dentro (o clamp acima), e aí o cursor não cai mais no canto
+   * superior esquerdo - sem essa conta o menu cresceria de um canto que não
+   * tem nada a ver com o clique.
+   *
+   * O Math.max prende a origem dentro da caixa: menu aberto pelo teclado
+   * chega com clientX/clientY zerados, e sem isso ele cresceria a partir de
+   * um ponto negativo, fora de si mesmo.
+   */
+  const origem = estado
+    ? `${Math.max(0, estado.x - pos.left)}px ${Math.max(0, estado.y - pos.top)}px`
+    : 'top left';
+
+  return [ref, pos, origem];
+}
+
+/**
+ * Fileira de emoji no topo do menu, como no Discord: as reações mais usadas
+ * a um clique, sem precisar abrir submenu.
+ */
+function Reacoes({ item, onFechar }) {
+  return (
+    <div className="ctx-reacoes">
+      {item.emojis.map((emoji) => (
+        <button
+          key={emoji}
+          className="ctx-reacao"
+          title={`Reagir com ${emoji}`}
+          onClick={() => { item.onReagir(emoji); onFechar(); }}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function Item({ item, onFechar }) {
@@ -61,6 +97,7 @@ function Item({ item, onFechar }) {
   if (item.tipo === 'titulo') return <div className="ctx-titulo">{item.label}</div>;
   if (item.tipo === 'slider') return <Slider item={item} />;
   if (item.tipo === 'sub') return <Submenu item={item} onFechar={onFechar} />;
+  if (item.tipo === 'reacoes') return <Reacoes item={item} onFechar={onFechar} />;
   if (item.tipo === 'custom') return item.render();
 
   return (
@@ -139,7 +176,7 @@ function Submenu({ item, onFechar }) {
 }
 
 export default function ContextMenu({ estado, onFechar }) {
-  const [ref, pos] = usePosicaoSegura(estado);
+  const [ref, pos, origem] = usePosicaoSegura(estado);
 
   // Esc fecha, e rolar a página também - senão o menu ficaria flutuando
   // solto longe do que foi clicado.
@@ -161,7 +198,12 @@ export default function ContextMenu({ estado, onFechar }) {
   return (
     <>
       <div className="ctx-backdrop" onClick={onFechar} onContextMenu={(e) => { e.preventDefault(); onFechar(); }} />
-      <div ref={ref} className="ctx-menu" style={{ left: pos.left, top: pos.top }} role="menu">
+      <div
+        ref={ref}
+        className="ctx-menu"
+        style={{ left: pos.left, top: pos.top, '--origem': origem }}
+        role="menu"
+      >
         {estado.itens.map((item, i) => (
           <Item key={item.key ?? `${item.label ?? item.tipo}-${i}`} item={item} onFechar={onFechar} />
         ))}

@@ -1,0 +1,322 @@
+/* ==========================================================================
+ *  Movimento
+ *
+ *  Tudo que anima no app mora aqui, num arquivo só, pra ficar fácil de ver
+ *  o conjunto e perceber quando duas coisas parecidas ganharam durações
+ *  diferentes sem motivo.
+ *
+ *  As três regras que valem pra tudo aqui dentro:
+ *
+ *  1. Só `transform` e `opacity` (e cor, que é barata). Elas rodam na GPU e
+ *     pulam layout e paint. Animar `width`/`height`/`top`/`margin` obriga o
+ *     navegador a refazer as três etapas em todo quadro.
+ *  2. Nada de UI passa de 300ms, e sair é sempre mais rápido que entrar - a
+ *     pessoa já decidiu, não quer esperar a despedida.
+ *  3. Nada aparece do zero: entrada é `scale(.95)` + `opacity 0`, nunca
+ *     `scale(0)`. Coisa nenhuma no mundo real surge do nada.
+ *
+ *  O que de propósito NÃO anima: trocar de canal, de servidor e de conversa.
+ *  São as ações mais repetidas do app (dezenas ou centenas de vezes por dia)
+ *  e qualquer animação ali vira imposto de espera - o certo é ser instantâneo.
+ * ========================================================================== */
+
+/* --------------------------- quadros reutilizados -------------------------- */
+
+@keyframes fundo-entra { from { opacity: 0; } }
+@keyframes fundo-sai   { to   { opacity: 0; } }
+
+/* Sobe 8px enquanto cresce de 96%: o suficiente pra ler como "veio de trás",
+   sem virar um salto. */
+@keyframes painel-entra { from { opacity: 0; transform: scale(.96) translateY(8px); } }
+@keyframes painel-sai   { to   { opacity: 0; transform: scale(.97) translateY(4px); } }
+
+/* Popover cresce do ponto em que foi aberto (ver --origem, abaixo). */
+@keyframes pop-entra { from { opacity: 0; transform: scale(.95); } }
+
+/* ---------------------------------- modais --------------------------------- */
+
+/* Vale pra todos os modais de uma vez - confirmar, perfil, recortar foto,
+   configurações do servidor, reportar bug, convite. */
+.modal-backdrop { animation: fundo-entra var(--dur-modal) var(--ease-out); }
+.modal-backdrop > .modal { animation: painel-entra var(--dur-modal) var(--ease-out); }
+
+/* `.saindo` é posto pelo Modal.jsx no clique de fechar, e o componente só
+   desmonta de verdade quando esta animação acaba. */
+.modal-backdrop.saindo { animation: fundo-sai 150ms var(--ease-out) forwards; }
+.modal-backdrop.saindo > .modal { animation: painel-sai 150ms var(--ease-out) forwards; }
+
+/* ------------------------ menus de contexto e popovers --------------------- */
+
+/* `--origem` é o ponto onde a pessoa clicou, calculado no ContextMenu.jsx:
+   o menu cresce a partir do cursor, e não do canto. É isso que faz parecer
+   que ele saiu do clique em vez de simplesmente aparecer ali. */
+.ctx-menu {
+  transform-origin: var(--origem, top left);
+  animation: pop-entra var(--dur-popover) var(--ease-out);
+}
+
+.ctx-sub-painel {
+  transform-origin: top left;
+  animation: pop-entra var(--dur-popover) var(--ease-out);
+}
+.ctx-sub-painel.esquerda { transform-origin: top right; }
+
+.ctx-item {
+  transition:
+    background-color var(--dur-toque) ease,
+    color var(--dur-toque) ease;
+}
+
+/*
+ * Fileira de reação no topo do menu. O emoji cresce no hover pra dizer qual
+ * está na mira - com seis grudados, só a mudança de fundo não basta pra
+ * saber em qual o clique vai cair.
+ */
+.ctx-reacao { transition: background-color var(--dur-toque) ease, transform var(--dur-toque) var(--ease-out); }
+@media (hover: hover) and (pointer: fine) {
+  .ctx-reacao:hover { transform: scale(1.25); }
+}
+.ctx-reacao:active { transform: scale(.9); }
+
+/* Entram em cascata curta, da esquerda pra direita: o menu abre e os emoji
+   assentam logo depois, em vez de tudo aterrissar no mesmo quadro. */
+@keyframes reacao-assenta { from { opacity: 0; transform: scale(.6); } }
+.ctx-reacao { animation: reacao-assenta 180ms var(--ease-out) backwards; }
+.ctx-reacao:nth-child(1) { animation-delay: 30ms; }
+.ctx-reacao:nth-child(2) { animation-delay: 60ms; }
+.ctx-reacao:nth-child(3) { animation-delay: 90ms; }
+.ctx-reacao:nth-child(4) { animation-delay: 120ms; }
+.ctx-reacao:nth-child(5) { animation-delay: 150ms; }
+.ctx-reacao:nth-child(6) { animation-delay: 180ms; }
+
+/* ---------------------- barra de ações da mensagem ------------------------ */
+
+/*
+ * Aparece subindo 4px enquanto surge. É rápida (120ms) de propósito: passar
+ * o mouse pelas mensagens acontece o tempo todo, e uma barra que demora a
+ * chegar dá a sensação de interface travando atrás do cursor.
+ *
+ * `visibility` entra na lista de transições com o mesmo tempo pra que, ao
+ * SAIR, a barra continue visível durante o fade em vez de sumir de uma vez
+ * no primeiro quadro. Como `visibility` é discreta, ela vira `hidden` só no
+ * fim - que é exatamente o que se quer.
+ */
+.msg-acoes {
+  transform: translateY(4px);
+  transition:
+    opacity var(--dur-toque) ease,
+    transform var(--dur-toque) var(--ease-out),
+    visibility var(--dur-toque);
+}
+
+.msg:hover .msg-acoes,
+.msg:focus-within .msg-acoes,
+.orbit-message-row:hover .msg-acoes,
+.orbit-message-row:focus-within .msg-acoes { transform: translateY(0); }
+
+.msg-acoes .icon-btn,
+.msg-acao-emoji { transition: background-color var(--dur-toque) ease, transform var(--dur-toque) var(--ease-out); }
+
+@media (hover: hover) and (pointer: fine) {
+  .msg-acao-emoji:hover { transform: scale(1.2); }
+}
+.msg-acao-emoji:active { transform: scale(.9); }
+
+/* -------------------------- encaminhar mensagem --------------------------- */
+
+.encaminhar-item {
+  transition: background-color var(--dur-toque) ease, opacity var(--dur-toque) ease;
+}
+.encaminhar-estado { transition: color var(--dur-toque) ease; }
+/* O check de "foi" nasce com o mesmo pop da reação: é a confirmação de que
+   a mensagem saiu, e é a única resposta visível que a pessoa tem. */
+.encaminhar-item:disabled .encaminhar-estado .icon { animation: reacao-entra var(--dur-toque) var(--ease-out); }
+
+/* Popovers do app que não passam pelo ContextMenu. Todos abrem ancorados em
+   algo logo abaixo deles, por isso crescem a partir da base. */
+.mencao-picker,
+.emoji-rapido,
+.gif-picker,
+.orbit-popover {
+  transform-origin: bottom left;
+  animation: pop-entra var(--dur-popover) var(--ease-out);
+}
+
+.emoji-rapido button { transition: background-color var(--dur-toque) ease, transform var(--dur-toque) var(--ease-out); }
+.emoji-rapido button:active { transform: scale(.88); }
+
+/* ------------------------------- lightbox ---------------------------------- */
+
+.lightbox-fundo { animation: fundo-entra var(--dur-modal) var(--ease-out); }
+.lightbox-fundo > .lightbox-imagem { animation: painel-entra var(--dur-modal) var(--ease-out); }
+
+.lightbox-fundo.saindo { animation: fundo-sai 150ms var(--ease-out) forwards; }
+.lightbox-fundo.saindo > .lightbox-imagem { animation: painel-sai 150ms var(--ease-out) forwards; }
+
+.lightbox-acoes button,
+.lightbox-acoes a {
+  transition: background-color var(--dur-toque) ease;
+}
+
+/* ------------------------------- mensagens --------------------------------- */
+
+/*
+ * Só a mensagem que chegou AGORA anima (o ChatView marca com `.nova` quem
+ * chegou depois da tela montar). Sem esse filtro, trocar de canal animaria as
+ * 50 mensagens do histórico de uma vez - o efeito "tudo entrando junto", que
+ * é exatamente o que faz uma interface parecer barulhenta.
+ */
+@keyframes msg-entra { from { opacity: 0; transform: translateY(8px); } }
+.message.nova,
+.orbit-message-row.nova { animation: msg-entra 200ms var(--ease-out); }
+
+/*
+ * Apagar: some antes de sumir. A lista abaixo ainda vai subir de um quadro
+ * pro outro quando o nó sai do DOM, mas aí a mensagem já está invisível -
+ * o que incomodava era o texto desaparecendo no meio da leitura, não o
+ * reflow.
+ */
+@keyframes msg-sai { to { opacity: 0; transform: translateX(-10px); } }
+.message.saindo,
+.orbit-message-row.saindo {
+  animation: msg-sai 160ms var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+.message { transition: background-color var(--dur-toque) ease; }
+.gutter-time { transition: opacity var(--dur-toque) ease; }
+
+/* Reação nova: um pop curto, que é a confirmação de que o clique pegou. */
+@keyframes reacao-entra { from { opacity: 0; transform: scale(.7); } }
+.reacao { animation: reacao-entra var(--dur-toque) var(--ease-out); }
+.reacao { transition: background-color var(--dur-toque) ease, border-color var(--dur-toque) ease; }
+
+/* A mensagem que a busca/resposta pulou pisca uma vez pra dizer "é essa". */
+@keyframes destaque-pisca {
+  from { background-color: rgba(88, 101, 242, .28); }
+  to   { background-color: transparent; }
+}
+.message.destacada { animation: destaque-pisca 1.2s var(--ease-out); }
+
+/* ------------------------- fotos: colocar e tirar -------------------------- */
+
+/*
+ * Trocar avatar/ícone: a imagem nova entra por cima com um crescimento curto.
+ * O React remonta o <img> quando a URL muda (key={url}), que é o que faz a
+ * animação rodar de novo em vez de só na primeira vez.
+ */
+@keyframes foto-entra { from { opacity: 0; transform: scale(1.06); } }
+
+.avatar-inner img,
+.guild-pill-icone img,
+.orbit-server-icon-img img,
+.guild-icone-botao img,
+.guild-icone-preview img { animation: foto-entra 240ms var(--ease-out); }
+
+.guild-icone-botao .trocar { transition: opacity var(--dur-toque) ease; }
+button.avatar .avatar-inner { transition: filter var(--dur-toque) ease; }
+
+/* ------------------------- botões, cor e resposta -------------------------- */
+
+button.primary,
+.modal-actions button,
+.icon-btn,
+.channel-btn,
+.guild-name-botao,
+.member,
+.settings-item,
+.guild-settings-tabs button,
+.convite-item {
+  transition:
+    background-color var(--dur-toque) ease,
+    color var(--dur-toque) ease,
+    border-color var(--dur-toque) ease,
+    opacity var(--dur-toque) ease;
+}
+
+/*
+ * Afundar no clique. Fica FORA do @media de hover de propósito: `:active`
+ * dispara no toque também, e no celular é justamente onde essa resposta
+ * mais falta - sem hover, é a única confirmação de que o dedo pegou.
+ */
+button.primary:active,
+.modal-actions button:active,
+.guild-pill:active,
+.orbit-server-icon:active { transform: scale(.97); }
+
+button.primary,
+.modal-actions button { transition: background-color var(--dur-toque) ease, transform var(--dur-toque) var(--ease-out); }
+
+/* A aba selecionada desliza pro lugar em vez de pular. */
+.guild-settings-tabs button { transition: color var(--dur-toque) ease, border-color var(--dur-toque) ease; }
+
+/* --------------------------- barras e indicadores -------------------------- */
+
+/* O tracinho branco ao lado do servidor ativo já cresce; aqui só se garante
+   que a cor acompanhe no mesmo tempo. */
+.guild-pill::before { transition: height var(--dur-toque) var(--ease-out); }
+
+.badge { animation: reacao-entra var(--dur-toque) var(--ease-out); }
+
+/* --------------------------- avisos e banners ------------------------------ */
+
+/* A entrada desses dois já existe (aviso-desce / convite-sobe, em
+   componentes.css). Aqui entra só o hover deles. */
+.aviso-flutuante { transition: opacity var(--dur-toque) ease; }
+.convite-call-banner button { transition: background-color var(--dur-toque) ease; }
+
+/* ========================================================================== */
+/*  Menos movimento                                                           */
+/*                                                                            */
+/*  "Reduzir movimento" não quer dizer "desligar tudo": o que incomoda quem   */
+/*  liga essa opção é deslocamento e escala, não a mudança de opacidade -     */
+/*  e apagar as transições de cor junto só deixaria a interface mais seca     */
+/*  sem ajudar ninguém. Então aqui se troca cada animação pela versão só de   */
+/*  opacidade, e as transições de cor ficam de pé.                            */
+/* ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop > .modal,
+  .lightbox-fundo > .lightbox-imagem,
+  .ctx-menu,
+  .ctx-sub-painel,
+  .mencao-picker,
+  .emoji-rapido,
+  .gif-picker,
+  .orbit-popover,
+  .message.nova,
+  .orbit-message-row.nova,
+  .reacao,
+  .badge,
+  .avatar-inner img,
+  .guild-pill-icone img,
+  .orbit-server-icon-img img,
+  .guild-icone-botao img,
+  .guild-icone-preview img { animation: fundo-entra var(--dur-toque) ease; }
+
+  .modal-backdrop.saindo > .modal,
+  .lightbox-fundo.saindo > .lightbox-imagem,
+  .message.saindo,
+  .orbit-message-row.saindo { animation: fundo-sai var(--dur-toque) ease forwards; }
+
+  .message.destacada { animation: none; }
+
+  /* A cascata dos emoji é enfeite: sem ela o menu continua igualmente usável. */
+  .ctx-reacao { animation: none; }
+
+  /* A barra ainda aparece e some, só que sem o deslocamento. */
+  .msg-acoes,
+  .msg:hover .msg-acoes,
+  .orbit-message-row:hover .msg-acoes { transform: none; }
+
+  button.primary:active,
+  .modal-actions button:active,
+  .guild-pill:active,
+  .orbit-server-icon:active,
+  .ctx-reacao:active,
+  .ctx-reacao:hover,
+  .msg-acao-emoji:active,
+  .msg-acao-emoji:hover { transform: none; }
+
+  .orbit-typing-dots i { animation: none; }
+}

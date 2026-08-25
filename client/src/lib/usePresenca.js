@@ -12,12 +12,22 @@ export function useDeteccaoDeJogo(socket, { ativo, manualRef }) {
     const ponte = typeof window !== 'undefined' ? window.appDesktop : null;
     if (!socket || !ativo || !ponte?.aoDetectarJogo) return undefined;
 
-    return ponte.aoDetectarJogo((nome) => {
+    return ponte.aoDetectarJogo((atividade) => {
       // Quem escreveu a atividade na mão (/jogando) manda mais que a
       // detecção automática - senão o próximo ciclo apagaria o que a pessoa
       // escolheu escrever.
       if (manualRef?.current) return;
-      socket.emit('presence:set', { activity: nome ? `Jogando ${nome}` : null });
+
+      // Versão antiga do app de desktop manda só o nome do jogo como string;
+      // a nova manda o objeto inteiro (tipo, detalhe, desde, imagem). Aceitar
+      // as duas evita quebrar quem ainda não atualizou o .exe.
+      if (!atividade) return socket.emit('presence:set', { activity: null });
+      if (typeof atividade === 'string') {
+        return socket.emit('presence:set', {
+          activity: { tipo: 'jogo', nome: atividade, desde: Date.now() },
+        });
+      }
+      return socket.emit('presence:set', { activity: atividade });
     });
   }, [socket, ativo]);
 }

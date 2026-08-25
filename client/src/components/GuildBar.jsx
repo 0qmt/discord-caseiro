@@ -34,7 +34,7 @@ export default function GuildBar({
         >
           {guild.iconUrl ? (
             <span className="guild-pill-icone">
-              <img src={guild.iconUrl} alt="" style={cropStyle(guild.iconCrop)} />
+              <img key={guild.iconUrl} src={guild.iconUrl} alt="" style={cropStyle(guild.iconCrop)} />
             </span>
           ) : initials(guild.name)}
           {unreadByGuild[guild.id] > 0 && guild.id !== activeGuildId && (

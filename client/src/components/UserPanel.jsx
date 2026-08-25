@@ -1,3 +1,4 @@
+import { AtividadeResumo } from './Atividade.jsx';
 import Avatar from './Avatar.jsx';
 import StatusDot from './StatusDot.jsx';
 import Icon from './Icon.jsx';
@@ -66,9 +67,13 @@ export default function UserPanel({
         <button className="user-name" onClick={onAbrirPerfil} title="Ver seu perfil">
           {me.username}
         </button>
-        <span className={`conn ${conectado ? 'on' : 'off'}`} title={atividade || undefined}>
-          {conectado ? (atividade || RESUMO[status] || 'online') : 'reconectando...'}
-        </span>
+        {conectado && atividade ? (
+          <AtividadeResumo atividade={atividade} className="conn on" />
+        ) : (
+          <span className={`conn ${conectado ? 'on' : 'off'}`}>
+            {conectado ? (RESUMO[status] || 'online') : 'reconectando...'}
+          </span>
+        )}
       </div>
 
       <button className="icon-btn" title="Configurações" onClick={onAbrirConfiguracoes}><Icon name="settings" /></button>

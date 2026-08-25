@@ -5,6 +5,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { config } from '../config.js';
 import { q, tx } from '../db.js';
+import { ACAO, listar as listarAuditoria, registrar } from '../lib/auditoria.js';
 import { requireAuth } from '../lib/auth.js';
 import { emitToGuild, getIo } from '../lib/bus.js';
 import { newId, newInviteCode } from '../lib/ids.js';
@@ -23,6 +24,14 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: config.maxAvatarBytes, files: 1 },
 });
+
+/**
+ * Nome de alguem pra guardar no historico.
+ *
+ * O historico grava o nome junto do id de proposito (ver auditoria.js): quem
+ * sai do servidor continua aparecendo no que fez.
+ */
+const nomeDe = (userId) => q.get('SELECT username FROM users WHERE id = ?', userId)?.username ?? userId;
 
 /** Só aceita cor em #rrggbb; qualquer outra coisa vira "sem cor". */
 function corValida(bruto) {
@@ -124,6 +133,11 @@ guildRoutes.patch('/:guildId', requirePerm(PERM.GERENCIAR_SERVIDOR), (req, res) 
   }
 
   const guild = guildDetail(guildId, req.user.id);
+  registrar(guildId, req.user, ACAO.SERVIDOR_ATUALIZADO, {
+    detalhe: Object.keys(patch).map((c) => ({
+      name: 'nome', description: 'descrição', is_public: 'visibilidade',
+    }[c] ?? c)).join(', '),
+  });
   emitToGuild(guildId, 'guild:updated', guild);
   res.json({ guild });
 });
@@ -200,8 +214,53 @@ guildRoutes.post('/:guildId/channels', requireRole('admin'), (req, res) => {
   );
 
   const dto = channelDto(channel);
+  registrar(guildId, req.user, ACAO.CANAL_CRIADO, {
+    alvo: channel.id, alvoLabel: name, detalhe: type === 'voice' ? 'canal de voz' : 'canal de texto',
+  });
   emitToGuild(guildId, 'channel:created', dto);
   res.status(201).json({ channel: dto });
+});
+
+/**
+ * Reordenar canais (arrastando na barra lateral).
+ *
+ * Recebe a ORDEM INTEIRA de uma vez, e não "o canal X foi pro lugar 3": a
+ * lista toda chega como o cliente quer que ela fique, e aqui só se reescreve
+ * position de cima pra baixo. Isso deixa o resultado igual mesmo se dois
+ * pedidos chegarem juntos - o último a gravar vence e a lista continua
+ * coerente, em vez de ficar com dois canais na mesma posição.
+ *
+ * `categoryId` vem junto porque arrastar pra dentro de uma categoria é a
+ * mesma gesto - separar em duas rotas obrigaria o cliente a mandar dois
+ * pedidos pra um arrasto só.
+ */
+guildRoutes.patch('/:guildId/channels-ordem', requirePerm(PERM.GERENCIAR_CANAIS), (req, res) => {
+  const { guildId } = req.params;
+  const ordem = Array.isArray(req.body?.ordem) ? req.body.ordem : null;
+  if (!ordem) return res.status(400).json({ error: 'ordem precisa ser uma lista' });
+
+  const doServidor = new Set(
+    q.all('SELECT id FROM channels WHERE guild_id = ?', guildId).map((c) => c.id),
+  );
+  const categorias = new Set(
+    q.all('SELECT id FROM categories WHERE guild_id = ?', guildId).map((c) => c.id),
+  );
+
+  tx(() => {
+    ordem.forEach((item, i) => {
+      const id = String(item?.id ?? '');
+      // Ignora id de fora deste servidor: sem isso daria pra reordenar (ou
+      // sequestrar pra uma categoria daqui) canal de um servidor alheio.
+      if (!doServidor.has(id)) return;
+      const bruta = item?.categoryId == null ? null : String(item.categoryId);
+      const categoryId = bruta && categorias.has(bruta) ? bruta : null;
+      q.run('UPDATE channels SET position = ?, category_id = ? WHERE id = ?', i, categoryId, id);
+    });
+  });
+
+  const guild = guildDetail(guildId, req.user.id);
+  emitToGuild(guildId, 'guild:updated', guild);
+  res.json({ guild });
 });
 
 /** Renomear canal, mudar o assunto do topo ou movê-lo de categoria. */
@@ -310,6 +369,7 @@ guildRoutes.delete('/:guildId/channels/:channelId', requireRole('admin'), (req, 
 
   q.run('DELETE FROM channels WHERE id = ?', channelId);
   if (channel.type === 'voice') dropVoiceRoom(getIo(), channelId, guildId);
+  registrar(guildId, req.user, ACAO.CANAL_APAGADO, { alvo: channelId, alvoLabel: channel.name });
   emitToGuild(guildId, 'channel:deleted', { id: channelId, guildId });
   res.json({ ok: true });
 });
@@ -329,6 +389,14 @@ guildRoutes.post('/:guildId/invites', requireRole('admin'), (req, res) => {
     expiresInHours ? Date.now() + expiresInHours * 3600000 : null,
     Date.now(),
   );
+  registrar(guildId, req.user, ACAO.CONVITE_CRIADO, {
+    alvo: code,
+    alvoLabel: code,
+    detalhe: [
+      maxUses ? `${maxUses} usos` : 'usos ilimitados',
+      expiresInHours ? `expira em ${expiresInHours}h` : 'nunca expira',
+    ].join(', '),
+  });
   res.status(201).json({ invite: { code, guildId, maxUses, expiresInHours } });
 });
 
@@ -342,6 +410,14 @@ guildRoutes.get('/:guildId/invites', requireRole('admin'), (req, res) => {
       code: i.code, uses: i.uses, maxUses: i.max_uses, expiresAt: i.expires_at,
     })),
   });
+});
+
+guildRoutes.delete('/:guildId/invites/:code', requireRole('admin'), (req, res) => {
+  const { guildId, code } = req.params;
+  const alvo = code.toUpperCase();
+  const removeu = q.run('DELETE FROM invites WHERE guild_id = ? AND code = ?', guildId, alvo).changes;
+  if (removeu) registrar(guildId, req.user, ACAO.CONVITE_APAGADO, { alvo, alvoLabel: alvo });
+  res.json({ ok: true });
 });
 
 /**
@@ -395,6 +471,9 @@ guildRoutes.patch('/:guildId/members/:userId', requireRole('owner'), (req, res) 
   ).changes;
   if (!changed) return res.status(404).json({ error: 'membro nao encontrado' });
 
+  registrar(guildId, req.user, ACAO.MEMBRO_CARGO, {
+    alvo: userId, alvoLabel: nomeDe(userId), detalhe: role === 'admin' ? 'promovido a admin' : 'rebaixado a membro',
+  });
   emitToGuild(guildId, 'member:updated', { guildId, userId, role });
   res.json({ ok: true });
 });
@@ -433,6 +512,11 @@ guildRoutes.post('/:guildId/members/:userId/timeout', requirePerm(PERM.SILENCIAR
   }
   const ate = minutos > 0 ? Date.now() + minutos * 60000 : null;
   q.run('UPDATE guild_members SET timeout_until = ? WHERE guild_id = ? AND user_id = ?', ate, guildId, userId);
+  registrar(guildId, req.user, ACAO.MEMBRO_CASTIGO, {
+    alvo: userId,
+    alvoLabel: nomeDe(userId),
+    detalhe: minutos > 0 ? `${minutos} min` : 'castigo retirado',
+  });
   emitToGuild(guildId, 'member:updated', { guildId, userId, timeoutUntil: ate });
   res.json({ ok: true, timeoutUntil: ate });
 });
@@ -452,23 +536,47 @@ guildRoutes.post('/:guildId/bans/:userId', requirePerm(PERM.BANIR), (req, res) =
     );
     q.run('DELETE FROM guild_members WHERE guild_id = ? AND user_id = ?', guildId, userId);
   });
+  registrar(guildId, req.user, ACAO.MEMBRO_BANIDO, {
+    alvo: userId, alvoLabel: nomeDe(userId), detalhe: reason,
+  });
   emitToGuild(guildId, 'member:left', { guildId, userId });
   getIo()?.to(`user:${userId}`).emit('guild:banned', { guildId });
   res.json({ ok: true });
 });
 
 guildRoutes.delete('/:guildId/bans/:userId', requirePerm(PERM.BANIR), (req, res) => {
-  q.run('DELETE FROM guild_bans WHERE guild_id = ? AND user_id = ?', req.params.guildId, req.params.userId);
+  const { guildId, userId } = req.params;
+  const removeu = q.run('DELETE FROM guild_bans WHERE guild_id = ? AND user_id = ?', guildId, userId).changes;
+  if (removeu) {
+    registrar(guildId, req.user, ACAO.MEMBRO_DESBANIDO, { alvo: userId, alvoLabel: nomeDe(userId) });
+  }
   res.json({ ok: true });
 });
 
 guildRoutes.get('/:guildId/bans', requirePerm(PERM.BANIR), (req, res) => {
   const rows = q.all(
-    `SELECT b.*, u.username FROM guild_bans b JOIN users u ON u.id = b.user_id
-     WHERE b.guild_id = ? ORDER BY b.created_at DESC`,
+    `SELECT b.*, u.username, a.username AS por_quem
+       FROM guild_bans b
+       JOIN users u ON u.id = b.user_id
+       LEFT JOIN users a ON a.id = b.banned_by
+      WHERE b.guild_id = ? ORDER BY b.created_at DESC`,
     req.params.guildId,
   );
-  res.json({ bans: rows.map((b) => ({ userId: b.user_id, username: b.username, reason: b.reason })) });
+  res.json({
+    bans: rows.map((b) => ({
+      userId: b.user_id,
+      username: b.username,
+      reason: b.reason,
+      bannedBy: b.por_quem ?? null,
+      createdAt: b.created_at,
+    })),
+  });
+});
+
+/* ---------------------------- registro de auditoria ---------------------- */
+
+guildRoutes.get('/:guildId/audit', requirePerm(PERM.GERENCIAR_SERVIDOR), (req, res) => {
+  res.json({ entradas: listarAuditoria(req.params.guildId, 150) });
 });
 
 /* --------------------------------- cargos -------------------------------- */
@@ -508,6 +616,7 @@ guildRoutes.post('/:guildId/roles', requirePerm(PERM.GERENCIAR_CARGOS), (req, re
      VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
     role.id, guildId, name, color, position, permissions, role.created_at,
   );
+  registrar(guildId, req.user, ACAO.CARGO_CRIADO, { alvo: role.id, alvoLabel: name });
   emitToGuild(guildId, 'role:updated', { guildId, role: roleDto(role) });
   res.status(201).json({ role: roleDto(role) });
 });
@@ -536,6 +645,7 @@ guildRoutes.patch('/:guildId/roles/:roleId', requirePerm(PERM.GERENCIAR_CARGOS),
     name || role.name, color, limpas, roleId,
   );
   const atualizado = q.get('SELECT * FROM roles WHERE id = ?', roleId);
+  registrar(guildId, req.user, ACAO.CARGO_ATUALIZADO, { alvo: roleId, alvoLabel: atualizado.name });
   emitToGuild(guildId, 'role:updated', { guildId, role: roleDto(atualizado) });
   res.json({ role: roleDto(atualizado) });
 });
@@ -550,6 +660,7 @@ guildRoutes.delete('/:guildId/roles/:roleId', requirePerm(PERM.GERENCIAR_CARGOS)
   }
 
   q.run('DELETE FROM roles WHERE id = ?', roleId);
+  registrar(guildId, req.user, ACAO.CARGO_APAGADO, { alvo: roleId, alvoLabel: role.name });
   emitToGuild(guildId, 'role:deleted', { guildId, roleId });
   res.json({ ok: true });
 });
@@ -604,6 +715,66 @@ guildRoutes.delete('/:guildId/members/:userId', (req, res) => {
   }
 
   q.run('DELETE FROM guild_members WHERE guild_id = ? AND user_id = ?', guildId, userId);
+  // Sair por conta própria não é ação de moderação - só expulsão vira registro.
+  if (!leavingMyself) {
+    registrar(guildId, req.user, ACAO.MEMBRO_EXPULSO, { alvo: userId, alvoLabel: nomeDe(userId) });
+  }
   emitToGuild(guildId, 'member:left', { guildId, userId });
+  res.json({ ok: true });
+});
+
+/**
+ * Excluir o servidor inteiro. Só o dono, e sem volta.
+ *
+ * Apaga as tabelas na mão em vez de contar com o ON DELETE CASCADE do
+ * schema: o banco roda sem `PRAGMA foreign_keys = ON`, então as cascatas
+ * declaradas lá são decorativas - confiar nelas deixaria mensagem, reação e
+ * marca de leitura órfãs no banco pra sempre. Ligar o pragma resolveria no
+ * papel, mas num banco que já rodou tempo sem ele qualquer violação antiga
+ * viraria erro em produção; apagar explicitamente é o caminho sem surpresa.
+ *
+ * Tudo numa transação só: ou some inteiro, ou não some nada.
+ */
+guildRoutes.delete('/:guildId', requireRole('owner'), (req, res) => {
+  const { guildId } = req.params;
+  const guild = q.get('SELECT * FROM guilds WHERE id = ?', guildId);
+  if (!guild) return res.status(404).json({ error: 'servidor nao encontrado' });
+
+  const canais = q.all('SELECT id FROM channels WHERE guild_id = ?', guildId).map((c) => c.id);
+  const membros = q.all('SELECT user_id FROM guild_members WHERE guild_id = ?', guildId)
+    .map((m) => m.user_id);
+
+  tx(() => {
+    for (const canalId of canais) {
+      // As reações apontam pro id da mensagem, não pro canal - por isso
+      // precisam sair antes das mensagens, enquanto ainda dá pra achá-las.
+      q.run(
+        'DELETE FROM message_reactions WHERE message_id IN (SELECT id FROM messages WHERE channel_id = ?)',
+        canalId,
+      );
+      q.run('DELETE FROM messages WHERE channel_id = ?', canalId);
+      q.run('DELETE FROM channel_overwrites WHERE channel_id = ?', canalId);
+      q.run('DELETE FROM read_state WHERE channel_id = ?', canalId);
+      q.run("DELETE FROM notification_settings WHERE scope_type = 'channel' AND scope_id = ?", canalId);
+    }
+    q.run("DELETE FROM notification_settings WHERE scope_type = 'guild' AND scope_id = ?", guildId);
+    q.run('DELETE FROM channels WHERE guild_id = ?', guildId);
+    q.run('DELETE FROM categories WHERE guild_id = ?', guildId);
+    q.run('DELETE FROM member_roles WHERE guild_id = ?', guildId);
+    q.run('DELETE FROM roles WHERE guild_id = ?', guildId);
+    q.run('DELETE FROM guild_members WHERE guild_id = ?', guildId);
+    q.run('DELETE FROM invites WHERE guild_id = ?', guildId);
+    q.run('DELETE FROM guild_bans WHERE guild_id = ?', guildId);
+    q.run('DELETE FROM audit_log WHERE guild_id = ?', guildId);
+    q.run('DELETE FROM guilds WHERE id = ?', guildId);
+  });
+
+  // Só depois que o banco confirmou: derruba as calls e avisa todo mundo.
+  const io = getIo();
+  for (const canalId of canais) dropVoiceRoom(io, canalId, guildId);
+  if (guild.icon_url) removeFile(guild.icon_url);
+
+  for (const userId of membros) io?.to(`user:${userId}`).emit('guild:deleted', { guildId });
+
   res.json({ ok: true });
 });
