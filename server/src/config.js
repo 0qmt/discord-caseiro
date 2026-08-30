@@ -56,13 +56,15 @@ export const config = {
    * (o caso da gente: a Vivo bloqueia entrada) e a conexao direta via STUN
    * nao rola. Ja passamos por um "sem cadastro" que nao respondia de
    * verdade, e por um serviço pago com cota gratuita que estourou rapido -
-   * agora e self-hosted: coturn rodando no proprio celular (ver
-   * lib/turn.js), sem depender de conta nem API de ninguem. So a
-   * credencial e fixa aqui; o ENDEREÇO muda a cada hora (o tunel gratuito
-   * que expõe isso expira e reconecta com outro), por isso e lido de um
-   * arquivo que o watchdog do celular atualiza sozinho.
+   * agora e self-hosted: coturn rodando num container ao lado do servidor
+   * (ver docker-compose.yml e lib/turn.js), com porta encaminhada de
+   * verdade no roteador de casa - por isso o endereço é fixo, sem precisar
+   * de nenhum túnel que expira e reconecta com outro host toda hora (era
+   * assim quando o coturn rodava dentro do Termux, sem porta própria).
    */
   turn: {
+    host: process.env.TURN_HOST ?? null,
+    port: Number(process.env.TURN_PORT ?? 3478),
     username: process.env.TURN_USERNAME ?? 'dcuser',
     password: process.env.TURN_PASSWORD ?? 'c43cf32f0b10817f4a34b9f2',
   },

@@ -1,34 +1,19 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { config, DATA_DIR } from '../config.js';
-
-const ARQUIVO_ENDERECO = path.join(DATA_DIR, 'turn-endpoint.json');
+import { config } from '../config.js';
 
 /**
- * O túnel gratuito (Pinggy) que expõe o coturn do celular expira de hora em
- * hora e reconecta com um endereço novo - o watchdog do celular escreve o
- * endereço atual aqui toda vez que reconecta. Lemos na hora de cada
- * chamada, sem guardar em cache: o arquivo é sempre a fonte mais nova.
- */
-function enderecoAtual() {
-  try {
-    const { host, port } = JSON.parse(fs.readFileSync(ARQUIVO_ENDERECO, 'utf8'));
-    return host && port ? { host, port } : null;
-  } catch {
-    return null; // tunel ainda nao conectou nenhuma vez, ou caiu agora.
-  }
-}
-
-/**
- * TURN self-hosted (coturn no proprio celular). Só TCP: o túnel gratuito só
- * encaminha TCP, e o coturn faz o relay de áudio/vídeo dentro dessa mesma
- * conexão (RFC 6062) - não precisa de nenhuma outra porta liberada.
+ * TURN self-hosted, agora num container coturn ao lado do servidor (ver
+ * docker-compose.yml), com porta 3478 encaminhada de verdade no roteador -
+ * endereço fixo, UDP funcionando de verdade (não só TCP através de um
+ * túnel, como era quando o coturn rodava dentro do Termux sem porta
+ * própria). Sem `TURN_HOST` configurado (dev local, por exemplo), a chamada
+ * cai pra STUN puro - funciona entre redes abertas, só não atravessa NAT
+ * fechado dos dois lados.
  */
 export function turnServers() {
-  const endereco = enderecoAtual();
-  if (!endereco) return [];
-  const { username, password } = config.turn;
+  const { host, port, username, password } = config.turn;
+  if (!host) return [];
   return [
-    { urls: `turn:${endereco.host}:${endereco.port}?transport=tcp`, username, credential: password },
+    { urls: `turn:${host}:${port}?transport=udp`, username, credential: password },
+    { urls: `turn:${host}:${port}?transport=tcp`, username, credential: password },
   ];
 }
