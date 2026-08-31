@@ -1530,7 +1530,20 @@ button.member-name:hover, button.author:hover { text-decoration: underline; }
 .voice-tile.arrastando { cursor: grabbing; }
 .voice-tile.arrastando video { cursor: grabbing; transition: none; }
 
-.voice-tile:fullscreen { aspect-ratio: auto; background: #000; }
+/* O navegador só aplica position:fixed/tamanho de tela cheia sozinho
+   quando NENHUMA regra de autor mexe nisso - como `.voice-tile` já fixa
+   `position: relative` pra grade normal, isso continuava valendo até
+   dentro da tela cheia (regra de autor sempre vence a folha do
+   navegador), deixando o tile preso no tamanho/lugar de sempre mesmo com
+   o :fullscreen "ativo" de verdade. Por isso repete aqui explícito. */
+.voice-tile:fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  background: #000;
+}
 
 /* Em tela cheia, só o essencial fica visível - rótulo, mic e qualidade eram
    feitos pra caber num quadradinho da grade, não pra tela toda. */
