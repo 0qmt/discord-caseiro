@@ -120,8 +120,22 @@ function caminhoDoProcesso(nomeExe) {
     if (process.platform !== 'win32') return resolve(null);
     const seguro = String(nomeExe).replace(/[^a-z0-9_-]/gi, '');
     if (!seguro) return resolve(null);
+    /*
+     * `Get-Process -Name X | Select Path` PARECE funcionar, mas o `.Path`
+     * depende de enumerar os MÓDULOS do processo - e isso falha em silêncio
+     * (erro não-terminante, `-ErrorAction SilentlyContinue` não pega) pra
+     * vários processos legítimos, o caso mais comum sendo um jogo de 32
+     * bits sendo consultado por um PowerShell de 64 bits. Quando falha, a
+     * gente simplesmente não descobre o caminho e cai no ícone genérico -
+     * foi exatamente o que aconteceu com o Roblox (Fortnite, 64 bits, nunca
+     * teve esse problema).
+     *
+     * `Win32_Process.ExecutablePath` via CIM vem da informação de criação do
+     * processo, sem precisar enumerar módulo nenhum - não tem esse
+     * problema de arquitetura.
+     */
     exec(
-      `powershell -NoProfile -NonInteractive -Command "(Get-Process -Name '${seguro}' -ErrorAction SilentlyContinue | Select-Object -First 1).Path"`,
+      `powershell -NoProfile -NonInteractive -Command "(Get-CimInstance Win32_Process -Filter \\"Name='${seguro}.exe'\\" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty ExecutablePath)"`,
       { windowsHide: true, timeout: 6000 },
       (erro, saida) => resolve(erro ? null : (String(saida).trim() || null)),
     );

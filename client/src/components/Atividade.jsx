@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Icon from './Icon.jsx';
+import { corTemaDaImagem } from '../lib/corDominante.js';
 
 /**
  * O que a pessoa está fazendo agora: jogando alguma coisa, ouvindo música, ou
@@ -75,8 +76,20 @@ export default function Atividade({ atividade }) {
   const decorrido = tempoDecorrido(a.desde, agora);
   const ehMusica = a.tipo === 'musica';
 
+  // Cor tirada da própria capa - o cartão fica com a cara do jogo/música em
+  // vez de um cinza igual pra tudo. Sem capa (ou enquanto a cor não fica
+  // pronta), some sozinho: a variável CSS não é escrita, e o valor padrão
+  // do estilo entra no lugar (ver componentes.css).
+  const [cor, setCor] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    setCor(null);
+    corTemaDaImagem(a.imagem).then((c) => { if (vivo) setCor(c); });
+    return () => { vivo = false; };
+  }, [a.imagem]);
+
   return (
-    <div className="atividade-cartao">
+    <div className="atividade-cartao" style={cor ? { '--atividade-cor': cor } : undefined}>
       <div className={`atividade-capa ${ehMusica ? 'musica' : ''}`}>
         {a.imagem
           ? <img src={a.imagem} alt="" />
