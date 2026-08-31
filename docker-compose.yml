@@ -21,8 +21,8 @@ services:
     volumes:
       - ./deploy/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
       - ./deploy/coturn/entrypoint.sh:/entrypoint-caseiro.sh:ro
-    environment:
-      TURN_LOCAL_IP: "192.168.0.56"
+    # Sem IP local fixo aqui de propósito - o entrypoint descobre sozinho a
+    # cada start (ver entrypoint.sh). Já mudou uma vez depois de um reinício.
     entrypoint: ["sh", "/entrypoint-caseiro.sh"]
 
   duckdns:
