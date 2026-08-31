@@ -36,6 +36,34 @@ const TYPING_TTL = 4000;
 const AVISO_TTL = 6000;
 
 /**
+ * Onde fica guardado "eu estava nessa call quando o app recarregou", pra
+ * voltar pra ela sozinho depois de uma atualização. Vale por pouco tempo
+ * (VALIDADE_RETOMAR_MS) de propósito: é pra emendar um recarregamento, não
+ * pra reconectar numa call de ontem quando a pessoa abrir o app de novo.
+ */
+const CHAVE_RETOMAR_CALL = 'discord-caseiro:retomar-call';
+const VALIDADE_RETOMAR_MS = 2 * 60 * 1000;
+
+/**
+ * Lê (e consome) a marca de "eu estava nessa call". Precisa ser chamada
+ * SINCRONAMENTE no primeiro render, nunca de dentro de um efeito: o efeito
+ * que mantém a marca em dia apaga ela assim que vê "não estou em call", e
+ * logo depois de um recarregamento isso é verdade por um instante - como
+ * efeitos rodam na ordem em que são declarados, a marca era apagada antes
+ * de alguém conseguir lê-la, e a pessoa nunca voltava pra chamada.
+ */
+function lerMarcaDeRetomar() {
+  try {
+    const marca = JSON.parse(localStorage.getItem(CHAVE_RETOMAR_CALL));
+    localStorage.removeItem(CHAVE_RETOMAR_CALL);
+    if (!marca?.channelId || Date.now() - marca.ts > VALIDADE_RETOMAR_MS) return null;
+    return marca;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Anotação privada sobre alguém. Carrega o que já existe ao abrir e some
  * quando salva vazio - é o mesmo comportamento da nota do Discord.
  */
@@ -179,6 +207,9 @@ function ApelidoModal({ membro, guildId, onClose, onErro }) {
 }
 
 export default function App() {
+  // Lazy initializer (função, não valor): roda UMA vez, no primeiro render,
+  // antes de qualquer efeito - ver o porquê em `lerMarcaDeRetomar`.
+  const [marcaDeRetomar] = useState(lerMarcaDeRetomar);
   const [me, setMe] = useState(null);
   const [booting, setBooting] = useState(true);
   const [connected, setConnected] = useState(false);
@@ -289,9 +320,27 @@ export default function App() {
   const podeMoverNaCall = temPermissao(guildMembroDeMim, guild, PERM.MOVER_MEMBROS);
   const minhaAtividade = presencas[me?.id]?.activity ?? null;
 
+  /*
+   * Deploy novo: recarrega NA HORA, mesmo em chamada - quem estava numa
+   * call volta pra ela sozinho logo depois (ver o efeito de "retomar call"
+   * abaixo). Antes isso esperava a pessoa sair da chamada, e o resultado
+   * era metade das pessoas rodando a versão velha por horas.
+   *
+   * A marca de retomar é reescrita AQUI, com a hora de agora, de propósito:
+   * ela é gravada quando a pessoa entra na call e só vale por 2 minutos
+   * (pra não reconectar num restart comum, dias depois). Sem reescrever,
+   * quem estivesse em call há mais de 2 minutos - ou seja, praticamente
+   * todo mundo - recarregaria e NÃO voltaria pra chamada.
+   */
   useEffect(() => {
-    if (atualizacaoPendente && !voice.channelId) window.location.reload();
-  }, [atualizacaoPendente, voice.channelId]);
+    if (!atualizacaoPendente) return;
+    if (voice.channelId) {
+      localStorage.setItem(CHAVE_RETOMAR_CALL, JSON.stringify({
+        guildId: activeGuildId, channelId: voice.channelId, ts: Date.now(),
+      }));
+    }
+    window.location.reload();
+  }, [atualizacaoPendente, voice.channelId, activeGuildId]);
 
   /*
    * Avisa o app de desktop se estamos numa call agora - é o que decide lá
@@ -310,7 +359,6 @@ export default function App() {
    * que evita reconectar num restart comum, dias depois - só vale por
    * pouco tempo.
    */
-  const CHAVE_RETOMAR_CALL = 'discord-caseiro:retomar-call';
   useEffect(() => {
     if (!voice.channelId) { localStorage.removeItem(CHAVE_RETOMAR_CALL); return; }
     const bruto = localStorage.getItem(CHAVE_RETOMAR_CALL);
@@ -775,24 +823,26 @@ export default function App() {
 
   /*
    * Reconecta sozinho na call que estava rolando, se o app acabou de
-   * reiniciar por causa de uma atualização durante a call (ver
-   * atualizador.js/entrarNaVoz acima). `tentou` garante que só tenta uma
-   * vez por sessão - sem isso, um `me` mudando de novo (reconexão de rede,
-   * por exemplo) tentaria de novo com a marca já velha.
+   * recarregar por causa de uma atualização durante a call. A marca já foi
+   * lida lá em cima (`marcaDeRetomar`), sincronamente - aqui só falta
+   * esperar ter `me` e socket pra poder entrar de verdade. `tentou` garante
+   * uma tentativa só: sem isso, um `me` mudando de novo (reconexão de rede,
+   * por exemplo) reentraria na call depois da pessoa já ter saído dela.
    */
   const tentouRetomarCallRef = useRef(false);
   useEffect(() => {
-    if (!me || tentouRetomarCallRef.current) return;
+    // `connected` (socket de pé) é obrigatório, não só `me`: entrar numa
+    // call é `clientRef.current?.join(...)` no useVoice, e esse client só
+    // nasce depois que o socket conecta - chamar antes disso não dá erro
+    // nenhum, simplesmente não faz nada, e a pessoa fica fora da chamada
+    // sem entender por quê.
+    if (!me || !connected || !marcaDeRetomar || tentouRetomarCallRef.current) return;
     tentouRetomarCallRef.current = true;
-    let marca;
-    try { marca = JSON.parse(localStorage.getItem('discord-caseiro:retomar-call')); } catch { marca = null; }
-    localStorage.removeItem('discord-caseiro:retomar-call');
-    if (!marca?.channelId || Date.now() - marca.ts > 2 * 60 * 1000) return;
     setDmMode(false);
-    if (marca.guildId) setActiveGuildId(marca.guildId);
-    entrarNaVoz(marca.channelId, marca.guildId);
+    if (marcaDeRetomar.guildId) setActiveGuildId(marcaDeRetomar.guildId);
+    entrarNaVoz(marcaDeRetomar.channelId, marcaDeRetomar.guildId);
     setCallMaximizada(true);
-  }, [me]);
+  }, [me, connected, marcaDeRetomar]);
 
   useEffect(() => {
     if (!activeGuildId) { setGuild(null); return; }
@@ -1580,14 +1630,14 @@ export default function App() {
 
   return (
     <>
+      {/* O recarregamento acontece na hora (ver o efeito de atualização),
+          então isto some sozinho em seguida - é só pra a tela não piscar do
+          nada sem nenhuma explicação. */}
       {atualizacaoPendente && (
         <div className="banner-atualizacao">
           {voice.channelId
-            ? 'Tem atualização nova — vai recarregar sozinho assim que você sair da chamada.'
+            ? 'Atualizando — você volta pra chamada em seguida...'
             : 'Atualizando...'}
-          {voice.channelId && (
-            <button onClick={() => window.location.reload()}>Atualizar agora</button>
-          )}
         </div>
       )}
 

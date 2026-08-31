@@ -516,7 +516,7 @@ function SecaoServidor() {
       <h2 className="settings-subtitulo">Atualizar todo mundo</h2>
       <p className="hint">
         Depois de publicar uma mudança, isso recarrega o app de todo mundo sozinho —
-        quem estiver numa chamada só atualiza quando sair dela.
+        quem estiver numa chamada volta pra ela logo em seguida, automaticamente.
       </p>
       <button className="primary" onClick={avisarTodoMundo} disabled={pedindoReload}>
         {reloadPedido ? 'Aviso enviado' : pedindoReload ? 'Enviando...' : 'Recarregar todo mundo'}

@@ -56,9 +56,10 @@ adminRoutes.get('/stats', async (req, res) => {
 });
 
 /**
- * Avisa todo mundo conectado (menos quem esta numa chamada, ver client)
- * pra recarregar a pagina - assim toda atualizacao de codigo chega sem
- * precisar pedir pra cada pessoa fechar e abrir o app na mao.
+ * Avisa todo mundo conectado pra recarregar a pagina - assim toda
+ * atualizacao de codigo chega sem precisar pedir pra cada pessoa fechar e
+ * abrir o app na mao. Quem esta numa chamada recarrega junto e volta pra
+ * ela sozinho logo depois (ver App.jsx).
  */
 adminRoutes.post('/reload', (req, res) => {
   if (!souDono(req.user.id)) {
