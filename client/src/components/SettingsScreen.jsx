@@ -372,6 +372,8 @@ export default function SettingsScreen({
               </div>
               <button className="primary" onClick={onEditarPerfil}>Editar perfil</button>
             </div>
+
+            <SecaoMudarSenha />
           </section>
         )}
 
@@ -520,6 +522,86 @@ function SecaoServidor() {
         {reloadPedido ? 'Aviso enviado' : pedindoReload ? 'Enviando...' : 'Recarregar todo mundo'}
       </button>
     </section>
+  );
+}
+
+/** Trocar a senha exige a atual de propósito - ver o porquê na rota do servidor. */
+function SecaoMudarSenha() {
+  const [aberto, setAberto] = useState(false);
+  const [senhaAtual, setSenhaAtual] = useState('');
+  const [senhaNova, setSenhaNova] = useState('');
+  const [confirmacao, setConfirmacao] = useState('');
+  const [erro, setErro] = useState(null);
+  const [ok, setOk] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+
+  function fechar() {
+    setAberto(false);
+    setSenhaAtual('');
+    setSenhaNova('');
+    setConfirmacao('');
+    setErro(null);
+    setOk(false);
+  }
+
+  async function enviar(e) {
+    e.preventDefault();
+    setErro(null);
+    if (senhaNova.length < 8) return setErro('a senha nova precisa ter pelo menos 8 caracteres');
+    if (senhaNova !== confirmacao) return setErro('as duas senhas novas não são iguais');
+
+    setEnviando(true);
+    try {
+      await api.mudarSenha(senhaAtual, senhaNova);
+      setOk(true);
+      setSenhaAtual('');
+      setSenhaNova('');
+      setConfirmacao('');
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (!aberto) {
+    return (
+      <button type="button" className="link" onClick={() => setAberto(true)}>
+        Mudar senha
+      </button>
+    );
+  }
+
+  return (
+    <form className="settings-card-conta-senha" onSubmit={enviar}>
+      <label className="settings-campo">
+        <span>Senha atual</span>
+        <input
+          type="password"
+          autoFocus
+          value={senhaAtual}
+          onChange={(e) => setSenhaAtual(e.target.value)}
+        />
+      </label>
+      <label className="settings-campo">
+        <span>Senha nova</span>
+        <input type="password" value={senhaNova} onChange={(e) => setSenhaNova(e.target.value)} />
+      </label>
+      <label className="settings-campo">
+        <span>Confirmar senha nova</span>
+        <input type="password" value={confirmacao} onChange={(e) => setConfirmacao(e.target.value)} />
+      </label>
+
+      {erro && <p className="hint erro">{erro}</p>}
+      {ok && <p className="hint ok">Senha alterada.</p>}
+
+      <div className="settings-card-conta-senha-acoes">
+        <button className="primary" type="submit" disabled={enviando}>
+          {enviando ? 'Salvando...' : 'Salvar nova senha'}
+        </button>
+        <button type="button" className="link" onClick={fechar}>Cancelar</button>
+      </div>
+    </form>
   );
 }
 

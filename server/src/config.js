@@ -48,6 +48,13 @@ export const config = {
   maxAvatarBytes: Number(process.env.MAX_AVATAR_MB ?? 20) * 1024 * 1024,
   maxAttachmentBytes: Number(process.env.MAX_ATTACHMENT_MB ?? 25) * 1024 * 1024,
   giphyApiKey: process.env.GIPHY_API_KEY || null,
+  // "Esqueci minha senha" manda um código por e-mail (ver lib/email.js) -
+  // sem essas duas variáveis o recurso fica desligado (a rota avisa "não
+  // configurado" em vez de quebrar), igual o Giphy sem chave.
+  email: (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) ? {
+    user: process.env.GMAIL_USER,
+    senhaDeApp: process.env.GMAIL_APP_PASSWORD,
+  } : null,
   iceServers: [
     { urls: (process.env.STUN_URL ?? 'stun:stun.l.google.com:19302').split(',') },
   ],

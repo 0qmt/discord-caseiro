@@ -188,6 +188,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at   INTEGER NOT NULL
 );
 
+-- Código de "esqueci minha senha", mandado por e-mail. Guarda só o HASH do
+-- código (igual senha), nunca o código puro - se o banco vazar, ninguém
+-- ganha um código de redefinição de graça. `tentativas` invalida o código
+-- depois de errar demais, mesmo dentro da validade.
+CREATE TABLE IF NOT EXISTS password_resets (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash   TEXT NOT NULL,
+  expires_at  INTEGER NOT NULL,
+  tentativas  INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_guild      ON audit_log(guild_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_channel  ON messages(channel_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reactions_message ON message_reactions(message_id);

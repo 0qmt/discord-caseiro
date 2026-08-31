@@ -1953,6 +1953,15 @@ button.member-name:hover, button.author:hover { text-decoration: underline; }
 .settings-campo { max-width: 360px; }
 .settings-campo .hint { text-transform: none; letter-spacing: 0; margin: 8px 0 0; }
 .settings-campo input[type="range"] { width: 100%; padding: 0; background: none; border: none; accent-color: var(--accent); }
+.settings-campo .hint.erro { color: var(--danger); }
+.settings-campo .hint.ok { color: var(--ok); }
+
+.settings-card-conta-senha { max-width: 360px; margin-top: 16px; }
+.settings-card-conta-senha .hint.erro { color: var(--danger); }
+.settings-card-conta-senha .hint.ok { color: var(--ok); }
+.settings-card-conta-senha-acoes { display: flex; align-items: center; gap: 16px; margin-top: 4px; }
+.settings-card-conta-senha-acoes .primary { width: auto; padding: 10px 20px; }
+.settings-card-conta-senha-acoes .link { width: auto; margin: 0; }
 
 .settings-card-conta {
   display: flex;

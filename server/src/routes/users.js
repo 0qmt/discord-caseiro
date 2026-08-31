@@ -5,7 +5,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { config } from '../config.js';
 import { q } from '../db.js';
-import { requireAuth } from '../lib/auth.js';
+import { checkPassword, hashPassword, requireAuth } from '../lib/auth.js';
 import { emitToGuild } from '../lib/bus.js';
 import { parseCrop, removeFile, sniffImage } from '../lib/images.js';
 import { sharesGuild } from '../lib/permissions.js';
@@ -152,6 +152,29 @@ userRoutes.patch('/me', (req, res) => {
   const updated = reload(req.user.id);
   broadcastUser(updated);
   return res.json({ user: selfUser(updated) });
+});
+
+/**
+ * Trocar a própria senha - pede a senha atual de propósito (mesmo já
+ * autenticado por token): sem isso, alguém que pega o computador destravado
+ * de outra pessoa conseguiria trocar a senha e trancar a conta dela fora.
+ */
+userRoutes.post('/me/senha', async (req, res) => {
+  const senhaAtual = String(req.body?.senhaAtual ?? '');
+  const senhaNova = String(req.body?.senhaNova ?? '');
+
+  if (senhaNova.length < 8) {
+    return res.status(400).json({ error: 'a senha nova precisa ter pelo menos 8 caracteres' });
+  }
+  // 403, não 401: a sessão continua válida, só essa ação foi recusada - o
+  // client trata TODO 401 como "sessão inválida, desloga" (ver api.js), e
+  // usar 401 aqui deslogava a pessoa sozinho só por errar a senha atual.
+  if (!(await checkPassword(senhaAtual, req.user.password_hash))) {
+    return res.status(403).json({ error: 'senha atual incorreta' });
+  }
+
+  q.run('UPDATE users SET password_hash = ? WHERE id = ?', await hashPassword(senhaNova), req.user.id);
+  res.json({ ok: true });
 });
 
 /** Card de perfil de alguem: banner, descricao, desde quando esta por aqui. */

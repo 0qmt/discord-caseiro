@@ -74,6 +74,7 @@ export const api = {
   deleteBanner: () => request('DELETE', '/users/me/banner'),
   getProfile: (userId) => request('GET', `/users/${userId}`),
   updateProfile: (payload) => request('PATCH', '/users/me', payload),
+  mudarSenha: (senhaAtual, senhaNova) => request('POST', '/users/me/senha', { senhaAtual, senhaNova }),
 
   listGuilds: () => request('GET', '/guilds'),
   createGuild: (payload) => request('POST', '/guilds', payload),
