@@ -110,9 +110,23 @@ function Tile({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [arrastando, setArrastando] = useState(false);
+  // "Tela cheia" tentada via Fullscreen API do navegador (`requestFullscreen`)
+  // não se comportava direito dentro do Electron (o botão parava de
+  // responder, ou entrava sem cobrir a tela de verdade) - troquei por um
+  // "ocupar a janela" só em CSS: o tile vira position:fixed cobrindo a
+  // janela inteira do app, sem depender de nenhuma API do navegador.
+  const [expandido, setExpandido] = useState(false);
   const ehTela = tipo === 'screen';
 
   useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, [stream]);
+
+  // Esc pra sair, do jeito que qualquer tela cheia de verdade funciona.
+  useEffect(() => {
+    if (!expandido) return undefined;
+    const aoTeclar = (e) => { if (e.key === 'Escape') setExpandido(false); };
+    document.addEventListener('keydown', aoTeclar);
+    return () => document.removeEventListener('keydown', aoTeclar);
+  }, [expandido]);
 
   /** Não deixa arrastar a imagem pra fora do quadro - a sobra depende de quanto deu zoom. */
   function limitarPan(x, y, z) {
@@ -156,26 +170,24 @@ function Tile({
   }
 
   // Os dois cobrem o mesmo vídeo por cima de tudo - deixar os dois ligados
-  // ao mesmo tempo é o popup (câmera ou outra janela) flutuando por cima da
-  // tela cheia. Um sempre fecha o outro antes de abrir.
-  async function alternarTelaCheia() {
-    if (document.fullscreenElement === containerRef.current) {
-      await document.exitFullscreen();
-      return;
+  // ao mesmo tempo é o popup (câmera ou outra janela) flutuando por cima do
+  // tile expandido. Um sempre fecha o outro antes de abrir.
+  function alternarExpandido() {
+    if (!expandido && document.pictureInPictureElement) {
+      document.exitPictureInPicture().catch(() => {});
     }
-    if (document.pictureInPictureElement) await document.exitPictureInPicture().catch(() => {});
-    await containerRef.current?.requestFullscreen?.().catch(() => {});
+    setExpandido((v) => !v);
   }
 
   async function abrirPopup() {
-    if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    setExpandido(false);
     await videoRef.current?.requestPictureInPicture?.().catch(() => {});
   }
 
   return (
     <div
       ref={containerRef}
-      className={`voice-tile ${ehTela ? 'compartilhando' : ''} ${falando ? 'falando' : ''} ${arrastando ? 'arrastando' : ''}`}
+      className={`voice-tile ${ehTela ? 'compartilhando' : ''} ${falando ? 'falando' : ''} ${arrastando ? 'arrastando' : ''} ${expandido ? 'expandido' : ''}`}
       onWheel={aoRolar}
       onMouseDown={aoIniciarArrasto}
       onMouseMove={aoMoverArrasto}
@@ -217,13 +229,24 @@ function Tile({
             onVotarExpulsao={() => onVotarExpulsao(socketId)}
           />
         )}
+        {ehTela && !expandido && (
+          <button className="icon-btn" title="Abrir em janela flutuante" onClick={abrirPopup}><Icon name="picture-in-picture" size={13} /></button>
+        )}
         {ehTela && (
-          <>
-            <button className="icon-btn" title="Abrir em janela flutuante" onClick={abrirPopup}><Icon name="picture-in-picture" size={13} /></button>
-            <button className="icon-btn" title="Tela cheia" onClick={alternarTelaCheia}><Icon name="expand" size={14} /></button>
-          </>
+          <button className="icon-btn" title={expandido ? 'Sair da tela cheia' : 'Ocupar a janela'} onClick={alternarExpandido}>
+            <Icon name={expandido ? 'x' : 'expand'} size={expandido ? 16 : 14} />
+          </button>
         )}
       </span>
+      {/* Botão de sair sempre visível enquanto expandido, sem depender de
+          passar o mouse em cima - `.voice-tile-acoes` só some/aparece no
+          hover, e sair da tela cheia não pode depender de achar o hover
+          certo primeiro. */}
+      {expandido && (
+        <button className="voice-tile-sair" title="Sair da tela cheia" onClick={alternarExpandido}>
+          <Icon name="x" size={18} />
+        </button>
+      )}
     </div>
   );
 }
