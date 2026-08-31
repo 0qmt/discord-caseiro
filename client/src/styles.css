@@ -1952,6 +1952,7 @@ button.member-name:hover, button.author:hover { text-decoration: underline; }
 
 .settings-campo { max-width: 360px; }
 .settings-campo .hint { text-transform: none; letter-spacing: 0; margin: 8px 0 0; }
+.settings-campo input[type="range"] { width: 100%; padding: 0; background: none; border: none; accent-color: var(--accent); }
 
 .settings-card-conta {
   display: flex;

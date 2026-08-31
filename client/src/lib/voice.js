@@ -1,4 +1,5 @@
 import { emitAck } from '../socket.js';
+import { getEntradaAudio, assinarEntradaAudio } from './audioInput.js';
 
 /**
  * Cliente de voz/vídeo em malha (cada um conecta com cada um).
@@ -23,9 +24,25 @@ import { emitAck } from '../socket.js';
 /** A ordem das linhas de mídia, combinada entre as duas pontas. */
 const SLOTS = ['audio', 'camera', 'screen'];
 
-const RESTRICOES_MIC = {
-  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-};
+/**
+ * Restrições de mídia do microfone, montadas na hora a partir do que a
+ * pessoa escolheu em Configurações > Voz e vídeo (dispositivo e supressor
+ * de ruído - ver audioInput.js). `autoGainControl` fica sempre ligado: é o
+ * ganho automático do NAVEGADOR, que não conflita com o ganho manual
+ * nosso (ver `abrirMicrofone`) - um estabiliza o volume, o outro ajusta o
+ * quanto mais forte/fraco a pessoa quer.
+ */
+function montarRestricoesMic() {
+  const { deviceId, noiseSuppression } = getEntradaAudio();
+  return {
+    audio: {
+      echoCancellation: true,
+      noiseSuppression,
+      autoGainControl: true,
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    },
+  };
+}
 
 const LIMIAR_FALA = 0.02;
 const INTERVALO_ESTATISTICAS = 2000;
@@ -139,6 +156,8 @@ export class VoiceClient {
     socket.on('voice:signal', this.aoSinal);
     socket.on('voice:participants', this.aoEntrarAlguem);
     socket.on('voice:left', this.aoSairAlguem);
+
+    this.pararDeOuvirEntrada = assinarEntradaAudio((prefs) => this.aoMudarEntradaAudio(prefs));
   }
 
   /* ------------------------------ estado ------------------------------ */
@@ -184,7 +203,7 @@ export class VoiceClient {
     // ao Discord. O aviso fica guardado pra mostrar depois que entrar.
     let avisoDeMic = null;
     try {
-      this.micStream = await navigator.mediaDevices.getUserMedia(RESTRICOES_MIC);
+      await this.abrirMicrofone();
     } catch (err) {
       this.micStream = null;
       avisoDeMic = err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError'
@@ -287,6 +306,7 @@ export class VoiceClient {
     this.socket.off('voice:signal', this.aoSinal);
     this.socket.off('voice:participants', this.aoEntrarAlguem);
     this.socket.off('voice:left', this.aoSairAlguem);
+    this.pararDeOuvirEntrada?.();
   }
 
   /* -------------------------------- pares ------------------------------ */
@@ -630,7 +650,7 @@ export class VoiceClient {
     // Entrou sem microfone e mudou de ideia: este clique é quem tenta ativar.
     if (!this.self.hasMic) {
       try {
-        this.micStream = await navigator.mediaDevices.getUserMedia(RESTRICOES_MIC);
+        await this.abrirMicrofone();
       } catch (err) {
         this.error = err.name === 'NotAllowedError'
           ? 'você precisa permitir o microfone'
@@ -744,9 +764,77 @@ export class VoiceClient {
     this.avisar();
   }
 
+  /**
+   * Abre o microfone e já passa o sinal por um nó de ganho antes de virar
+   * `this.micStream` - é o que permite "mais forte"/"mais fraco" de
+   * verdade (a Media Capture API não tem constraint nenhuma de volume; só
+   * dá pra fazer isso processando o áudio com a Web Audio API). O ganho
+   * fica sempre no grafo, mesmo em 1x (sem boost/corte nenhum) - assim dá
+   * pra mudar ele DEPOIS, ao vivo, sem reabrir o microfone (ver
+   * `aoMudarEntradaAudio`).
+   *
+   * `micStreamCru` é o stream de verdade vindo do hardware - precisa ser
+   * parado à parte quando a call acaba, porque o stream "processado" (saída
+   * do nó de ganho) é sintético e não seria isso que libera o microfone de
+   * verdade.
+   */
+  async abrirMicrofone() {
+    const streamCru = await navigator.mediaDevices.getUserMedia(montarRestricoesMic());
+    this.pararMicrofone();
+    this.micStreamCru = streamCru;
+
+    if (!this.audioContext) this.audioContext = new AudioContext();
+    const fonte = this.audioContext.createMediaStreamSource(streamCru);
+    this.gainNode = this.audioContext.createGain();
+    this.gainNode.gain.value = getEntradaAudio().ganho;
+    const destino = this.audioContext.createMediaStreamDestination();
+    fonte.connect(this.gainNode).connect(destino);
+
+    this.micStream = destino.stream;
+    return this.micStream;
+  }
+
+  /**
+   * Preferência de entrada mudou (ver audioInput.js) - aplica na hora se o
+   * microfone já está aberto, sem precisar sair e entrar de nada.
+   *
+   * Ganho: só ajustar o nó já existente, instantâneo. Supressor de ruído:
+   * `applyConstraints` na faixa crua, sem reabrir o microfone (funciona na
+   * maioria dos navegadores; se não funcionar, vale só na próxima vez que
+   * o mic for aberto). Dispositivo: precisa mesmo trocar de stream - só
+   * faz isso se o microfone já estiver de verdade aberto (não faz sentido
+   * pedir permissão de novo só porque a pessoa mudou uma configuração).
+   */
+  async aoMudarEntradaAudio(prefs) {
+    if (this.gainNode) this.gainNode.gain.value = prefs.ganho;
+
+    if (!this.micStreamCru) return;
+
+    const faixaCrua = this.micStreamCru.getAudioTracks()[0];
+    if (faixaCrua && typeof faixaCrua.applyConstraints === 'function') {
+      faixaCrua.applyConstraints({ noiseSuppression: prefs.noiseSuppression }).catch(() => {});
+    }
+
+    const deviceIdAtual = faixaCrua?.getSettings?.().deviceId;
+    if (prefs.deviceId && prefs.deviceId !== deviceIdAtual) {
+      try {
+        await this.abrirMicrofone();
+        this.substituirEmTodos('audio', this.micStream.getAudioTracks()[0]);
+        this.observarFala('self', this.micStream);
+        // Troca de dispositivo no meio da call não deve desmutar sozinha.
+        for (const track of this.micStream.getAudioTracks()) track.enabled = !this.self.muted;
+      } catch {
+        // Dispositivo escolhido sumiu/sem permissão - continua com o antigo.
+      }
+    }
+  }
+
   pararMicrofone() {
+    for (const t of this.micStreamCru?.getTracks() ?? []) t.stop();
     for (const t of this.micStream?.getTracks() ?? []) t.stop();
+    this.micStreamCru = null;
     this.micStream = null;
+    this.gainNode = null;
   }
 
   pararCamera() {

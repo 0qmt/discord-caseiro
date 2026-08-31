@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import Avatar from './Avatar.jsx';
 import ColorPicker from './ColorPicker.jsx';
 import { getSaidaAudio, setSaidaAudio } from '../lib/audioOutput.js';
+import { getEntradaAudio, setEntradaAudio } from '../lib/audioInput.js';
 import { ehDesktop, estadoDaPermissao, notificar, pedirPermissaoDeNotificacao } from '../lib/notificar.js';
 import {
   aplicarGradienteApp, aplicarTemaApp, reaplicarTemaSalvo, removerTemaApp,
@@ -523,48 +524,100 @@ function SecaoServidor() {
 }
 
 function SecaoVoz() {
-  const [dispositivos, setDispositivos] = useState([]);
+  const [saidas, setSaidas] = useState([]);
+  const [entradas, setEntradas] = useState([]);
   const [saida, setSaida] = useState(getSaidaAudio());
-  const [suportado, setSuportado] = useState(true);
+  const [entrada, setEntrada] = useState(getEntradaAudio());
+  const [suportadoSaida, setSuportadoSaida] = useState(true);
 
   useEffect(() => {
     if (typeof HTMLMediaElement === 'undefined' || !HTMLMediaElement.prototype.setSinkId) {
-      setSuportado(false);
-      return;
+      setSuportadoSaida(false);
     }
     navigator.mediaDevices?.enumerateDevices()
-      .then((lista) => setDispositivos(lista.filter((d) => d.kind === 'audiooutput')))
+      .then((lista) => {
+        setSaidas(lista.filter((d) => d.kind === 'audiooutput'));
+        setEntradas(lista.filter((d) => d.kind === 'audioinput'));
+      })
       .catch(() => {});
   }, []);
 
-  const escolher = (deviceId) => {
+  const escolherSaida = (deviceId) => {
     setSaida(deviceId);
     setSaidaAudio(deviceId);
   };
+
+  const mudarEntrada = (parcial) => setEntrada(setEntradaAudio(parcial));
+
+  // 50% a 300%: abaixo disso a pessoa já tem como abaixar no próprio SO, e
+  // acima o áudio começa a estourar (clipar) antes de ficar realmente mais
+  // "alto" de um jeito útil.
+  const percentualGanho = Math.round(entrada.ganho * 100);
 
   return (
     <section className="settings-secao">
       <h2>Voz e vídeo</h2>
 
-      {!suportado ? (
+      {!suportadoSaida ? (
         <p className="hint">Escolher saída de áudio não é suportado neste navegador.</p>
       ) : (
         <label className="settings-campo">
-          <span>Saída de áudio</span>
-          <select value={saida} onChange={(e) => escolher(e.target.value)}>
+          <span>Saída de áudio (onde o som sai)</span>
+          <select value={saida} onChange={(e) => escolherSaida(e.target.value)}>
             <option value="">Padrão do sistema</option>
-            {dispositivos.map((d) => (
+            {saidas.map((d) => (
               <option key={d.deviceId} value={d.deviceId}>
                 {d.label || 'Dispositivo de áudio'}
               </option>
             ))}
           </select>
-          {dispositivos.length > 0 && dispositivos.every((d) => !d.label) && (
-            <span className="hint">
-              Sem nome porque o navegador ainda não liberou - entra numa chamada uma vez e volta aqui.
-            </span>
-          )}
         </label>
+      )}
+
+      <label className="settings-campo">
+        <span>Entrada de áudio (microfone)</span>
+        <select value={entrada.deviceId} onChange={(e) => mudarEntrada({ deviceId: e.target.value })}>
+          <option value="">Padrão do sistema</option>
+          {entradas.map((d) => (
+            <option key={d.deviceId} value={d.deviceId}>
+              {d.label || 'Microfone'}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {saidas.length + entradas.length > 0 && saidas.every((d) => !d.label) && entradas.every((d) => !d.label) && (
+        <p className="hint">
+          Os dispositivos aparecem sem nome porque o navegador ainda não liberou -
+          entra numa chamada de voz uma vez e volta aqui.
+        </p>
+      )}
+
+      <label className="settings-campo checkbox">
+        <input
+          type="checkbox"
+          checked={entrada.noiseSuppression}
+          onChange={(e) => mudarEntrada({ noiseSuppression: e.target.checked })}
+        />
+        <span>Supressor de ruído (reduz ruído de fundo automaticamente)</span>
+      </label>
+
+      <label className="settings-campo">
+        <span>Sensibilidade do microfone — {percentualGanho}%</span>
+        <input
+          type="range"
+          min="50"
+          max="300"
+          step="10"
+          value={percentualGanho}
+          onChange={(e) => mudarEntrada({ ganho: Number(e.target.value) / 100 })}
+        />
+        <span className="hint">Mais pra esquerda = mais fraco, mais pra direita = mais forte.</span>
+      </label>
+      {percentualGanho !== 100 && (
+        <button type="button" className="link" onClick={() => mudarEntrada({ ganho: 1 })}>
+          Voltar pro normal (100%)
+        </button>
       )}
     </section>
   );
