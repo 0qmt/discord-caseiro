@@ -178,6 +178,53 @@ button.link {
 /* Só some pra quem enxerga; quem navega por teclado precisa alcançar. */
 .icon-btn.faint:focus-visible { opacity: 1; }
 
+/*
+ * Chacoalho suave no hover, pra qualquer botão de ícone do app - reinicia
+ * toda vez que o mouse ENTRA de novo (não só na primeira vez), porque é
+ * `:hover` disparando a animação, não uma classe presa. `.punch` é o
+ * complemento: uma classe que quem usa o botão liga por um instante no
+ * clique (ver lib/usePunch.js), pra dar uma resposta mais viva que só a
+ * cor de fundo mudando.
+ */
+@keyframes icone-chacoalho {
+  0%   { transform: rotate(0deg) scale(1); }
+  22%  { transform: rotate(-9deg) scale(1.06); }
+  46%  { transform: rotate(7deg) scale(1.06); }
+  68%  { transform: rotate(-4deg) scale(1.03); }
+  86%  { transform: rotate(2deg) scale(1.01); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+@keyframes icone-punch {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(.8); }
+  70%  { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+.icon-btn:hover svg,
+.voice-btn:hover svg,
+.orbit-icon-button:hover svg,
+.orbit-composer-icon:hover svg,
+.orbit-send-button:hover svg,
+.orbit-composer-gif:hover svg,
+.orbit-server-icon:hover .icon,
+.orbit-header-acoes .icon-btn:hover svg {
+  animation: icone-chacoalho 420ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.icon-btn.punch svg,
+.voice-btn.punch svg,
+.orbit-icon-button.punch svg,
+.orbit-send-button.punch svg {
+  animation: icone-punch 260ms cubic-bezier(.34, 1.56, .64, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn:hover svg, .voice-btn:hover svg, .orbit-icon-button:hover svg,
+  .orbit-composer-icon:hover svg, .orbit-send-button:hover svg, .orbit-composer-gif:hover svg,
+  .orbit-server-icon:hover .icon, .orbit-header-acoes .icon-btn:hover svg,
+  .icon-btn.punch svg, .voice-btn.punch svg, .orbit-icon-button.punch svg, .orbit-send-button.punch svg {
+    animation: none !important;
+  }
+}
+
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .boot { display: grid; place-items: center; height: 100%; color: var(--text-dim); }
@@ -1564,6 +1611,46 @@ button.member-name:hover, button.author:hover { text-decoration: underline; }
   color: #fff;
 }
 .voice-tile-sair:hover { background: rgba(0, 0, 0, .8); }
+
+/* Ícone "ao vivo" da tela compartilhada: pulso lento e sutil só pra
+   indicar "isso está ativo agora" - a tag <span class="voice-tile-label">
+   só existe enquanto a tela está sendo compartilhada, então não precisa de
+   estado nenhum aqui, é sempre "ligado" enquanto aparece. */
+@keyframes icone-ao-vivo { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+.voice-tile-label .ao-vivo { animation: icone-ao-vivo 2.1s ease-in-out infinite; }
+
+/* Botão "ocupar janela": crossfade entre expand/x, com uma leve rotação
+   nos traços de cada camada - dá sensação de "fechando/abrindo" sem
+   depender de girar o ícone inteiro (que nesse desenho específico quase
+   não muda de aparência girado 90°). */
+.icon-btn.troca-janela { position: relative; }
+.icon-btn.troca-janela .camada {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 200ms cubic-bezier(.34, 1.56, .64, 1), transform 200ms cubic-bezier(.34, 1.56, .64, 1);
+}
+.icon-btn.troca-janela .camada.base { opacity: 1; transform: rotate(0deg) scale(1); }
+.icon-btn.troca-janela .camada.corte { opacity: 0; transform: rotate(-20deg) scale(.7); }
+.icon-btn.troca-janela.aberto .camada.base { opacity: 0; transform: rotate(20deg) scale(.7); }
+.icon-btn.troca-janela.aberto .camada.corte { opacity: 1; transform: rotate(0deg) scale(1); }
+
+/* PiP "pop" ao abrir a janelinha flutuante (ver usePunch em VoiceStage.jsx). */
+@keyframes icone-pop {
+  0%   { transform: scale(1) rotate(0); }
+  40%  { transform: scale(1.32) rotate(-4deg); }
+  70%  { transform: scale(.9) rotate(2deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.icon-btn.pop svg { animation: icone-pop 320ms cubic-bezier(.34, 1.56, .64, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-tile-label .ao-vivo,
+  .icon-btn.troca-janela .camada,
+  .icon-btn.pop svg { animation: none !important; transition-duration: 60ms !important; }
+}
 
 /* Em tela cheia, só o essencial fica visível - rótulo, mic e qualidade eram
    feitos pra caber num quadradinho da grade, não pra tela toda. */

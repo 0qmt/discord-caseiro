@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import ScreenQualityPopover from './ScreenQualityPopover.jsx';
 import Icon from './Icon.jsx';
+import { usePunch } from '../lib/usePunch.js';
 
 export default function VoicePanel({ voice, channelName, actions }) {
   // Hooks não podem vir depois de um return condicional, então os guards de
   // "call inexistente" ficam depois deles.
   const [ajusteAberto, setAjusteAberto] = useState(false);
+  const [micPunch, dispararMicPunch] = usePunch();
+  const [fonePunch, dispararFonePunch] = usePunch();
 
   // A tela pode parar de ser compartilhada por fora (barra do navegador,
   // "parar compartilhamento"), sem passar pelo nosso botão - fecha o
@@ -49,17 +52,17 @@ export default function VoicePanel({ voice, channelName, actions }) {
       {voice.channelId && (
         <div className="voice-botoes">
           <button
-            className={`voice-btn ${!hasMic ? 'sem-mic' : muted ? 'perigo' : 'ativo'}`}
+            className={`voice-btn ${!hasMic ? 'sem-mic' : muted ? 'perigo' : 'ativo'} ${micPunch}`}
             title={!hasMic ? 'Você entrou sem microfone — clique pra ativar' : muted ? 'Desmutar' : 'Mutar'}
-            onClick={actions.toggleMute}
+            onClick={() => { actions.toggleMute(); dispararMicPunch(); }}
           >
             <Icon name={!hasMic ? 'mic-off' : muted ? 'mic-off' : 'mic'} />
           </button>
 
           <button
-            className={`voice-btn ${deafened ? 'perigo' : 'ativo'}`}
+            className={`voice-btn ${deafened ? 'perigo' : 'ativo'} ${fonePunch}`}
             title={deafened ? 'Voltar a ouvir' : 'Ensurdecer (para de ouvir e muta você junto)'}
-            onClick={actions.toggleDeafen}
+            onClick={() => { actions.toggleDeafen(); dispararFonePunch(); }}
           >
             <Icon name={deafened ? 'headphones-off' : 'headphones'} />
           </button>

@@ -7,6 +7,7 @@ import { Anexo, Conteudo, ItemFixado, Reacoes, shouldGroup } from '../../compone
 import { corDoMembro, nomeExibido } from '../../lib/cargos.js';
 import { cropStyle } from '../../lib/cropStyle.js';
 import { useMensagensNovas } from '../../lib/mensagensNovas.js';
+import { usePunch } from '../../lib/usePunch.js';
 import GifPicker from '../../components/GifPicker.jsx';
 import Icon from '../../components/Icon.jsx';
 import { IndicadorDeSolte, LinhaDeVoz } from '../../components/ChannelSidebar.jsx';
@@ -316,6 +317,8 @@ function Composer({ placeholder, onSend, onTyping }) {
     }
   }
 
+  const [lancando, dispararLancar] = usePunch(260, 'lancar');
+
   const enviar = () => {
     const texto = draft.trim();
     if (!texto && !anexo) return;
@@ -323,6 +326,7 @@ function Composer({ placeholder, onSend, onTyping }) {
     onSend(texto, anexo);
     setDraft('');
     setAnexo(null);
+    dispararLancar();
   };
 
   return (
@@ -383,7 +387,7 @@ function Composer({ placeholder, onSend, onTyping }) {
           </button>
           {gifAberto && <GifPicker onEscolher={escolherGif} onFechar={() => setGifAberto(false)} />}
         </div>
-        <button className="orbit-send-button" aria-label="Enviar mensagem" onClick={enviar}>
+        <button className={`orbit-send-button ${lancando}`} aria-label="Enviar mensagem" onClick={enviar}>
           <Icon name="send" size={16} />
         </button>
       </div>

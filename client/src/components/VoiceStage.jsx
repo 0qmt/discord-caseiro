@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
 import { getSaidaAudio, assinarSaidaAudio } from '../lib/audioOutput.js';
+import { usePunch } from '../lib/usePunch.js';
 
 /**
  * Autoplay bloqueado pelo navegador falha em silêncio - sem isso, a pessoa
@@ -179,8 +180,11 @@ function Tile({
     setExpandido((v) => !v);
   }
 
+  const [pipPop, dispararPipPop] = usePunch(280, 'pop');
+
   async function abrirPopup() {
     setExpandido(false);
+    dispararPipPop();
     await videoRef.current?.requestPictureInPicture?.().catch(() => {});
   }
 
@@ -203,7 +207,9 @@ function Tile({
         style={zoom !== 1 ? { transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)` } : undefined}
       />
       <span className="voice-tile-label">
-        <Icon name={tipo === 'screen' ? 'monitor' : 'camera'} size={13} /> {label}
+        {ehTela
+          ? <Icon name="monitor" size={13} className="ao-vivo" />
+          : <Icon name="camera" size={13} />} {label}
       </span>
       {(muted || !hasMic) && (
         <span className="voice-tile-mic" title={hasMic ? 'mutado' : 'sem microfone'}>
@@ -230,11 +236,21 @@ function Tile({
           />
         )}
         {ehTela && !expandido && (
-          <button className="icon-btn" title="Abrir em janela flutuante" onClick={abrirPopup}><Icon name="picture-in-picture" size={13} /></button>
+          <button className={`icon-btn ${pipPop}`} title="Abrir em janela flutuante" onClick={abrirPopup}>
+            <Icon name="picture-in-picture" size={13} />
+          </button>
         )}
         {ehTela && (
-          <button className="icon-btn" title={expandido ? 'Sair da tela cheia' : 'Ocupar a janela'} onClick={alternarExpandido}>
-            <Icon name={expandido ? 'x' : 'expand'} size={expandido ? 16 : 14} />
+          <button
+            className={`icon-btn troca-janela ${expandido ? 'aberto' : ''}`}
+            title={expandido ? 'Sair da tela cheia' : 'Ocupar a janela'}
+            onClick={alternarExpandido}
+          >
+            {/* Girar o ícone inteiro (versão antiga) quase não mudava nada -
+                "expand" tem 4 cantos parecidos em qualquer rotação de 90°.
+                Troquei por um crossfade de verdade entre os dois desenhos. */}
+            <span className="camada base"><Icon name="expand" size={14} /></span>
+            <span className="camada corte"><Icon name="x" size={16} /></span>
           </button>
         )}
       </span>

@@ -121,6 +121,17 @@
 }
 .orbit-server-icon:hover, .orbit-server-icon.orbit-active { border-radius: 14px; transform: scale(1.04); }
 .orbit-server-icon.orbit-active, .orbit-home { background: var(--o-primary); color: var(--o-primary-fg); }
+/* Brilho raro e discreto - não constante o bastante pra distrair, só pra
+   dar uma sensação de "vivo" no único ícone decorativo da barra. */
+@keyframes orbit-cintilar {
+  0%   { opacity: .8; transform: scale(1); }
+  4%   { opacity: 1; transform: scale(1.14); }
+  9%   { opacity: .9; transform: scale(1); }
+  14%  { opacity: .8; transform: scale(1); }
+  100% { opacity: .8; transform: scale(1); }
+}
+.orbit-home .icon { animation: orbit-cintilar 5s ease-in-out infinite; transform-origin: 50% 50%; }
+@media (prefers-reduced-motion: reduce) { .orbit-home .icon { animation: none !important; } }
 .orbit-server-icon.orbit-add { background: var(--o-accent); color: var(--o-secondary); }
 .orbit-server-icon.orbit-subtle { background: var(--o-muted); color: var(--o-muted-fg); }
 .orbit-server-icon.orbit-alerta { background: var(--o-muted); color: #f0b232; }
@@ -206,6 +217,16 @@ button.orbit-server-header-botao .icon { flex-shrink: 0; color: var(--o-muted-fg
 .orbit-shell .indicador-de-solte { background: var(--o-primary); }
 .orbit-shell .voz-previa-bolinha { border-color: var(--o-primary); }
 .orbit-shell .voice-members li.voz-previa { color: var(--o-primary); }
+
+/* A lista de participantes de um canal de voz (nome, anel de "falando",
+   badge de "compartilhando") também vem do CSS compartilhado - faltava
+   repintar ela igual às outras acima, e por isso ficava com o indigo/verde
+   da pele clássica (--accent-hover/--ok) em vez do roxo/verde do Orbit. */
+.orbit-shell .voice-members li { color: var(--o-muted-fg); }
+.orbit-shell .voice-members li.falando { color: var(--o-fg); }
+.orbit-shell .voice-members li.falando .avatar { box-shadow: 0 0 0 2px var(--o-secondary); }
+.orbit-shell .voice-members li.compartilhando { color: var(--o-fg); }
+.orbit-shell .compartilhando-badge { background: color-mix(in srgb, var(--o-primary) 20%, transparent); color: var(--o-primary); }
 .orbit-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .orbit-member-count { border-radius: 4px; background: var(--o-muted); padding: 1px 6px; font-size: 10px; color: var(--o-muted-fg); }
 
@@ -474,6 +495,16 @@ p.orbit-message-text { margin: 1px 0 0; font-size: 14px; line-height: 1.5; white
   color: var(--o-primary-fg);
 }
 .orbit-send-button:hover { opacity: .9; }
+/* "Lançada" no clique - some voando pro canto e reaparece, antes do campo
+   limpar de vez (ver Composer/usePunch.js). */
+@keyframes orbit-lancar {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  60%  { transform: translate(7px, -7px) scale(.9); opacity: .4; }
+  61%  { transform: translate(-7px, 7px) scale(.9); opacity: 0; }
+  100% { transform: translate(0, 0) scale(1); opacity: 1; }
+}
+.orbit-send-button.lancar svg { animation: orbit-lancar 260ms cubic-bezier(.34, 1.56, .64, 1); }
+@media (prefers-reduced-motion: reduce) { .orbit-send-button.lancar svg { animation: none !important; } }
 
 .orbit-composer-icon {
   display: flex;
