@@ -316,7 +316,7 @@ if (!app.requestSingleInstanceLock()) {
 
     // Só instalado (via NSIS) o auto-update funciona de verdade - em dev
     // não existe app-update.yml e checkForUpdates só geraria ruído no log.
-    if (app.isPackaged) require('./atualizador.js').iniciar();
+    if (app.isPackaged) require('./atualizador.js').iniciar(veioDaNossaPagina);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) criarJanela();

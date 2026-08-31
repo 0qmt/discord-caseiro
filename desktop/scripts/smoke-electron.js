@@ -166,6 +166,7 @@ async function testarJanelas() {
       ponteDesktop: typeof window.appDesktop,
       desktopNotificar: typeof window.appDesktop?.notificar,
       desktopJogo: typeof window.appDesktop?.aoDetectarJogo,
+      desktopEmCall: typeof window.appDesktop?.emCall,
       temMediaDevices: typeof navigator.mediaDevices?.getUserMedia === 'function',
       temDisplayMedia: typeof navigator.mediaDevices?.getDisplayMedia === 'function',
       contextoSeguro: window.isSecureContext,
@@ -181,6 +182,7 @@ async function testarJanelas() {
     dentro.ponteDesktop === 'object', dentro.ponteDesktop);
   check('a ponte do app expoe notificar', dentro.desktopNotificar === 'function');
   check('a ponte do app expoe a deteccao de jogo', dentro.desktopJogo === 'function');
+  check('a ponte do app expoe emCall', dentro.desktopEmCall === 'function');
   check('getUserMedia disponível na página', dentro.temMediaDevices === true);
   check('getDisplayMedia disponível na página', dentro.temDisplayMedia === true);
   check('localhost já é contexto seguro', dentro.contextoSeguro === true);

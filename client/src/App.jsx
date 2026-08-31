@@ -293,6 +293,40 @@ export default function App() {
     if (atualizacaoPendente && !voice.channelId) window.location.reload();
   }, [atualizacaoPendente, voice.channelId]);
 
+  /*
+   * Avisa o app de desktop se estamos numa call agora - é o que decide lá
+   * (atualizador.js) se uma atualização baixada reinicia na hora ou espera
+   * a pessoa sair da call. Não faz nada fora do Electron (a ponte
+   * simplesmente não existe no navegador).
+   */
+  useEffect(() => {
+    window.appDesktop?.emCall?.(Boolean(voice.channelId));
+  }, [voice.channelId]);
+
+  /*
+   * Guarda em qual call estávamos, pra reconectar sozinho se o app reiniciar
+   * por causa de uma atualização (ver entrarNaVoz abaixo e o efeito de
+   * "retomar call" logo depois do carregamento dos servidores). `ts` é o
+   * que evita reconectar num restart comum, dias depois - só vale por
+   * pouco tempo.
+   */
+  const CHAVE_RETOMAR_CALL = 'discord-caseiro:retomar-call';
+  useEffect(() => {
+    if (!voice.channelId) { localStorage.removeItem(CHAVE_RETOMAR_CALL); return; }
+    const bruto = localStorage.getItem(CHAVE_RETOMAR_CALL);
+    // Já escrito por `entrarNaVoz` com o guildId certo - aqui só teria que
+    // criar do zero se por algum motivo não passou por lá (não deveria
+    // acontecer, mas não custa não deixar sem marca nenhuma).
+    if (bruto) return;
+    localStorage.setItem(CHAVE_RETOMAR_CALL, JSON.stringify({ guildId: activeGuildId, channelId: voice.channelId, ts: Date.now() }));
+  }, [voice.channelId]);
+
+  /** Entra numa call de voz e já marca pra reconectar sozinho num restart de atualização. */
+  function entrarNaVoz(channelId, guildId) {
+    localStorage.setItem(CHAVE_RETOMAR_CALL, JSON.stringify({ guildId, channelId, ts: Date.now() }));
+    voiceActions.join(channelId);
+  }
+
   /**
    * Detecta sozinho quando um deploy novo saiu, sem precisar que alguém
    * clique em "Recarregar todo mundo" nas configurações: de tempos em
@@ -739,6 +773,27 @@ export default function App() {
     }).catch(() => {});
   }, [me]);
 
+  /*
+   * Reconecta sozinho na call que estava rolando, se o app acabou de
+   * reiniciar por causa de uma atualização durante a call (ver
+   * atualizador.js/entrarNaVoz acima). `tentou` garante que só tenta uma
+   * vez por sessão - sem isso, um `me` mudando de novo (reconexão de rede,
+   * por exemplo) tentaria de novo com a marca já velha.
+   */
+  const tentouRetomarCallRef = useRef(false);
+  useEffect(() => {
+    if (!me || tentouRetomarCallRef.current) return;
+    tentouRetomarCallRef.current = true;
+    let marca;
+    try { marca = JSON.parse(localStorage.getItem('discord-caseiro:retomar-call')); } catch { marca = null; }
+    localStorage.removeItem('discord-caseiro:retomar-call');
+    if (!marca?.channelId || Date.now() - marca.ts > 2 * 60 * 1000) return;
+    setDmMode(false);
+    if (marca.guildId) setActiveGuildId(marca.guildId);
+    entrarNaVoz(marca.channelId, marca.guildId);
+    setCallMaximizada(true);
+  }, [me]);
+
   useEffect(() => {
     if (!activeGuildId) { setGuild(null); return; }
     api.getGuild(activeGuildId).then(({ guild: detail }) => {
@@ -904,7 +959,7 @@ export default function App() {
     if (voice.channelId === channelId) {
       setCallMaximizada((v) => !v);
     } else {
-      voiceActions.join(channelId);
+      entrarNaVoz(channelId, activeGuildId);
       setCallMaximizada(true);
     }
   }
@@ -1416,7 +1471,7 @@ export default function App() {
     if (!voiceConvite) return;
     setDmMode(false);
     setActiveGuildId(voiceConvite.guildId);
-    voiceActions.join(voiceConvite.channelId);
+    entrarNaVoz(voiceConvite.channelId, voiceConvite.guildId);
     setCallMaximizada(true);
     voiceActions.limparConvite();
   }

@@ -22,6 +22,10 @@ if (location.protocol === 'file:') {
  */
 contextBridge.exposeInMainWorld('appDesktop', {
   notificar: (payload) => ipcRenderer.send('app:notificar', payload),
+  /** Avisa o processo principal se a pessoa está numa call agora - decide
+   * se uma atualização baixada reinicia na hora ou espera (ver
+   * atualizador.js). */
+  emCall: (emCall) => ipcRenderer.send('app:em-call', { emCall }),
   /** Assina a deteccao de jogo. Devolve uma funcao pra cancelar. */
   aoDetectarJogo: (callback) => {
     const handler = (_evento, nome) => callback(nome);
