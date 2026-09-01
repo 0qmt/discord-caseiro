@@ -13,6 +13,7 @@ const DEV_URL = process.env.DISCORD_CASEIRO_DEV_URL ?? null;
 app.setAppUserModelId('com.discordcaseiro.app');
 
 let janela = null;
+let janelaPlayer = null;
 let splash = null;
 let bandeja = null;
 let saindoDeVerdade = false;
@@ -309,6 +310,54 @@ ipcMain.handle('app:tela-cheia', (evento, ativa) => {
   if (!veioDaNossaPagina(evento) || !janela || janela.isDestroyed()) return false;
   janela.setFullScreen(Boolean(ativa));
   return janela.isFullScreen();
+});
+
+ipcMain.handle('app:abrir-player-tela-cheia', (evento, bruto) => {
+  if (!veioDaNossaPagina(evento)) return false;
+
+  let endereco;
+  try {
+    endereco = new URL(String(bruto));
+  } catch {
+    return false;
+  }
+
+  if (!['http:', 'https:'].includes(endereco.protocol)
+    || !HOSTS_PERMITIDOS_NO_PLAYER.has(endereco.hostname.toLowerCase())) return false;
+
+  if (janelaPlayer && !janelaPlayer.isDestroyed()) {
+    janelaPlayer.focus();
+    return true;
+  }
+
+  janelaPlayer = new BrowserWindow({
+    show: false,
+    frame: false,
+    fullscreen: true,
+    backgroundColor: '#000000',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  janelaPlayer.setMenuBarVisibility(false);
+  janelaPlayer.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  janelaPlayer.webContents.on('before-input-event', (_evento, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape') janelaPlayer?.close();
+  });
+  janelaPlayer.once('ready-to-show', () => {
+    janelaPlayer?.setFullScreen(true);
+    janelaPlayer?.show();
+  });
+  janelaPlayer.on('closed', () => {
+    janelaPlayer = null;
+    mostrarJanelaPrincipal();
+  });
+  janelaPlayer.loadURL(endereco.toString());
+  janela?.hide();
+  return true;
 });
 
 // Uma vigia so, compartilhada - a interface pode assinar e cancelar varias
