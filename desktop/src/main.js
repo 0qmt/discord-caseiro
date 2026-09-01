@@ -1,6 +1,7 @@
 const path = require('node:path');
 const {
   app, BrowserWindow, Menu, Notification, Tray, nativeImage, ipcMain, session, shell, dialog,
+  screen,
 } = require('electron');
 const config = require('./config.js');
 const jogos = require('./jogos.js');
@@ -312,7 +313,12 @@ ipcMain.handle('app:tela-cheia', (evento, ativa) => {
   return janela.isFullScreen();
 });
 
-ipcMain.handle('app:abrir-player-tela-cheia', (evento, bruto) => {
+ipcMain.handle('app:versao', (evento) => {
+  if (!veioDaNossaPagina(evento)) return null;
+  return app.getVersion();
+});
+
+ipcMain.handle('app:abrir-player-tela-cheia', async (evento, bruto) => {
   if (!veioDaNossaPagina(evento)) return false;
 
   let endereco;
@@ -330,10 +336,19 @@ ipcMain.handle('app:abrir-player-tela-cheia', (evento, bruto) => {
     return true;
   }
 
-  janelaPlayer = new BrowserWindow({
+  if (!servidorAtual) return false;
+  const shell = new URL('/cinema-fullscreen', servidorAtual);
+  shell.searchParams.set('src', endereco.toString());
+  const monitor = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+
+  const player = new BrowserWindow({
+    ...monitor.bounds,
     show: false,
     frame: false,
+    kiosk: true,
     fullscreen: true,
+    fullscreenable: true,
+    autoHideMenuBar: true,
     backgroundColor: '#000000',
     webPreferences: {
       contextIsolation: true,
@@ -341,23 +356,56 @@ ipcMain.handle('app:abrir-player-tela-cheia', (evento, bruto) => {
       sandbox: true,
     },
   });
+  janelaPlayer = player;
 
-  janelaPlayer.setMenuBarVisibility(false);
-  janelaPlayer.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  janelaPlayer.webContents.on('before-input-event', (_evento, input) => {
-    if (input.type === 'keyDown' && input.key === 'Escape') janelaPlayer?.close();
+  player.setMenuBarVisibility(false);
+  player.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  player.webContents.on('before-input-event', (inputEvent, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape') {
+      inputEvent.preventDefault();
+      player.close();
+    }
   });
-  janelaPlayer.once('ready-to-show', () => {
-    janelaPlayer?.setFullScreen(true);
-    janelaPlayer?.show();
+  player.once('ready-to-show', () => {
+    if (player.isDestroyed()) return;
+    janela?.setFullScreen(false);
+    janela?.hide();
+    player.setBounds(monitor.bounds, false);
+    player.setKiosk(true);
+    player.setFullScreen(true);
+    player.setAlwaysOnTop(true, 'screen-saver');
+    player.show();
+    player.focus();
+
+    // O Windows pode recalcular a area util um instante depois e reservar um
+    // pixel para a barra de tarefas. Reafirmar o estado depois da transicao
+    // garante que o video continue cobrindo o monitor inteiro.
+    setTimeout(() => {
+      if (player.isDestroyed()) return;
+      player.setBounds(monitor.bounds, false);
+      player.setKiosk(true);
+      player.setFullScreen(true);
+      player.focus();
+    }, 250);
   });
-  janelaPlayer.on('closed', () => {
-    janelaPlayer = null;
+  player.on('closed', () => {
+    if (janelaPlayer === player) janelaPlayer = null;
     mostrarJanelaPrincipal();
   });
-  janelaPlayer.loadURL(endereco.toString());
-  janela?.hide();
-  return true;
+  player.webContents.on('did-fail-load', (_falha, codigo, descricao, _url, principal) => {
+    if (!principal || codigo === -3 || player.isDestroyed()) return;
+    console.error(`[cinema] shell falhou: ${descricao} (${codigo})`);
+    player.close();
+  });
+
+  try {
+    await player.loadURL(shell.toString());
+    return !player.isDestroyed();
+  } catch (erro) {
+    console.error('[cinema] nao foi possivel abrir o shell fullscreen', erro);
+    if (!player.isDestroyed()) player.close();
+    return false;
+  }
 });
 
 // Uma vigia so, compartilhada - a interface pode assinar e cancelar varias

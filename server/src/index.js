@@ -11,6 +11,7 @@ import { adminRoutes } from './routes/admin.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
 import { channelRoutes } from './routes/channels.js';
+import { cinemaFullscreenRoutes } from './routes/cinema-fullscreen.js';
 import { dmRoutes } from './routes/dms.js';
 import { embedRoutes } from './routes/embed.js';
 import { reportRoutes } from './routes/reports.js';
@@ -38,6 +39,8 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/ice', (_req, res) => {
   res.json({ iceServers: [...config.iceServers, ...turnServers()] });
 });
+
+app.use('/cinema-fullscreen', cinemaFullscreenRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/guilds', guildRoutes);
