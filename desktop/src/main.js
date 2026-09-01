@@ -108,8 +108,7 @@ function deveBloquearPedido(url) {
     return true;
   }
 
-  if (!['http:', 'https:', 'about:', 'data:', 'blob:'].includes(parsed.protocol)) return true;
-  if (['about:', 'data:', 'blob:'].includes(parsed.protocol)) return false;
+  if (!['http:', 'https:'].includes(parsed.protocol)) return false;
   if (ehNossoServidor(url)) return false;
 
   const host = parsed.hostname.toLowerCase();
