@@ -31,6 +31,11 @@ contextBridge.exposeInMainWorld('appDesktop', {
     ipcRenderer.on('app:tela-cheia', handler);
     return () => ipcRenderer.removeListener('app:tela-cheia', handler);
   },
+  aoFecharPlayerTelaCheia: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('app:player-fechou', handler);
+    return () => ipcRenderer.removeListener('app:player-fechou', handler);
+  },
   /** Avisa o processo principal se a pessoa está numa call agora - decide
    * se uma atualização baixada reinicia na hora ou espera (ver
    * atualizador.js). */

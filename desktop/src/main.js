@@ -390,6 +390,7 @@ ipcMain.handle('app:abrir-player-tela-cheia', async (evento, bruto) => {
   });
   player.on('closed', () => {
     if (janelaPlayer === player) janelaPlayer = null;
+    janela?.webContents.send('app:player-fechou');
     mostrarJanelaPrincipal();
   });
   player.webContents.on('did-fail-load', (_falha, codigo, descricao, _url, principal) => {
