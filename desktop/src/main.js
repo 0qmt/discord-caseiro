@@ -33,6 +33,11 @@ const ehNossoServidor = (url) => config.mesmaOrigem(url, servidorAtual);
 
 const paginaLocal = (nome) => path.join(__dirname, nome);
 
+function emitirEstadoDeTelaCheia(ativa) {
+  if (!janela || janela.isDestroyed()) return;
+  janela.webContents.send('app:tela-cheia', Boolean(ativa));
+}
+
 /*
  * Servidores expostos por tunel gratuito (ngrok) mostram uma pagina de aviso
  * ("voce esta prestes a visitar...") pra qualquer pedido com cara de
@@ -185,6 +190,9 @@ function criarJanela() {
     janela.show();
   });
 
+  janela.on('enter-full-screen', () => emitirEstadoDeTelaCheia(true));
+  janela.on('leave-full-screen', () => emitirEstadoDeTelaCheia(false));
+
   // Fechar no X so minimiza pra bandeja - continua recebendo chamada e
   // mensagem por trás. So sai de verdade pelo menu/bandeja "Sair".
   janela.on('close', (evento) => {
@@ -295,6 +303,12 @@ ipcMain.on('app:notificar', (evento, payload = {}) => {
   // Clicar na notificacao leva pro app, que e o que a pessoa espera.
   aviso.on('click', mostrarJanelaPrincipal);
   aviso.show();
+});
+
+ipcMain.handle('app:tela-cheia', (evento, ativa) => {
+  if (!veioDaNossaPagina(evento) || !janela || janela.isDestroyed()) return false;
+  janela.setFullScreen(Boolean(ativa));
+  return janela.isFullScreen();
 });
 
 // Uma vigia so, compartilhada - a interface pode assinar e cancelar varias

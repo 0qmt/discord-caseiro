@@ -22,6 +22,13 @@ if (location.protocol === 'file:') {
  */
 contextBridge.exposeInMainWorld('appDesktop', {
   notificar: (payload) => ipcRenderer.send('app:notificar', payload),
+  /** Alterna o modo de tela cheia nativo da janela do Electron. */
+  telaCheia: (ativa) => ipcRenderer.invoke('app:tela-cheia', Boolean(ativa)),
+  aoMudarTelaCheia: (callback) => {
+    const handler = (_evento, ativa) => callback(Boolean(ativa));
+    ipcRenderer.on('app:tela-cheia', handler);
+    return () => ipcRenderer.removeListener('app:tela-cheia', handler);
+  },
   /** Avisa o processo principal se a pessoa está numa call agora - decide
    * se uma atualização baixada reinicia na hora ou espera (ver
    * atualizador.js). */
