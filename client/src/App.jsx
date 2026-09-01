@@ -353,6 +353,23 @@ export default function App() {
   }, [voice.channelId]);
 
   /*
+   * Versões antigas do desktop já baixavam o update, mas às vezes deixavam o
+   * instalador preso em "pending" esperando um aviso/reinício que a pessoa não
+   * via. A ponte `emCall(true)` existe nelas e força o atualizador a instalar
+   * assim que houver pacote baixado, sem pedir reinstalação manual.
+   */
+  useEffect(() => {
+    if (!window.appDesktop?.emCall) return;
+    window.appDesktop.emCall(true);
+    const intervalo = setInterval(() => window.appDesktop?.emCall?.(true), 30_000);
+    const parar = setTimeout(() => clearInterval(intervalo), 10 * 60 * 1000);
+    return () => {
+      clearInterval(intervalo);
+      clearTimeout(parar);
+    };
+  }, []);
+
+  /*
    * Guarda em qual call estávamos, pra reconectar sozinho se o app reiniciar
    * por causa de uma atualização (ver entrarNaVoz abaixo e o efeito de
    * "retomar call" logo depois do carregamento dos servidores). `ts` é o
