@@ -73,7 +73,7 @@ export function renderizarCinemaFullscreen(playerUrl) {
     const aviso = document.getElementById('aviso-esc');
     const dispensar = () => aviso?.remove();
     aviso?.addEventListener('click', dispensar);
-    window.setTimeout(dispensar, 10000);
+    window.setTimeout(dispensar, 5000);
   </script>
 </body>
 </html>`;
