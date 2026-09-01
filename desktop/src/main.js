@@ -52,6 +52,79 @@ function instalarCabecalhoDeTunel(sessao) {
   });
 }
 
+const HOSTS_PERMITIDOS_NO_PLAYER = new Set([
+  'superflixapi.beer',
+  'www.superflixapi.beer',
+]);
+
+const PADROES_DE_ANUNCIO = [
+  /(^|\.)doubleclick\.net$/i,
+  /(^|\.)googlesyndication\.com$/i,
+  /(^|\.)googleadservices\.com$/i,
+  /(^|\.)adservice\.google\./i,
+  /(^|\.)adnxs\.com$/i,
+  /(^|\.)adsystem\.com$/i,
+  /(^|\.)exoclick\.com$/i,
+  /(^|\.)popads\.net$/i,
+  /(^|\.)popcash\.net$/i,
+  /(^|\.)propellerads\.com$/i,
+  /(^|\.)propeller-tracking\.com$/i,
+  /(^|\.)onclickads\.net$/i,
+  /(^|\.)hilltopads\.net$/i,
+  /(^|\.)juicyads\.com$/i,
+  /(^|\.)adsterra\.com$/i,
+  /(^|\.)adsterratools\.com$/i,
+  /(^|\.)monetag\.com$/i,
+  /(^|\.)trafficjunky\.net$/i,
+  /(^|\.)popunder/i,
+  /(^|\.)pushads/i,
+];
+
+const TRECHOS_DE_ANUNCIO = [
+  '/ads/',
+  '/adserver',
+  '/advert',
+  '/banner',
+  '/popunder',
+  '/popup',
+  '/prebid',
+  '/vast',
+  '/vpaid',
+  'doubleclick',
+  'googlesyndication',
+  'googleadservices',
+  'onclick',
+  'popads',
+  'propeller',
+  'adsterra',
+  'monetag',
+];
+
+function deveBloquearPedido(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return true;
+  }
+
+  if (!['http:', 'https:', 'about:', 'data:', 'blob:'].includes(parsed.protocol)) return true;
+  if (['about:', 'data:', 'blob:'].includes(parsed.protocol)) return false;
+  if (ehNossoServidor(url)) return false;
+
+  const host = parsed.hostname.toLowerCase();
+  const caminho = `${parsed.pathname}${parsed.search}`.toLowerCase();
+  if (HOSTS_PERMITIDOS_NO_PLAYER.has(host)) return false;
+  if (PADROES_DE_ANUNCIO.some((padrao) => padrao.test(host))) return true;
+  return TRECHOS_DE_ANUNCIO.some((trecho) => caminho.includes(trecho) || host.includes(trecho));
+}
+
+function instalarBloqueadorDeAnuncios(sessao) {
+  sessao.webRequest.onBeforeRequest((detalhes, callback) => {
+    callback({ cancel: deveBloquearPedido(detalhes.url) });
+  });
+}
+
 async function servidorRespondendo(url) {
   try {
     const resposta = await fetch(`${url}/api/health`, {
@@ -121,16 +194,16 @@ function criarJanela() {
     janela.hide();
   });
 
-  // Link externo abre no navegador do sistema, não dentro do app.
+  // Popups de players externos tentam abrir navegador/abas invisiveis; no app,
+  // janelas novas ficam bloqueadas e a navegacao principal continua protegida.
   janela.webContents.setWindowOpenHandler(({ url }) => {
-    if (!ehNossoServidor(url)) shell.openExternal(url);
+    if (ehNossoServidor(url)) return { action: 'allow' };
     return { action: 'deny' };
   });
 
   janela.webContents.on('will-navigate', (evento, url) => {
     if (!ehNossoServidor(url) && !url.startsWith('file://')) {
       evento.preventDefault();
-      shell.openExternal(url);
     }
   });
 
@@ -299,6 +372,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     instalarCabecalhoDeTunel(session.defaultSession);
+    instalarBloqueadorDeAnuncios(session.defaultSession);
     instalarPermissoes(session.defaultSession, ehNossoServidor);
     instalarCapturaDeTela(session.defaultSession, () => janela);
     montarMenu();
