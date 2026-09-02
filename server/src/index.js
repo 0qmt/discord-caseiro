@@ -20,6 +20,7 @@ import { guildRoutes } from './routes/guilds.js';
 import { inviteRoutes } from './routes/invites.js';
 import { prefRoutes } from './routes/prefs.js';
 import { userRoutes } from './routes/users.js';
+import { watchRoutes } from './routes/watch.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -54,6 +55,7 @@ app.use('/api/gifs', gifRoutes);
 app.use('/api/prefs', prefRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/embed', embedRoutes);
+app.use('/api/watch', watchRoutes);
 
 // Avatares. O nome do arquivo ja e unico por upload, entao pode cachear forte.
 app.use('/uploads', express.static(config.uploadsDir, { maxAge: '365d', immutable: true }));

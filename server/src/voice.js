@@ -19,6 +19,10 @@ const rooms = new Map();
  */
 const votosDeExpulsao = new Map();
 
+// Sessao de assistir junto por canal de voz. Tambem vive so em memoria.
+const watchSessions = new Map();
+const watchVotes = new Map();
+
 const ESTADO_INICIAL = {
   muted: false, hasMic: true, camera: false, screen: false, deafened: false,
   // Impostos por um moderador: a pessoa nao consegue tirar sozinha.
@@ -66,13 +70,77 @@ function limparVotosDe(channelId, socketId) {
   if (votos.size === 0) votosDeExpulsao.delete(channelId);
 }
 
+function watchSessionSnapshot(session) {
+  if (!session) return null;
+  const position = session.status === 'playing'
+    ? session.position + ((Date.now() - session.updatedAt) / 1000)
+    : session.position;
+  return { ...session, viewers: [...session.viewers], position };
+}
+
+function watchSessionsFor(channelId) {
+  return [...watchSessions.values()]
+    .filter((session) => session.channelId === String(channelId))
+    .map(watchSessionSnapshot);
+}
+
+function watchProposalsFor(channelId) {
+  return [...watchVotes.values()]
+    .filter((proposal) => proposal.channelId === String(channelId))
+    .map((proposal) => ({
+      ...proposal,
+      votes: [...proposal.votes],
+      needed: proposal.needed,
+    }));
+}
+
+function normalizarMedia(media) {
+  if (!media?.url) return null;
+  const url = new URL(media.url);
+  if (url.protocol !== 'https:' || url.hostname !== 'superflixapi.beer') return null;
+  return {
+    id: String(media.id ?? url.pathname).slice(0, 160),
+    kind: media.kind === 'filme' ? 'filme' : 'serie',
+    imdbId: /^tt\d+$/.test(String(media.imdbId ?? '')) ? media.imdbId : null,
+    title: String(media.title ?? 'Assistindo junto').slice(0, 120),
+    subtitle: String(media.subtitle ?? '').slice(0, 120),
+    poster: typeof media.poster === 'string' ? media.poster : null,
+    url: url.href,
+  };
+}
+
+function membroDaVoz(channelId, socketId) {
+  const membros = rooms.get(String(channelId ?? ''));
+  const entry = membros?.get(socketId);
+  return { membros, entry, channelId: String(channelId ?? '') };
+}
+
+function broadcastWatch(io, channelId) {
+  const sessions = watchSessionsFor(channelId);
+  io.to(`voice:${channelId}`).emit('watch:update', {
+    channelId,
+    session: sessions[0] ?? null,
+    sessions,
+    proposals: watchProposalsFor(channelId),
+  });
+}
+
 function removeFromRoom(io, socketId, channelId) {
   const membros = rooms.get(channelId);
   const entry = membros?.get(socketId);
   if (!entry) return;
 
   membros.delete(socketId);
-  if (membros.size === 0) { rooms.delete(channelId); votosDeExpulsao.delete(channelId); }
+  if (membros.size === 0) {
+    rooms.delete(channelId);
+    votosDeExpulsao.delete(channelId);
+    for (const [id, session] of [...watchSessions]) {
+      if (session.channelId === channelId) watchSessions.delete(id);
+    }
+    for (const [id, proposal] of [...watchVotes]) {
+      if (proposal.channelId === channelId) watchVotes.delete(id);
+    }
+  }
   else limparVotosDe(channelId, socketId);
 
   io.sockets.sockets.get(socketId)?.leave(`voice:${channelId}`);
@@ -117,6 +185,12 @@ export function registerVoiceHandlers(io, socket) {
       state: { ...ESTADO_INICIAL },
     });
     socket.join(`voice:${channel.id}`);
+    socket.emit('watch:sync', {
+      channelId: channel.id,
+      session: watchSessionsFor(channel.id)[0] ?? null,
+      sessions: watchSessionsFor(channel.id),
+      proposals: watchProposalsFor(channel.id),
+    });
 
     broadcastParticipants(io, channel.id, channel.guild_id);
 
@@ -299,6 +373,133 @@ export function registerVoiceHandlers(io, socket) {
       guildId: entry.guildId,
       channelName: canalInfo?.name ?? 'chamada',
     });
+  });
+
+  socket.on('watch:start', ({ channelId, media } = {}, ack) => {
+    const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
+    const { membros, entry, channelId: canal } = membroDaVoz(channelId, socket.id);
+    if (!membros || !entry) return respond({ error: 'voce precisa estar na chamada' });
+
+    let clean;
+    try { clean = normalizarMedia(media); } catch { clean = null; }
+    if (!clean) return respond({ error: 'player invalido' });
+
+    const id = `${canal}:${socket.id}:${Date.now()}`;
+    watchSessions.set(id, {
+      id,
+      channelId: canal,
+      guildId: entry.guildId,
+      media: clean,
+      status: 'playing',
+      position: 0,
+      updatedAt: Date.now(),
+      startedBy: entry.user,
+      ownerSocketId: socket.id,
+      viewers: new Set([socket.id]),
+    });
+    broadcastWatch(io, canal);
+    return respond({ ok: true, session: watchSessionSnapshot(watchSessions.get(id)) });
+  });
+
+  socket.on('watch:join', ({ channelId, sessionId } = {}, ack) => {
+    const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
+    const { membros, channelId: canal } = membroDaVoz(channelId, socket.id);
+    const session = watchSessions.get(String(sessionId ?? ''));
+    if (!membros || !session || session.channelId !== canal) return respond({ error: 'sessao nao encontrada' });
+    session.viewers.add(socket.id);
+    broadcastWatch(io, canal);
+    return respond({ ok: true, session: watchSessionSnapshot(session) });
+  });
+
+  socket.on('watch:leave', ({ channelId, sessionId } = {}, ack) => {
+    const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
+    const { membros, channelId: canal } = membroDaVoz(channelId, socket.id);
+    const session = watchSessions.get(String(sessionId ?? ''));
+    if (!membros || !session || session.channelId !== canal) return respond({ error: 'sessao nao encontrada' });
+    session.viewers.delete(socket.id);
+    broadcastWatch(io, canal);
+    return respond({ ok: true });
+  });
+
+  socket.on('watch:stop', ({ channelId, sessionId } = {}, ack) => {
+    const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
+    const { membros, channelId: canal } = membroDaVoz(channelId, socket.id);
+    const id = String(sessionId ?? '');
+    const session = watchSessions.get(id);
+    if (!membros || !session || session.channelId !== canal) return respond({ error: 'sessao nao encontrada' });
+    watchSessions.delete(id);
+    for (const [proposalId, proposal] of [...watchVotes]) {
+      if (proposal.sessionId === id) watchVotes.delete(proposalId);
+    }
+    broadcastWatch(io, canal);
+    return respond({ ok: true });
+  });
+
+  socket.on('watch:control', ({ channelId, sessionId, status, position } = {}, ack) => {
+    const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
+    const { membros, channelId: canal } = membroDaVoz(channelId, socket.id);
+    const session = watchSessions.get(String(sessionId ?? ''));
+    if (!membros || !session || session.channelId !== canal) return respond({ error: 'sessao nao encontrada' });
+
+    const current = watchSessionSnapshot(session);
+    session.position = Number.isFinite(Number(position)) ? Math.max(0, Number(position)) : current.position;
+    session.status = status === 'paused' ? 'paused' : 'playing';
+    session.updatedAt = Date.now();
+    broadcastWatch(io, canal);
+    return respond({ ok: true, session: watchSessionSnapshot(session) });
+  });
+
+  socket.on('watch:propose-control', ({ channelId, sessionId, status, position } = {}, ack) => {
+    const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
+    const { membros, entry, channelId: canal } = membroDaVoz(channelId, socket.id);
+    const session = watchSessions.get(String(sessionId ?? ''));
+    if (!membros || !entry || !session || session.channelId !== canal) return respond({ error: 'sessao nao encontrada' });
+    if (!session.viewers.has(socket.id)) return respond({ error: 'entre na sessao antes de controlar' });
+
+    const viewers = [...session.viewers].filter((id) => membros.has(id));
+    const id = `vote:${session.id}:${Date.now()}`;
+    const proposal = {
+      id,
+      channelId: canal,
+      sessionId: session.id,
+      requestedBy: entry.user,
+      status: status === 'paused' ? 'paused' : 'playing',
+      position: Number.isFinite(Number(position)) ? Math.max(0, Number(position)) : watchSessionSnapshot(session).position,
+      votes: new Set([socket.id]),
+      eligible: viewers,
+      needed: Math.max(1, Math.ceil(viewers.length / 2)),
+      createdAt: Date.now(),
+    };
+    watchVotes.set(id, proposal);
+
+    if (proposal.votes.size >= proposal.needed) {
+      session.position = proposal.position;
+      session.status = proposal.status;
+      session.updatedAt = Date.now();
+      watchVotes.delete(id);
+    }
+    broadcastWatch(io, canal);
+    return respond({ ok: true });
+  });
+
+  socket.on('watch:vote-control', ({ channelId, proposalId, approve } = {}, ack) => {
+    const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
+    const { membros, channelId: canal } = membroDaVoz(channelId, socket.id);
+    const proposal = watchVotes.get(String(proposalId ?? ''));
+    if (!membros || !proposal || proposal.channelId !== canal) return respond({ error: 'votacao nao encontrada' });
+    if (!proposal.eligible.includes(socket.id)) return respond({ error: 'voce nao esta nessa sessao' });
+    if (approve === false) watchVotes.delete(proposal.id);
+    else proposal.votes.add(socket.id);
+
+    const session = watchSessions.get(proposal.sessionId);
+    if (session && proposal.votes.size >= proposal.needed) {
+      session.position = proposal.position;
+      session.status = proposal.status;
+      session.updatedAt = Date.now();
+      watchVotes.delete(proposal.id);
+    }
+    broadcastWatch(io, canal);
+    return respond({ ok: true });
   });
 
   socket.on('disconnect', () => {
