@@ -14,6 +14,7 @@ import { useVoice } from './lib/useVoice.js';
 import AuthView from './components/AuthView.jsx';
 import Avatar from './components/Avatar.jsx';
 import ChannelSidebar from './components/ChannelSidebar.jsx';
+import CinemaHome from './components/CinemaHome.jsx';
 import ChatView from './components/ChatView.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import ContextMenu, { useContextMenu } from './components/ContextMenu.jsx';
@@ -31,6 +32,7 @@ import ReportBugModal from './components/ReportBugModal.jsx';
 import SettingsScreen from './components/SettingsScreen.jsx';
 import { itensDeStatus } from './components/UserPanel.jsx';
 import VoiceStage, { temVideoDeOutros, VoiceAudioSink } from './components/VoiceStage.jsx';
+import WatchTogetherModal from './components/WatchTogetherModal.jsx';
 
 const TYPING_TTL = 4000;
 const AVISO_TTL = 6000;
@@ -227,16 +229,8 @@ export default function App() {
   // chat (ver selectChannel). Fica até trocar de canal e voltar.
   const [marcadorNaoLidas, setMarcadorNaoLidas] = useState({});
 
-  // Pele visual alternativa ("versão de teste" nas configurações): mesmo
-  // estado/lógica de sempre, só troca quem desenha a tela - ver
-  // skins/orbit/OrbitApp.jsx. Guardado, senão a cada refresh voltava pro
-  // clássico sem avisar.
-  const [interfaceTeste, setInterfaceTeste] = useState(
-    () => localStorage.getItem('discord-caseiro:interface-teste') === '1',
-  );
-  useEffect(() => {
-    localStorage.setItem('discord-caseiro:interface-teste', interfaceTeste ? '1' : '0');
-  }, [interfaceTeste]);
+  // Orbit é a interface oficial do app. O estado antigo da pele clássica fica ignorado para que instalações antigas não voltem para a tela anterior.
+  const interfaceTeste = true;
 
   // Mensagens diretas vivem paralelas aos servidores: mesma forma dos estados
   // acima (mensagens/estado do canal/nao-lidas), so que por dmChannelId.
@@ -252,6 +246,7 @@ export default function App() {
   const [presencas, setPresencas] = useState({});
   const [typing, setTyping] = useState({});
   const [modal, setModal] = useState(null);
+  const [cinemaAberto, setCinemaAberto] = useState(false);
   const [sendError, setSendError] = useState(null);
   const [profileToken, setProfileToken] = useState(0);
   // Tela cheia, separada do resto dos modais - fica aberta por baixo mesmo
@@ -301,7 +296,7 @@ export default function App() {
   const notifSettingsRef = useRef({});
   const statusRef = useRef('online');
 
-  const { voice, voiceRooms, voiceVotacoes, voiceConvite, voiceActions } = useVoice(socket);
+  const { voice, voiceRooms, voiceVotacoes, voiceConvite, voiceWatch, voiceActions } = useVoice(socket);
 
   // A barra de DM só precisa saber quem está online; monta o Set a partir das
   // presenças pra não manter dois estados dizendo a mesma coisa.
@@ -318,6 +313,7 @@ export default function App() {
   const podeGerenciarServidor = temPermissao(guildMembroDeMim, guild, PERM.GERENCIAR_SERVIDOR);
   const podeBanir = temPermissao(guildMembroDeMim, guild, PERM.BANIR);
   const podeMoverNaCall = temPermissao(guildMembroDeMim, guild, PERM.MOVER_MEMBROS);
+  const podeModerarVoz = temPermissao(guildMembroDeMim, guild, PERM.SILENCIAR_MEMBROS) || temPermissao(guildMembroDeMim, guild, PERM.ENSURDECER_MEMBROS);
   const minhaAtividade = presencas[me?.id]?.activity ?? null;
 
   /*
@@ -1680,8 +1676,9 @@ export default function App() {
           voiceActions={voiceActions}
           callMaximizada={callMaximizada}
           voiceVotacoes={voiceVotacoes}
-          onSelectGuild={(guildId) => { setDmMode(false); setActiveGuildId(guildId); }}
-          onOpenDms={() => setDmMode(true)}
+          voiceWatch={voiceWatch}
+          onSelectGuild={(guildId) => { setCinemaAberto(false); setDmMode(false); setActiveGuildId(guildId); }}
+          onOpenDms={() => { setCinemaAberto(false); setDmMode(true); }}
           onSelectChannel={selectChannel}
           onSelectDm={selectDm}
           onToggleVoiceChannel={alternarCanalDeVoz}
@@ -1691,7 +1688,11 @@ export default function App() {
           onNovaConversa={() => setModal({ type: 'nova-conversa' })}
           onCreateGuild={() => setModal({ type: 'create-guild' })}
           onJoinGuild={() => setModal({ type: 'join' })}
+          onOpenCinema={() => setCinemaAberto(true)}
           onReportarBug={() => setModal({ type: 'reportar-bug' })}
+          cinemaAberto={cinemaAberto}
+          onCloseCinema={() => setCinemaAberto(false)}
+          onErroCinema={setAviso}
           onOpenSettings={() => setConfiguracoesAbertas(true)}
           onOpenProfile={(userId) => setModal({ type: 'profile', userId })}
           onMinimizarCall={() => setCallMaximizada(false)}
@@ -1700,7 +1701,7 @@ export default function App() {
           telaAssistida={telaAssistida}
           onAssistir={setTelaAssistida}
           onPararDeAssistir={() => setTelaAssistida(null)}
-          onVoltarClassico={() => setInterfaceTeste(false)}
+          onOpenApps={() => setModal({ type: 'watch-app' })}
           presencas={presencas}
           minhaAtividade={minhaAtividade}
           membrosVisiveis={membrosVisiveis}
@@ -1708,6 +1709,7 @@ export default function App() {
           onPromote={(member, role) => api.setMemberRole(guild.id, member.id, role).catch(() => {})}
           onKick={acoesDoMembro.expulsar}
           podeChamarParaCall={Boolean(voice.channelId)}
+          podeModerarVoz={podeModerarVoz}
           onChamarParaCall={(member) => voiceActions.convidar(member.id)}
           onMenuDoMembro={menuDoMembro}
           voiceRooms={voiceRooms}
@@ -1741,10 +1743,11 @@ export default function App() {
         dmMode={dmMode}
         unreadDmTotal={unreadDmTotal}
         unreadByGuild={unreadByGuild}
-        onSelect={(guildId) => { setDmMode(false); setActiveGuildId(guildId); }}
-        onOpenDms={() => setDmMode(true)}
+        onSelect={(guildId) => { setCinemaAberto(false); setDmMode(false); setActiveGuildId(guildId); }}
+        onOpenDms={() => { setCinemaAberto(false); setDmMode(true); }}
         onCreate={() => setModal({ type: 'create-guild' })}
         onJoin={() => setModal({ type: 'join' })}
+        onOpenCinema={() => setCinemaAberto(true)}
         onReportarBug={() => setModal({ type: 'reportar-bug' })}
       />
 
@@ -1800,7 +1803,9 @@ export default function App() {
       <VoiceAudioSink voice={voice} />
 
       <div className="chat-column">
-        {callMaximizada && voice.channelId ? (
+        {cinemaAberto ? (
+          <CinemaHome onClose={() => setCinemaAberto(false)} onErro={setAviso} />
+        ) : callMaximizada && voice.channelId ? (
           <VoiceStage
             voice={voice}
             me={me}
@@ -1813,6 +1818,16 @@ export default function App() {
             telaAssistida={telaAssistida}
             onAssistir={setTelaAssistida}
             onPararDeAssistir={() => setTelaAssistida(null)}
+            watchSession={voiceWatch}
+            onOpenApps={() => setModal({ type: 'watch-app' })}
+            onStopWatch={async (sessionId) => {
+              const resposta = await voiceActions.watchStop(voice.channelId, sessionId);
+              if (resposta?.error) setAviso(resposta.error);
+            }}
+            onJoinWatch={(sessionId) => voiceActions.watchJoin(voice.channelId, sessionId)}
+            onLeaveWatch={(sessionId) => voiceActions.watchLeave(voice.channelId, sessionId)}
+            onProposeWatch={(sessionId, control) => voiceActions.watchProposeControl(voice.channelId, sessionId, control)}
+            onVoteWatch={(proposalId, approve) => voiceActions.watchVoteControl(voice.channelId, proposalId, approve)}
           />
         ) : dmMode ? (
           activeDm ? (
@@ -1889,7 +1904,7 @@ export default function App() {
         )}
       </div>
 
-      <MemberList
+      {!cinemaAberto && <MemberList
         membroArrastavel={podeMoverNaCall || Boolean(voice.channelId)}
         aoArrastarMembro={(membro) => arrasto.comecar({
           tipo: 'membro',
@@ -1910,7 +1925,7 @@ export default function App() {
         podeChamarParaCall={Boolean(voice.channelId)}
         onChamarParaCall={(member) => voiceActions.convidar(member.id)}
         onMenuDoMembro={menuDoMembro}
-      />
+      />}
         </div>
       )}
 
@@ -1975,6 +1990,19 @@ export default function App() {
           guildId={guild?.id}
           onClose={() => setModal(null)}
           onErro={setAviso}
+        />
+      )}
+
+      {modal?.type === 'watch-app' && voice.channelId && (
+        <WatchTogetherModal
+          channelId={voice.channelId}
+          onClose={() => setModal(null)}
+          onErro={setAviso}
+          onStart={async (channelId, media) => {
+            const resposta = await voiceActions.watchStart(channelId, media);
+            if (resposta?.error) throw new Error(resposta.error);
+            setCallMaximizada(true);
+          }}
         />
       )}
 
@@ -2054,8 +2082,6 @@ export default function App() {
           onClose={() => setConfiguracoesAbertas(false)}
           onLogout={() => { setConfiguracoesAbertas(false); pedirLogout(); }}
           onEditarPerfil={() => setModal({ type: 'edit-profile' })}
-          interfaceTeste={interfaceTeste}
-          onAlternarInterfaceTeste={setInterfaceTeste}
         />
       )}
     </>

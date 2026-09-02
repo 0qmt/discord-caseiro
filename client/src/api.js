@@ -154,6 +154,10 @@ export const api = {
   },
   pins: (channelId) => request('GET', `/channels/${channelId}/pins`),
   getEmbed: (url) => request('GET', `/embed?url=${encodeURIComponent(url)}`),
+  watchSearch: (q, kind = 'serie') =>
+    request('GET', `/watch/search?q=${encodeURIComponent(q)}&kind=${encodeURIComponent(kind)}`),
+  watchEpisodes: (imdbId) => request('GET', `/watch/episodes?imdbId=${encodeURIComponent(imdbId)}`),
+  watchPlayer: (payload) => request('POST', '/watch/player', payload),
   buscarNoCanal: (channelId, termo) =>
     request('GET', `/channels/${channelId}/search?q=${encodeURIComponent(termo)}`),
 

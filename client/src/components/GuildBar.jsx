@@ -11,7 +11,7 @@ const initials = (name) =>
 
 export default function GuildBar({
   guilds, activeGuildId, dmMode, unreadDmTotal, onSelect, onOpenDms, onCreate, onJoin, unreadByGuild,
-  onReportarBug,
+  onReportarBug, onOpenCinema,
 }) {
   return (
     <nav className="guild-bar">
@@ -47,6 +47,9 @@ export default function GuildBar({
       <button className="guild-pill ghost" title="Entrar com convite" onClick={onJoin}><Icon name="arrow-right" size={19} /></button>
 
       <div className="guild-bar-divisor" />
+      <button className="guild-pill ghost cinema" title="Cinema" onClick={onOpenCinema}>
+        <Icon name="film" size={19} />
+      </button>
       <button className="guild-pill ghost reportar" title="Reportar um problema" onClick={onReportarBug}>
         <Icon name="alert-triangle" size={19} />
       </button>

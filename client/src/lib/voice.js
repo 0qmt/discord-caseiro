@@ -113,6 +113,8 @@ export class VoiceClient {
     this.channelId = null;
     this.connecting = false;
     this.error = null;
+    this.connectionStatus = 'connected';
+    this.reconexaoCanal = null;
 
     this.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
     this.micStream = null;
@@ -152,10 +154,14 @@ export class VoiceClient {
     this.aoSinal = this.aoSinal.bind(this);
     this.aoEntrarAlguem = this.aoEntrarAlguem.bind(this);
     this.aoSairAlguem = this.aoSairAlguem.bind(this);
+    this.aoConectar = this.aoConectar.bind(this);
+    this.aoDesconectar = this.aoDesconectar.bind(this);
 
     socket.on('voice:signal', this.aoSinal);
     socket.on('voice:participants', this.aoEntrarAlguem);
     socket.on('voice:left', this.aoSairAlguem);
+    socket.on('connect', this.aoConectar);
+    socket.on('disconnect', this.aoDesconectar);
 
     this.pararDeOuvirEntrada = assinarEntradaAudio((prefs) => this.aoMudarEntradaAudio(prefs));
   }
@@ -166,6 +172,7 @@ export class VoiceClient {
     return {
       channelId: this.channelId,
       socketId: this.socketId ?? null,
+      connectionStatus: this.connectionStatus,
       connecting: this.connecting,
       error: this.error,
       self: { ...this.self },
@@ -189,20 +196,40 @@ export class VoiceClient {
     this.onChange?.(this.snapshot());
   }
 
+  /* ----------------------------- reconexao ---------------------------- */
+
+  aoDesconectar() {
+    if (!this.channelId) { this.connectionStatus = 'offline'; this.avisar(); return; }
+    this.reconexaoCanal = this.channelId;
+    for (const socketId of [...this.peers.keys()]) this.removerPar(socketId);
+    this.channelId = null; this.socketId = null; this.connecting = true;
+    this.connectionStatus = 'reconnecting';
+    this.self = { ...this.self, camera: false, screen: false, speaking: false };
+    this.error = 'Conexao perdida. Tentando voltar para a chamada...';
+    this.avisar();
+  }
+
+  aoConectar() {
+    this.connectionStatus = 'connected';
+    const canal = this.reconexaoCanal; this.reconexaoCanal = null;
+    if (canal) this.join(canal, { preservarMidia: true }); else this.avisar();
+  }
+
   /* ------------------------------- entrar ------------------------------ */
 
-  async join(channelId) {
+  async join(channelId, { preservarMidia = false } = {}) {
     if (this.channelId) this.leave();
 
     this.connecting = true;
     this.error = null;
+    this.connectionStatus = preservarMidia ? 'reconnecting' : 'connecting';
     this.avisar();
 
     // O microfone é opcional: sem ele (ou sem permissão) a pessoa ainda entra
     // na call, só pra ouvir os outros e ver o que for compartilhado - igual
     // ao Discord. O aviso fica guardado pra mostrar depois que entrar.
     let avisoDeMic = null;
-    try {
+    if (!this.micStream) try {
       await this.abrirMicrofone();
     } catch (err) {
       this.micStream = null;
@@ -240,8 +267,8 @@ export class VoiceClient {
     this.self = {
       muted: !this.micStream,
       hasMic: Boolean(this.micStream),
-      camera: false,
-      screen: false,
+      camera: preservarMidia && Boolean(this.cameraStream),
+      screen: preservarMidia && Boolean(this.screenStream),
       speaking: false,
       screenStats: null,
       telaResolucaoId: null,
@@ -249,6 +276,7 @@ export class VoiceClient {
     };
     // Aviso não bloqueante: aparece igual a um erro, mas não impede a call.
     this.error = avisoDeMic;
+    this.connectionStatus = 'connected';
     // O servidor assume hasMic=true até o primeiro voice:state — se entramos
     // sem microfone, os outros precisam saber disso desde já.
     this.publicarEstado();
@@ -306,6 +334,8 @@ export class VoiceClient {
     this.socket.off('voice:signal', this.aoSinal);
     this.socket.off('voice:participants', this.aoEntrarAlguem);
     this.socket.off('voice:left', this.aoSairAlguem);
+    this.socket.off('connect', this.aoConectar);
+    this.socket.off('disconnect', this.aoDesconectar);
     this.pararDeOuvirEntrada?.();
   }
 

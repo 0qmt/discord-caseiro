@@ -9,6 +9,7 @@ import { cropStyle } from '../../lib/cropStyle.js';
 import { useMensagensNovas } from '../../lib/mensagensNovas.js';
 import { usePunch } from '../../lib/usePunch.js';
 import GifPicker from '../../components/GifPicker.jsx';
+import CinemaHome from '../../components/CinemaHome.jsx';
 import Icon from '../../components/Icon.jsx';
 import { IndicadorDeSolte, LinhaDeVoz } from '../../components/ChannelSidebar.jsx';
 import LinkPreview from '../../components/LinkPreview.jsx';
@@ -40,7 +41,7 @@ function agruparCanais(canais, categorias) {
   return { soltos, grupos, voz };
 }
 
-function ServerRail({ guilds, activeGuildId, dmMode, onSelectGuild, onOpenDms, onCreateGuild, onJoinGuild, onReportarBug }) {
+function ServerRail({ guilds, activeGuildId, dmMode, onSelectGuild, onOpenDms, onCreateGuild, onJoinGuild, onOpenCinema, onReportarBug }) {
   return (
     <nav className="orbit-rail" aria-label="Servidores">
       <button className={`orbit-server-icon orbit-home ${dmMode ? 'orbit-active' : ''}`} title="Amigos e mensagens diretas" onClick={onOpenDms}>
@@ -66,6 +67,9 @@ function ServerRail({ guilds, activeGuildId, dmMode, onSelectGuild, onOpenDms, o
         <Icon name="arrow-right" size={18} />
       </button>
       <div className="orbit-rail-divider" />
+      <button className="orbit-server-icon orbit-cinema" title="Cinema" onClick={onOpenCinema}>
+        <Icon name="film" size={18} />
+      </button>
       <button className="orbit-server-icon orbit-alerta" title="Reportar um problema" onClick={onReportarBug}>
         <Icon name="alert-triangle" size={18} />
       </button>
@@ -727,15 +731,14 @@ function DmMain({ activeDm, messages, onSend, onOpenProfile }) {
 export default function OrbitApp({
   me, guilds, guild, activeGuildId, dmMode, dms, activeDm, activeDmId, onlineIds,
   activeChannel, messages, dmMessages, typingUsers, sendError, connected,
-  voice, voiceActions, callMaximizada, voiceVotacoes,
+  voice, voiceActions, callMaximizada, voiceVotacoes, voiceWatch,
   onSelectGuild, onOpenDms, onSelectChannel, onSelectDm, onToggleVoiceChannel,
   onSend, onSendDm, onTyping, onNovaConversa,
   onCreateGuild, onJoinGuild, onOpenSettings, onOpenProfile,
   onMinimizarCall, onExpulsarDaCall, onVotarExpulsaoDaCall,
-  telaAssistida, onAssistir, onPararDeAssistir,
-  onVoltarClassico,
+  telaAssistida, onAssistir, onPararDeAssistir, onOpenApps, onOpenCinema, cinemaAberto, onCloseCinema, onErroCinema,
   presencas, minhaAtividade, membrosVisiveis, onAlternarMembros, onPromote, onKick,
-  podeChamarParaCall, onChamarParaCall, onMenuDoMembro, onReportarBug,
+  podeChamarParaCall, podeModerarVoz, onChamarParaCall, onMenuDoMembro, onReportarBug,
   voiceRooms, onMenuDoParticipanteDeVoz, naoLidasAoAbrir, onMenuDaGuild, onMenuDaMensagem, acoesDaMensagem,
   podeOrdenarCanais, podeMoverNaCall, onReordenarCanais, onPuxarParaCall, onMoverParaFim, arrasto, aoArrastarMembro,
 }) {
@@ -746,13 +749,7 @@ export default function OrbitApp({
       {/* Independente de qualquer tela estar aberta - sem isso o áudio de
           quem tá na call nunca toca pra quem usa a versão de teste. */}
       <VoiceAudioSink voice={voice} />
-
-      <div className="orbit-beta-tag">
-        Versão de teste
-        <button onClick={onVoltarClassico}>voltar pra clássica</button>
-      </div>
-
-      <ServerRail
+<ServerRail
         guilds={guilds}
         activeGuildId={activeGuildId}
         dmMode={dmMode}
@@ -760,10 +757,11 @@ export default function OrbitApp({
         onOpenDms={onOpenDms}
         onCreateGuild={onCreateGuild}
         onJoinGuild={onJoinGuild}
+        onOpenCinema={onOpenCinema}
         onReportarBug={onReportarBug}
       />
 
-      {dmMode ? (
+      {!cinemaAberto && (dmMode ? (
         <DmSidebar
           dms={dms}
           activeDmId={activeDmId}
@@ -794,9 +792,11 @@ export default function OrbitApp({
           onMoverParaFim={onMoverParaFim}
           arrasto={arrasto}
         />
-      )}
+      ))}
 
-      {callMaximizada && voice.channelId ? (
+      {cinemaAberto ? (
+        <CinemaHome onClose={onCloseCinema} onErro={onErroCinema} />
+      ) : callMaximizada && voice.channelId ? (
         <VoiceStage
           voice={voice}
           me={me}
@@ -806,9 +806,21 @@ export default function OrbitApp({
           votacoes={voiceVotacoes}
           onExpulsar={onExpulsarDaCall}
           onVotarExpulsao={onVotarExpulsaoDaCall}
+          voiceActions={voiceActions}
+          podeModerarVoz={podeModerarVoz}
           telaAssistida={telaAssistida}
           onAssistir={onAssistir}
           onPararDeAssistir={onPararDeAssistir}
+          watchSession={voiceWatch}
+          onOpenApps={onOpenApps}
+          onStopWatch={async (sessionId) => {
+            const resposta = await voiceActions.watchStop(voice.channelId, sessionId);
+            if (resposta?.error) console.warn(resposta.error);
+          }}
+          onJoinWatch={(sessionId) => voiceActions.watchJoin(voice.channelId, sessionId)}
+          onLeaveWatch={(sessionId) => voiceActions.watchLeave(voice.channelId, sessionId)}
+          onProposeWatch={(sessionId, control) => voiceActions.watchProposeControl(voice.channelId, sessionId, control)}
+          onVoteWatch={(proposalId, approve) => voiceActions.watchVoteControl(voice.channelId, proposalId, approve)}
         />
       ) : dmMode ? (
         <DmMain
@@ -849,7 +861,7 @@ export default function OrbitApp({
         </section>
       )}
 
-      {!dmMode && !(callMaximizada && voice.channelId) && (
+      {!cinemaAberto && !dmMode && !(callMaximizada && voice.channelId) && (
         <MemberList
           guild={guild}
           presencas={presencas}

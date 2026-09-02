@@ -21,11 +21,15 @@ export default function VoicePanel({ voice, channelName, actions }) {
 
   const sozinho = voice.peers.length === 0;
   const conectado = voice.peers.some((p) => p.connectionState === 'connected');
+  const reconectando = voice.connectionStatus === 'reconnecting';
+  const offline = voice.connectionStatus === 'offline';
 
   const falhou = Boolean(voice.error) && !voice.channelId;
 
   const situacao = falhou ? 'não deu pra entrar'
-    : voice.connecting ? 'entrando...'
+    : reconectando ? 'reconectando...'
+      : offline ? 'sem conexão'
+        : voice.connecting ? 'entrando...'
       : sozinho ? 'esperando alguém'
         : conectado ? 'conectado' : 'negociando...';
 
@@ -36,7 +40,7 @@ export default function VoicePanel({ voice, channelName, actions }) {
   return (
     <div className="voice-panel">
       <div className="voice-info">
-        <span className={`voice-situacao ${!falhou && (conectado || sozinho) ? 'on' : ''}`}>
+        <span className={`voice-situacao ${!falhou && !reconectando && (conectado || sozinho) ? 'on' : ''} ${reconectando || offline ? 'instavel' : ''}`}>
           {situacao}
         </span>
         {voice.channelId && <span className="voice-canal">{channelName}</span>}

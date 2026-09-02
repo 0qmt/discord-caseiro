@@ -337,6 +337,192 @@ export function temVideoDeOutros(voice) {
   return voice.peers.some((p) => p.state.screen || p.state.camera);
 }
 
+function formatarTempo(segundos = 0) {
+  const total = Math.max(0, Math.floor(Number(segundos) || 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h
+    ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
+    : m + ':' + String(s).padStart(2, '0');
+}
+
+function WatchBlock({ session, ativo, onAssistir, onStop }) {
+  function acionarTeclado(event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onAssistir?.();
+  }
+
+  return (
+    <div
+      className={'voice-bloco voice-cinema-bloco ' + (ativo ? 'ativo' : '')}
+      role="button"
+      tabIndex={0}
+      onClick={onAssistir}
+      onKeyDown={acionarTeclado}
+    >
+      {session.media?.poster ? <img src={session.media.poster} alt="" /> : <span className="voice-bloco-poster"><Icon name="film" size={30} /></span>}
+      <span className="voice-bloco-info">
+        <strong>{session.media?.title ?? 'Cinema'}</strong>
+        <small>{session.media?.subtitle || ('Cinema de ' + (session.startedBy?.username ?? 'alguem'))}</small>
+        <small>{session.viewers?.length ?? 0} assistindo - {formatarTempo(session.position)}</small>
+      </span>
+      <span className="voice-bloco-pill"><Icon name="film" size={12} /> Cinema</span>
+      <button className="icon-btn perigo voice-bloco-fechar" title="Fechar sessão" onClick={(e) => { e.stopPropagation(); onStop?.(); }}>
+        <Icon name="x" size={13} />
+      </button>
+    </div>
+  );
+}
+
+function WatchVoteBar({ proposal, minhaVez, onVote }) {
+  if (!proposal) return null;
+  return (
+    <div className="watch-vote-bar">
+      <span>
+        <strong>{proposal.requestedBy?.username ?? 'Alguem'}</strong> quer sincronizar em {formatarTempo(proposal.position)}
+      </span>
+      <span className="hint">{proposal.votes?.length ?? 0}/{proposal.needed ?? 1}</span>
+      {minhaVez && (
+        <>
+          <button className="primary" onClick={() => onVote(true)}><Icon name="check" size={13} /> Concordar</button>
+          <button onClick={() => onVote(false)}><Icon name="x" size={13} /> Recusar</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function WatchTile({ session, proposal, meuSocketId, onStop, onLeave, onPropose, onVote }) {
+  const [expandido, setExpandido] = useState(false);
+  const [minuto, setMinuto] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const lastSyncRef = useRef(null);
+  if (!session?.media?.url) return null;
+
+  useEffect(() => {
+    const chave = session.id + ':' + Math.floor(session.position ?? 0) + ':' + session.status;
+    if (lastSyncRef.current === chave) return;
+    lastSyncRef.current = chave;
+    setReloadKey((n) => n + 1);
+  }, [session.id, session.position, session.status]);
+
+  const minhaVez = proposal && proposal.requestedBy?.id !== meuSocketId && !proposal.votes?.includes(meuSocketId);
+  const pedirSync = () => {
+    const partes = String(minuto).trim().split(':').map(Number);
+    const seconds = partes.length === 1 ? partes[0] * 60 : (partes[0] * 60) + (partes[1] || 0);
+    if (Number.isFinite(seconds)) onPropose?.({ status: 'playing', position: seconds });
+  };
+
+  return (
+    <div className={'voice-watch-tile ' + (expandido ? 'expandido' : '')}>
+      <WatchVoteBar proposal={proposal} minhaVez={minhaVez} onVote={onVote} />
+      <iframe
+        key={reloadKey}
+        src={session.media.url}
+        title={session.media.title}
+        allow="autoplay *; encrypted-media *; picture-in-picture *; fullscreen *; clipboard-write *; accelerometer *; gyroscope *; web-share *"
+        allowFullScreen
+      />
+      <span className="voice-tile-label">
+        <Icon name="film" size={13} className="ao-vivo" /> {session.media.title}
+        {session.media.subtitle ? ' - ' + session.media.subtitle : ''}
+      </span>
+      <span className="watch-sync-tools">
+        <input value={minuto} onChange={(e) => setMinuto(e.target.value)} placeholder="minuto" />
+        <button onClick={pedirSync}>Pedir sync</button>
+      </span>
+      <span className="voice-tile-acoes">
+        <button className="icon-btn" title="Parar de assistir" onClick={onLeave}>
+          <Icon name="arrow-right" size={13} style={{ transform: 'rotate(180deg)' }} />
+        </button>
+        <button className="icon-btn perigo" title="Fechar sessão" onClick={onStop}>
+          <Icon name="x" size={13} />
+        </button>
+        <button
+          className={'icon-btn troca-janela ' + (expandido ? 'aberto' : '')}
+          title={expandido ? 'Sair da tela cheia' : 'Ocupar a janela'}
+          onClick={() => setExpandido((v) => !v)}
+        >
+          <span className="camada base"><Icon name="expand" size={14} /></span>
+          <span className="camada corte"><Icon name="x" size={16} /></span>
+        </button>
+      </span>
+      {expandido && (
+        <button className="voice-tile-sair" title="Sair da tela cheia" onClick={() => setExpandido(false)}>
+          <Icon name="x" size={18} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ParticipantControls({ peer, actions, podeModerarVoz }) {
+  const [aberto, setAberto] = useState(false);
+  if (!peer?.socketId) return null;
+  const volume = peer.volume ?? 1;
+  return (
+    <span className="voice-participant-controls">
+      <button className="icon-btn" title="Controles de audio" onClick={(e) => { e.stopPropagation(); setAberto((v) => !v); }}><Icon name="volume" size={13} /></button>
+      {aberto && (
+        <span className="voice-participant-popover" onClick={(e) => e.stopPropagation()}>
+          <label><Icon name="volume" size={12} /><input aria-label="Volume do participante" type="range" min="0" max="2" step=".05" value={volume} onChange={(e) => actions?.definirVolume(peer.socketId, Number(e.target.value))} /></label>
+          <button onClick={() => actions?.alternarSilencioLocal(peer.socketId)}>{peer.silenciadoLocal ? 'Ouvir novamente' : 'Silenciar so para mim'}</button>
+          {podeModerarVoz && <button onClick={() => actions?.moderar(peer.socketId, { serverMuted: !peer.state.serverMuted })}>{peer.state.serverMuted ? 'Permitir microfone' : 'Silenciar para todos'}</button>}
+          {podeModerarVoz && <button onClick={() => actions?.moderar(peer.socketId, { serverDeafened: !peer.state.serverDeafened })}>{peer.state.serverDeafened ? 'Permitir audio' : 'Ensurdecer para todos'}</button>}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function FaceBlock({ user, falando, muted, hasMic, connectionState, children }) {
+  return (
+    <div className={'voice-bloco voice-pessoa-bloco ' + (falando ? 'falando' : '')}>
+      <Avatar user={user} size={56} />
+      <strong>{user?.username ?? 'conectando...'}</strong>
+      {(muted || !hasMic) && <small>{hasMic ? 'mutado' : 'sem microfone'}</small>}
+      {connectionState && connectionState !== 'connected' && <small className="voice-connection-state">{connectionState === 'failed' ? 'conexao com falha' : connectionState === 'connecting' ? 'conectando...' : 'conexao instavel'}</small>}
+      {children}
+    </div>
+  );
+}
+
+function ScreenPreviewBlock({ tile, onAssistir }) {
+  return (
+    <button className="voice-bloco voice-screen-bloco" onClick={onAssistir}>
+      {tile.stream ? (
+        <Media stream={tile.stream} kind="video" muted className="voice-screen-preview" />
+      ) : <span className="voice-bloco-poster"><Icon name="monitor" size={30} /></span>}
+      <span className="voice-screen-overlay">
+        <Icon name="monitor" size={16} />
+        <strong>{tile.label}</strong>
+        <small>compartilhando tela</small>
+      </span>
+    </button>
+  );
+}
+
+function tocarAvisoTela() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 740;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch {}
+}
+
 /**
  * A chamada maximizada — substitui o chat inteiro, igual ao Discord. Só é
  * montada quando o App decide mostrá-la; o áudio (VoiceAudioSink) é
@@ -345,68 +531,89 @@ export function temVideoDeOutros(voice) {
 export default function VoiceStage({
   voice, me, channelName, onMinimizar, podeExpulsar = false, votacoes = {}, onExpulsar, onVotarExpulsao,
   telaAssistida = null, onAssistir, onPararDeAssistir,
+  voiceActions, podeModerarVoz = false,
+  watchSession = null, onOpenApps, onStopWatch, onJoinWatch, onLeaveWatch, onProposeWatch, onVoteWatch,
 }) {
   if (!voice.channelId) return null;
   const todos = montarTiles(voice, votacoes, podeExpulsar);
+  const sessoesCinema = Array.isArray(watchSession?.sessions) ? watchSession.sessions : (watchSession ? [watchSession] : []);
+  const propostasCinema = Array.isArray(watchSession?.proposals) ? watchSession.proposals : [];
+  const [cinemaAssistido, setCinemaAssistido] = useState(null);
+  const telasAtivas = todos.filter((t) => t.tipo === 'screen');
+  const camerasAtivas = todos.filter((t) => t.tipo === 'camera');
+  const telaAtual = telaAssistida ? telasAtivas.find((t) => t.socketId === telaAssistida || t.key === telaAssistida) : null;
+  const cinemaAssistidoId = cinemaAssistido ?? sessoesCinema.find((s) => s.viewers?.includes(voice.socketId))?.id ?? null;
+  const cinemaAtual = cinemaAssistidoId ? sessoesCinema.find((s) => s.id === cinemaAssistidoId) : null;
+  const propostaAtual = cinemaAtual ? propostasCinema.find((p) => p.sessionId === cinemaAtual.id) : null;
+  const vistosRef = useRef(new Set());
 
-  // "Assistir transmissão" é ação separada de estar na call: quando alguém
-  // escolhe uma, o palco mostra só ela em tamanho cheio.
-  const assistindo = telaAssistida
-    ? todos.find((t) => t.socketId === telaAssistida && t.tipo === 'screen')
-    : null;
-  const tiles = assistindo ? [assistindo] : todos;
+  useEffect(() => {
+    for (const tela of telasAtivas) {
+      if (tela.deSiMesmo) continue;
+      if (!vistosRef.current.has(tela.key)) {
+        vistosRef.current.add(tela.key);
+        tocarAvisoTela();
+      }
+    }
+  }, [telasAtivas.map((t) => t.key).join('|')]);
 
-  // Quem está transmitindo e ainda não estamos assistindo - vira o atalho no
-  // topo, do jeito que o Discord mostra "fulano está ao vivo".
-  const aoVivo = voice.peers.filter((p) => p.state.screen && p.socketId !== telaAssistida);
+  useEffect(() => {
+    if (cinemaAssistido && !sessoesCinema.some((s) => s.id === cinemaAssistido)) setCinemaAssistido(null);
+  }, [cinemaAssistido, sessoesCinema]);
+
+  async function assistirCinema(session) {
+    const resposta = await onJoinWatch?.(session.id);
+    if (resposta?.error) return;
+    setCinemaAssistido(session.id);
+    onPararDeAssistir?.();
+  }
+
+  const modoAssistindo = telaAtual || cinemaAtual;
 
   return (
     <div className="voice-stage">
       <header className="voice-stage-head">
         <span className="voice-dot" />
         <strong>{channelName}</strong>
+        <button className="voice-apps-btn" onClick={onOpenApps}>
+          <Icon name="store" size={14} /> Apps
+        </button>
         <span className="hint">{voice.peers.length + 1} na chamada</span>
+        {voice.connectionStatus === 'reconnecting' && <span className="voice-stage-status instavel">Reconectando...</span>}
+        {voice.connectionStatus === 'connected' && <span className="voice-stage-status">Conexao ativa</span>}
 
-        {assistindo && (
-          <button className="voice-voltar" onClick={onPararDeAssistir}>
-            <Icon name="arrow-right" size={13} style={{ transform: 'rotate(180deg)' }} /> Ver todo mundo
+        {modoAssistindo && (
+          <button className="voice-voltar" onClick={() => { setCinemaAssistido(null); onPararDeAssistir?.(); }}>
+            <Icon name="arrow-right" size={13} style={{ transform: 'rotate(180deg)' }} /> Parar de assistir
           </button>
         )}
-
-        {aoVivo.map((p) => (
-          <button
-            key={p.socketId}
-            className="voice-aovivo"
-            title={`Assistir a transmissão de ${p.user?.username ?? 'alguém'}`}
-            onClick={() => onAssistir?.(p.socketId)}
-          >
-            <span className="voice-aovivo-selo">AO VIVO</span>
-            {p.user?.username ?? 'alguém'}
-          </button>
-        ))}
 
         <button className="icon-btn" title="Minimizar" onClick={onMinimizar}>
           <Icon name="arrow-right" size={15} style={{ transform: 'rotate(90deg)' }} />
         </button>
       </header>
 
-      {tiles.length > 0 ? (
-        <div className={`voice-grid c${Math.min(tiles.length, 4)}`}>
-          {tiles.map((t) => (
-            <Tile key={t.key} {...t} onExpulsar={onExpulsar} onVotarExpulsao={onVotarExpulsao} />
-          ))}
+      {telaAtual ? (
+        <div className="voice-grid c1">
+          <Tile {...telaAtual} onExpulsar={onExpulsar} onVotarExpulsao={onVotarExpulsao} />
         </div>
+      ) : cinemaAtual ? (
+        <WatchTile
+          session={cinemaAtual}
+          proposal={propostaAtual}
+          meuSocketId={voice.socketId}
+          onLeave={() => { onLeaveWatch?.(cinemaAtual.id); setCinemaAssistido(null); }}
+          onStop={() => onStopWatch?.(cinemaAtual.id)}
+          onPropose={(control) => onProposeWatch?.(cinemaAtual.id, control)}
+          onVote={(approve) => onVoteWatch?.(propostaAtual?.id, approve)}
+        />
       ) : (
-        <div className="voice-faces">
-          <div className={`voice-face ${voice.self.speaking ? 'falando' : ''}`}>
-            <Avatar user={me} size={56} />
-            <span>{me.username}</span>
-          </div>
+        <div className="voice-blocos-grid">
+          <FaceBlock user={me} falando={voice.self.speaking} muted={voice.self.muted} hasMic={voice.self.hasMic} />
           {voice.peers.map((peer) => (
-            <div key={peer.socketId} className={`voice-face ${peer.speaking ? 'falando' : ''}`}>
-              <Avatar user={peer.user ?? { username: '?' }} size={56} />
-              <span>{peer.user?.username ?? 'conectando...'}</span>
+            <FaceBlock key={peer.socketId} user={peer.user ?? { username: '?' }} falando={peer.speaking} muted={peer.state.muted} hasMic={peer.state.hasMic}>
               <span className="voice-face-acoes">
+                <ParticipantControls peer={peer} actions={voiceActions} podeModerarVoz={podeModerarVoz} />
                 <AcaoExpulsar
                   podeExpulsar={podeExpulsar}
                   votacao={votacoes[peer.socketId] ?? null}
@@ -414,7 +621,22 @@ export default function VoiceStage({
                   onVotarExpulsao={() => onVotarExpulsao(peer.socketId)}
                 />
               </span>
-            </div>
+            </FaceBlock>
+          ))}
+          {camerasAtivas.map((tile) => (
+            <Tile key={tile.key} {...tile} onExpulsar={onExpulsar} onVotarExpulsao={onVotarExpulsao} />
+          ))}
+          {telasAtivas.map((tile) => (
+            <ScreenPreviewBlock key={tile.key} tile={tile} onAssistir={() => onAssistir?.(tile.socketId ?? tile.key)} />
+          ))}
+          {sessoesCinema.map((session) => (
+            <WatchBlock
+              key={session.id}
+              session={session}
+              ativo={session.viewers?.includes(voice.socketId)}
+              onAssistir={() => assistirCinema(session)}
+              onStop={() => onStopWatch?.(session.id)}
+            />
           ))}
         </div>
       )}

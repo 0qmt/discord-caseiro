@@ -273,7 +273,7 @@ function formatarBuild(iso) {
  * ter o que mostrar nela.
  */
 export default function SettingsScreen({
-  me, souDono, onClose, onLogout, onEditarPerfil, interfaceTeste, onAlternarInterfaceTeste,
+  me, souDono, onClose, onLogout, onEditarPerfil,
 }) {
   const [aba, setAba] = useState('conta');
 
@@ -323,12 +323,6 @@ export default function SettingsScreen({
             onClick={() => setAba('temas')}
           >
             Temas
-          </button>
-          <button
-            className={`settings-item ${aba === 'versao-teste' ? 'ativo' : ''}`}
-            onClick={() => setAba('versao-teste')}
-          >
-            Versão de teste
           </button>
           {souDono && (
             <button
@@ -382,26 +376,6 @@ export default function SettingsScreen({
         {aba === 'notificacoes' && <SecaoNotificacoes />}
 
         {aba === 'temas' && <SecaoTemas />}
-
-        {aba === 'versao-teste' && (
-          <section className="settings-secao">
-            <h2>Versão de teste</h2>
-            <p className="hint">
-              Um visual novo do app, em construção — vai ganhar mais recursos e ficar mais bonito
-              aos poucos. Suas mensagens e servidores são os mesmos dos dois lados, é só a tela
-              que muda; dá pra voltar pra clássica a qualquer momento, inclusive por um botão
-              dentro da própria versão de teste.
-            </p>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={interfaceTeste}
-                onChange={(e) => onAlternarInterfaceTeste(e.target.checked)}
-              />
-              Ativar a versão de teste
-            </label>
-          </section>
-        )}
 
         {aba === 'servidor' && souDono && <SecaoServidor />}
 
