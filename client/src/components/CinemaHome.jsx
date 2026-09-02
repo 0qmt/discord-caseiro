@@ -70,11 +70,22 @@ function Row({ title, items, onChoose, ranked = false }) {
   );
 }
 
+function CatalogLoading() {
+  return (
+    <section className="cinema-row cinema-catalog-loading" aria-label="Carregando catálogo">
+      <div className="cinema-row-head"><h3>Carregando catálogo</h3></div>
+      <div className="cinema-row-track" aria-hidden="true">
+        {Array.from({ length: 6 }, (_, index) => <span className="cinema-skeleton-card" key={index} />)}
+      </div>
+    </section>
+  );
+}
+
 export default function CinemaHome({ onClose, onErro }) {
   const [query, setQuery] = useState('');
-  const [kind, setKind] = useState('serie');
   const [tab, setTab] = useState('inicio');
   const [loading, setLoading] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [results, setResults] = useState([]);
   const [rows, setRows] = useState([]);
   const [recentes, setRecentes] = useState(() => lerRecentes());
@@ -91,7 +102,8 @@ export default function CinemaHome({ onClose, onErro }) {
     Promise.all(BUSCAS.filter((row) => row.kind !== 'recentes').map(async (row) => {
       const items = await Promise.all(row.terms.map((term) => api.watchSearch(term, row.kind).then((r) => r.results?.[0]).catch(() => null)));
       return { ...row, items: items.filter(Boolean) };
-    })).then((list) => { if (alive) setRows(list); });
+    })).then((list) => { if (alive) setRows(list); })
+      .finally(() => { if (alive) setCatalogLoading(false); });
     return () => { alive = false; };
   }, []);
 
@@ -101,13 +113,28 @@ export default function CinemaHome({ onClose, onErro }) {
     let alive = true;
     const timer = setTimeout(() => {
       setLoading(true);
-      api.watchSearch(q, kind)
-        .then((r) => { if (alive) setResults(r.results ?? []); })
+      const tipoDaBusca = tab === 'serie' || tab === 'filme' ? tab : null;
+      const busca = tipoDaBusca
+        ? api.watchSearch(q, tipoDaBusca).then((r) => r.results ?? [])
+        : Promise.all(['serie', 'filme'].map((tipo) => api.watchSearch(q, tipo)
+          .then((r) => r.results ?? [])
+          .catch(() => [])))
+          .then((listas) => {
+            const vistos = new Set();
+            return listas.flat().filter((item) => {
+              const chave = `${item.kind}:${item.imdbId ?? item.id ?? item.title}`;
+              if (vistos.has(chave)) return false;
+              vistos.add(chave);
+              return true;
+            });
+          });
+      busca
+        .then((lista) => { if (alive) setResults(lista); })
         .catch((e) => { if (alive) onErro?.(e.message); })
         .finally(() => { if (alive) setLoading(false); });
     }, 300);
     return () => { alive = false; clearTimeout(timer); };
-  }, [query, kind, onErro]);
+  }, [query, tab, onErro]);
 
   useEffect(() => {
     if (!selected || selected.kind === 'filme' || selected.kind === 'recente') { setEpisodes([]); return undefined; }
@@ -209,7 +236,6 @@ export default function CinemaHome({ onClose, onErro }) {
 
   function mudarAba(novaTab) {
     setTab(novaTab);
-    if (novaTab === 'serie' || novaTab === 'filme') setKind(novaTab);
   }
 
   function choose(item) {
@@ -262,7 +288,6 @@ export default function CinemaHome({ onClose, onErro }) {
           <>
             <section className="cinema-hero" style={featured?.poster ? { backgroundImage: 'linear-gradient(90deg, rgba(0, 0, 0, .96), rgba(0, 0, 0, .64) 46%, rgba(0, 0, 0, .18)), url(' + featured.poster + ')' } : undefined}>
               <div className="cinema-hero-copy">
-                <strong>ORBIT ORIGINAL</strong>
                 <h2>{hasSearch ? 'Resultados para "' + query.trim() + '"' : featured?.title ?? 'Cinema sem entrar em call'}</h2>
                 <p>{hasSearch ? 'Busca em tempo real no catalogo conectado ao seu servidor.' : 'Filmes, series e episodios em uma pagina propria, com historico recente e visual de streaming dentro do Orbit.'}</p>
                 <div className="cinema-hero-actions">
@@ -274,11 +299,18 @@ export default function CinemaHome({ onClose, onErro }) {
             <div className="cinema-mobile-search">
               <label className="cinema-top-search"><Icon name="search" size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar titulo, IMDb ou TMDb" autoFocus /></label>
             </div>
-            {!tipoFixo && <div className="cinema-kind"><button className={kind === 'serie' ? 'ativo' : ''} onClick={() => setKind('serie')}>Series</button><button className={kind === 'filme' ? 'ativo' : ''} onClick={() => setKind('filme')}>Filmes</button></div>}
-            {tipoFixo && <div className="cinema-context"><Icon name={kind === 'filme' ? 'film' : 'tv'} size={14} /> Mostrando apenas {kind === 'filme' ? 'filmes' : 'series'}</div>}
             {hasSearch ? <Row title={loading ? 'Buscando...' : 'Resultados'} items={results} onChoose={choose} /> : null}
-            {!hasSearch && tab === 'recentes' ? <Row title="Assistidos recentes" items={recentes.filter((item) => !tipoFixo || item.kind === kind).map((item) => ({ ...item, isRecent: true }))} onChoose={choose} /> : null}
-            {!hasSearch && tab !== 'recentes' ? <Row title="Assistidos recentes" items={recentes.filter((item) => !tipoFixo || item.kind === kind).map((item) => ({ ...item, isRecent: true }))} onChoose={choose} /> : null}
+            {!hasSearch && catalogLoading && tab !== 'recentes' ? <CatalogLoading /> : null}
+            {!hasSearch && tab === 'recentes' && recentes.length === 0 ? (
+              <section className="cinema-empty">
+                <Icon name="clock" size={22} />
+                <h3>Nada assistido por aqui ainda</h3>
+                <p>Quando você abrir um filme ou episódio, ele aparece nesta lista.</p>
+                <button onClick={() => mudarAba('inicio')}>Explorar catálogo</button>
+              </section>
+            ) : null}
+            {!hasSearch && tab === 'recentes' ? <Row title="Assistidos recentes" items={recentes.map((item) => ({ ...item, isRecent: true }))} onChoose={choose} /> : null}
+            {!hasSearch && tab !== 'recentes' ? <Row title="Assistidos recentes" items={recentes.filter((item) => !tipoFixo || item.kind === tab).map((item) => ({ ...item, isRecent: true }))} onChoose={choose} /> : null}
             {!hasSearch && visibleRows.map((row, index) => <Row key={row.title} title={row.title} items={row.items} ranked={index === 0 && tab === 'inicio'} onChoose={choose} />)}
           </>
         )}

@@ -16,8 +16,7 @@ import { useMemo, useRef } from 'react';
  * Mora num ref, e não num state, porque isso é memória entre renders e não
  * dado de tela: virar state renderizaria tudo de novo a cada mensagem.
  *
- * As duas peles (clássica e Orbit) chamam esta mesma função pra não
- * divergirem no que conta como "nova".
+ * Toda conversa usa esta função para manter um único critério de chegada.
  */
 export function useMensagensNovas(mensagens, chave) {
   const registro = useRef({ chave: undefined, ids: new Set() });

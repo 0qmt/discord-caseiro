@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Icon from './Icon.jsx';
 
 /** Quanto dura a animação de saída em animacoes.css (.modal-backdrop.saindo). */
 const SAIDA_MS = 150;
@@ -37,7 +38,7 @@ export default function Modal({ title, onClose, children, wide = false, bare = f
         {!bare && (
           <div className="modal-head">
             <h2>{title}</h2>
-            <button className="icon-btn" onClick={fechar} aria-label="Fechar">x</button>
+            <button className="icon-btn" onClick={fechar} aria-label="Fechar"><Icon name="x" size={15} /></button>
           </div>
         )}
         <div className="modal-body">{children}</div>

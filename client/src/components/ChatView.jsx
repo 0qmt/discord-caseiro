@@ -9,6 +9,7 @@ import {
   decodificarMencoesParaEdicao,
   encontrarConsultaMencao,
   mensagemMenciona,
+  textoLegivel,
 } from '../lib/mencoes.js';
 import { itensDeImagem } from '../lib/menuDeImagem.jsx';
 import { EMOJIS_RAPIDOS, itensDeMensagem } from '../lib/menuDeMensagem.jsx';
@@ -71,8 +72,8 @@ export function Conteudo({ texto, membros, meuId }) {
 
 export function Anexo({ anexo }) {
   const [aberta, setAberta] = useState(false);
-  // O menu vive dentro do próprio anexo: assim vale igual nas duas peles,
-  // sem cada tela ter que montar e posicionar o dela.
+  // O menu vive dentro do próprio anexo para manter posição e ações junto
+  // do conteúdo que ele controla.
   const menu = useContextMenu();
 
   if (!anexo) return null;
@@ -202,7 +203,7 @@ function SlashMenu({ lista, ativo, onEscolher }) {
  * uma lista de cinco fixadas ficava com cinco linhas idênticas - impossível
  * saber qual era qual sem clicar uma por uma.
  *
- * Exportado porque a versão de teste mostra a mesma lista.
+ * Exportado para ser reutilizado nos painéis de mensagens fixadas.
  */
 export function ItemFixado({ pin, onIr }) {
   const imagem = pin.attachment && (pin.attachment.type === 'image' || pin.attachment.type === 'gif')
@@ -230,18 +231,13 @@ export function ItemFixado({ pin, onIr }) {
 /**
  * Uma reação: mostra o emoji, quantos reagiram, e destaca se você é um deles.
  *
- * Exportado porque a versão de teste (Orbit) mostra as mesmas reações - sem
- * isso ela guardava a reação no servidor e não desenhava nada na tela, que
- * pra quem clica é indistinguível de "o botão não funciona".
+ * Exportado para manter a representação da reação reutilizável sem criar
+ * outra implementação da mensagem.
  */
 export function Reacoes({ reactions, meuId, onReagir, onAbrirEmoji }) {
-  if (!reactions?.length) {
-    return (
-      <button type="button" className="reacao-add" title="Reagir" onClick={onAbrirEmoji}>
-        <Icon name="smile" size={14} />
-      </button>
-    );
-  }
+  // A barra de ações já oferece "Reagir". Sem reações reais, reservar uma
+  // linha invisível aqui só separa mensagens que pertencem ao mesmo grupo.
+  if (!reactions?.length) return null;
   return (
     <div className="reacoes">
       {reactions.map((r) => (
@@ -260,6 +256,89 @@ export function Reacoes({ reactions, meuId, onReagir, onAbrirEmoji }) {
         <Icon name="smile" size={14} />
       </button>
     </div>
+  );
+}
+
+function BuscaNoCanal({ channelId, members, onIr, onClose }) {
+  const [termo, setTermo] = useState('');
+  const [resultados, setResultados] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+  const [abrindoId, setAbrindoId] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [pesquisou, setPesquisou] = useState(false);
+
+  async function buscar(e) {
+    e.preventDefault();
+    if (termo.trim().length < 2) return;
+    setBuscando(true);
+    setErro(null);
+    try {
+      const { messages: encontrados } = await api.buscarNoCanal(channelId, termo.trim());
+      setResultados(encontrados);
+      setPesquisou(true);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  async function abrir(messageId) {
+    setAbrindoId(messageId);
+    try {
+      await onIr(messageId);
+      onClose();
+    } finally {
+      setAbrindoId(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="click-fora" onClick={onClose} />
+      <section className="busca-popover" role="dialog" aria-label="Buscar no canal">
+        <form className="busca-campo" onSubmit={buscar}>
+          <Icon name="search" size={15} />
+          <input
+            value={termo}
+            onChange={(e) => setTermo(e.target.value)}
+            placeholder="Buscar neste canal"
+            aria-label="Termo da busca"
+            autoFocus
+          />
+          <button type="submit" className="icon-btn" title="Buscar" disabled={buscando || termo.trim().length < 2}>
+            <Icon name="arrow-right" size={15} />
+          </button>
+        </form>
+
+        <div className="busca-resultados">
+          {!pesquisou && !erro && <p className="busca-vazio">Digite pelo menos dois caracteres.</p>}
+          {buscando && <p className="busca-vazio">Buscando mensagens...</p>}
+          {erro && <p className="busca-vazio erro">{erro}</p>}
+          {pesquisou && !buscando && resultados.length === 0 && (
+            <p className="busca-vazio">Nenhuma mensagem encontrada.</p>
+          )}
+          {resultados.map((message) => (
+            <button
+              type="button"
+              className="busca-resultado"
+              key={message.id}
+              onClick={() => abrir(message.id)}
+              disabled={abrindoId === message.id}
+            >
+              <Avatar user={message.author} size={28} className="small" />
+              <span>
+                <span className="busca-resultado-meta">
+                  <strong>{message.author.username}</strong>
+                  <small>{timeOf(message.createdAt)}</small>
+                </span>
+                <span className="busca-resultado-texto">{textoLegivel(message.content, members) || 'anexo'}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -292,6 +371,7 @@ export default function ChatView({
   podeModerar = false,
   onRodarComando,
   // Botões do topo (só o chat de servidor usa).
+  onAlternarCanais,
   onAlternarMembros,
   membrosVisiveis = true,
   inserirNoCampo,
@@ -309,7 +389,9 @@ export default function ChatView({
   const [respondendo, setRespondendo] = useState(null); // mensagem sendo respondida
   const [editando, setEditando] = useState(null);       // { id, texto }
   const [emojiPara, setEmojiPara] = useState(null);     // id da msg com seletor aberto
+  const [acoesAbertas, setAcoesAbertas] = useState(null);
   const [pinsAbertos, setPinsAbertos] = useState(false);
+  const [buscaAberta, setBuscaAberta] = useState(false);
   const [pins, setPins] = useState([]);
   const [destacada, setDestacada] = useState(null);
   const [marcadorId, setMarcadorId] = useState(null);
@@ -320,7 +402,13 @@ export default function ChatView({
   const lastTypingSent = useRef(0);
   const arquivoRef = useRef(null);
   const campoRef = useRef(null);
+  const cursorDepoisDaMencao = useRef(null);
+  const hasMoreRef = useRef(hasMore);
+  const onLoadMoreRef = useRef(onLoadMore);
   const menu = useContextMenu();
+
+  hasMoreRef.current = hasMore;
+  onLoadMoreRef.current = onLoadMore;
 
   const listaSlash = useMemo(() => (onRodarComando ? sugestoes(draft) : []), [draft, onRodarComando]);
   const opcoesMencao = useMemo(
@@ -329,6 +417,14 @@ export default function ChatView({
   );
 
   const novas = useMensagensNovas(messages, channel?.id);
+
+  useLayoutEffect(() => {
+    if (cursorDepoisDaMencao.current === null) return;
+    const cursor = cursorDepoisDaMencao.current;
+    cursorDepoisDaMencao.current = null;
+    campoRef.current?.focus();
+    campoRef.current?.setSelectionRange(cursor, cursor);
+  }, [draft]);
 
   /*
    * Apagar com a mensagem saindo antes de sumir. A classe entra direto no nó
@@ -374,8 +470,19 @@ export default function ChatView({
     setErroAnexo(null);
     setRespondendo(null);
     setEditando(null);
+    setAcoesAbertas(null);
     setPinsAbertos(false);
+    setBuscaAberta(false);
   }, [channel?.id]);
+
+  useEffect(() => {
+    if (!acoesAbertas) return undefined;
+    const fecharFora = (event) => {
+      if (!event.target.closest(`[data-msg="${acoesAbertas}"]`)) setAcoesAbertas(null);
+    };
+    document.addEventListener('pointerdown', fecharFora);
+    return () => document.removeEventListener('pointerdown', fecharFora);
+  }, [acoesAbertas]);
 
   // "Mencionar" no menu de contexto empurra o @nome pro campo. O token muda a
   // cada pedido, então mencionar a mesma pessoa duas vezes funciona.
@@ -409,6 +516,7 @@ export default function ChatView({
 
   async function abrirPins() {
     const abrindo = !pinsAbertos;
+    setBuscaAberta(false);
     setPinsAbertos(abrindo);
     if (!abrindo) return;
     try {
@@ -426,6 +534,20 @@ export default function ChatView({
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     setDestacada(messageId);
     setTimeout(() => setDestacada((atual) => (atual === messageId ? null : atual)), 1600);
+  }
+
+  async function irParaResultado(messageId) {
+    for (let pagina = 0; pagina < 20; pagina += 1) {
+      if (scrollRef.current?.querySelector(`[data-msg="${CSS.escape(messageId)}"]`)) {
+        irPara(messageId);
+        return true;
+      }
+      if (!hasMoreRef.current || !onLoadMoreRef.current) break;
+      await onLoadMoreRef.current();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+    irPara(messageId);
+    return false;
   }
 
   async function submit(e) {
@@ -573,6 +695,7 @@ export default function ChatView({
     const rotulo = `@${escolha.nome}`;
     const proximo = `${draft.slice(0, mencaoTermo.inicio)}${rotulo} ${draft.slice(mencaoTermo.fim)}`;
     const reposicionadas = ajustarMencoesAposEdicao(draft, proximo, mencoesEscolhidas);
+    cursorDepoisDaMencao.current = mencaoTermo.inicio + rotulo.length + 1;
     setDraft(proximo);
     setMencoesEscolhidas([...reposicionadas, {
       userId: escolha.id,
@@ -582,11 +705,6 @@ export default function ChatView({
     }]);
     setMencaoTermo(null);
     setMencaoAtiva(0);
-    requestAnimationFrame(() => {
-      const cursor = mencaoTermo.inicio + rotulo.length + 1;
-      campoRef.current?.focus();
-      campoRef.current?.setSelectionRange(cursor, cursor);
-    });
   }
 
   async function enviarArquivoParaAnexo(arquivo) {
@@ -665,6 +783,17 @@ export default function ChatView({
   return (
     <main className="chat">
       <header className="chat-head">
+        {onAlternarCanais && (
+          <button
+            type="button"
+            className="orbit-mobile-nav-toggle"
+            title="Abrir canais"
+            aria-label="Abrir canais"
+            onClick={onAlternarCanais}
+          >
+            <Icon name="menu" size={18} />
+          </button>
+        )}
         {icon}
         <span className="chat-title">{channel.name}</span>
         {channel.topic && (
@@ -674,6 +803,16 @@ export default function ChatView({
           </>
         )}
         <div className="chat-head-acoes">
+          {members && (
+            <button
+              className={`icon-btn ${buscaAberta ? 'ativo' : ''}`}
+              title="Buscar no canal"
+              aria-label="Buscar no canal"
+              onClick={() => { setBuscaAberta((aberta) => !aberta); setPinsAbertos(false); }}
+            >
+              <Icon name="search" />
+            </button>
+          )}
           <button className="icon-btn" title="Mensagens fixadas" onClick={abrirPins}><Icon name="pin" /></button>
           {onAlternarMembros && (
             <button
@@ -685,6 +824,14 @@ export default function ChatView({
             </button>
           )}
         </div>
+        {buscaAberta && (
+          <BuscaNoCanal
+            channelId={channel.id}
+            members={members}
+            onIr={irParaResultado}
+            onClose={() => setBuscaAberta(false)}
+          />
+        )}
         {pinsAbertos && (
           <>
             <div className="click-fora" onClick={() => setPinsAbertos(false)} />
@@ -730,9 +877,15 @@ export default function ChatView({
                   message.pending ? 'pending' : '',
                   novas.has(message.id) ? 'nova' : '',
                   destacada === message.id ? 'destacada' : '',
+                  acoesAbertas === message.id ? 'acoes-abertas' : '',
                   meId && mensagemMenciona(message.content, meId) ? 'mencionado' : '',
                 ].filter(Boolean).join(' ')}
                 onContextMenu={menu.abrirCom(() => itensDaMensagem(message))}
+                onPointerUp={(event) => {
+                  if (event.pointerType !== 'touch') return;
+                  if (event.target.closest('a, button, input, textarea, video, audio')) return;
+                  setAcoesAbertas((atual) => (atual === message.id ? null : message.id));
+                }}
               >
                 {message.replyTo && (
                   <div className="reply-linha" onClick={() => irPara(message.replyTo.id)}>
@@ -773,6 +926,9 @@ export default function ChatView({
 
                   {message.content && (
                     <div className="content">
+                      {grouped && message.pinnedAt && (
+                        <Icon name="pin" size={11} className="msg-fixada-selo agrupada" title="fixada" />
+                      )}
                       <Conteudo texto={message.content} membros={members} meuId={meId} />
                       {message.editedAt && <span className="msg-editada" title="editada">(editada)</span>}
                     </div>
@@ -915,8 +1071,14 @@ export default function ChatView({
           </div>
         </div>
 
-        <button className="primary" type="submit" disabled={(!draft.trim() && !anexoPendente) || enviandoAnexo}>
-          {editando ? 'Salvar' : 'Enviar'}
+        <button
+          className="primary composer-enviar"
+          type="submit"
+          title={editando ? 'Salvar edição' : 'Enviar mensagem'}
+          aria-label={editando ? 'Salvar edição' : 'Enviar mensagem'}
+          disabled={(!draft.trim() && !anexoPendente) || enviandoAnexo}
+        >
+          <Icon name={editando ? 'check' : 'send'} size={17} />
         </button>
       </form>
 

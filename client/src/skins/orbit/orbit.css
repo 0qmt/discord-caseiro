@@ -1,891 +1,1046 @@
-/**
- * Pele visual "Orbit" (versão de teste) - paleta e formas extraídas do
- * protótipo estático que o João desenhou (roxo/verde, cantos mais
- * arredondados que o clássico, cabeçalhos em maiúsculas espaçadas). Tudo
- * escopado em `.orbit-shell` de propósito: não toca em nenhum token do
- * styles.css, então as duas interfaces vivem lado a lado sem brigar.
+/*
+ * Orbit is the product skin, not a second component system. The selectors
+ * below refine the shared chat components and keep their behavior intact.
  */
 
 .orbit-shell {
-  --o-bg: #111214;
-  --o-fg: #f2f3f5;
-  --o-card: #1a1b1f;
-  --o-popover: #232428;
-  --o-primary: #8b5cf6;
-  --o-primary-fg: #fff;
-  --o-secondary: #34d399;
-  --o-muted: #3a3c43;
-  --o-muted-fg: #969aa5;
-  --o-accent: #2a2c32;
-  --o-border: #2b2d33;
-  --o-input: #24262b;
-  --o-radius: 10px;
+  --orbit-rail: 64px;
+  --orbit-sidebar: 232px;
+  --orbit-members: 224px;
+  --orbit-header: 48px;
+  --orbit-focus: #7c89ed;
+  --orbit-focus-soft: rgba(124, 137, 237, .16);
+  --orbit-mention: #f0b232;
 
-  display: flex;
+  display: grid;
+  grid-template-columns: var(--orbit-rail) var(--orbit-sidebar) minmax(320px, 1fr) var(--orbit-members);
+  grid-template-rows: minmax(0, 1fr);
+  width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
-  background: var(--o-bg);
-  color: var(--o-fg);
-  font: 15px/1.5 "gg sans", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  position: relative;
+  background: var(--bg-0);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
 }
 
-.orbit-shell * { box-sizing: border-box; }
-.orbit-shell p, .orbit-shell h1, .orbit-shell h2, .orbit-shell h3 { margin: 0; }
-/* Link herdava a cor do texto e sumia no meio da mensagem - o `:not` deixa
-   os links de dentro do conteúdo azuis sem pintar os que são casca de
-   botão (ícone da barra, ação de anexo). */
-.orbit-shell a { color: inherit; text-decoration: none; }
-.orbit-shell .orbit-message-text a,
-.orbit-shell .content a { color: var(--link); }
-.orbit-shell .orbit-message-text a:hover,
-.orbit-shell .content a:hover { text-decoration: underline; }
-.orbit-shell img { display: block; max-width: 100%; }
-/* font-family (não o atalho "font") de propósito: o atalho reseta size/weight
-   junto, e como "inherit" sempre teria a mesma especificidade de qualquer
-   classe simples (.orbit-message-author etc.), ganharia até de regras
-   declaradas depois - aí nome de mensagem/botão nunca conseguiria ficar
-   maior ou mais grosso que o texto normal. */
-.orbit-shell button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
-.orbit-shell input, .orbit-shell textarea {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: none;
-  padding: 0;
+.orbit-shell.sem-membros,
+.orbit-shell.modo-chamada {
+  grid-template-columns: var(--orbit-rail) var(--orbit-sidebar) minmax(320px, 1fr);
+}
+
+.orbit-shell.modo-cinema {
+  grid-template-columns: var(--orbit-rail) minmax(0, 1fr);
+}
+
+.orbit-shell .guild-bar { grid-column: 1; }
+.orbit-shell .channel-sidebar { grid-column: 2; }
+.orbit-shell .chat-column { grid-column: 3; }
+.orbit-shell .member-list { grid-column: 4; }
+.orbit-shell.modo-cinema .chat-column { grid-column: 2; }
+
+.orbit-shell button,
+.orbit-shell input,
+.orbit-shell textarea,
+.orbit-shell select {
+  letter-spacing: 0;
+}
+
+.orbit-shell button,
+.orbit-shell .channel-row,
+.orbit-shell .member,
+.orbit-shell .dm-row {
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+
+.orbit-shell :is(button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--orbit-focus);
+  outline-offset: 2px;
+}
+
+.orbit-shell ::selection {
+  background: rgba(124, 137, 237, .4);
+  color: #fff;
+}
+
+/* Server rail */
+
+.orbit-shell .guild-bar {
   width: auto;
-  border-radius: 0;
-  outline: none;
+  min-width: 0;
+  gap: 8px;
+  padding: 10px 0;
+  background: var(--bg-0);
+  border-right: 1px solid rgba(255, 255, 255, .035);
 }
 
-/* --------------------------------- rail --------------------------------- */
-
-.orbit-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  width: 72px;
-  flex: none;
-  padding: 16px 0;
-  background: var(--o-bg);
-  border-right: 1px solid var(--o-border);
-  overflow-y: auto;
-}
-
-.orbit-server-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.orbit-shell .guild-pill {
   width: 44px;
   height: 44px;
-  flex: none;
-  border-radius: 16px;
-  background: var(--o-muted);
-  color: var(--o-muted-fg);
-  font-size: 13px;
+  border-radius: 14px;
+  background: var(--bg-2);
+  color: var(--text-soft);
+  font-size: 14px;
+  box-shadow: none;
+}
+
+.orbit-shell .guild-pill:hover {
+  border-radius: 11px;
+  background: var(--ativo);
+  color: #fff;
+}
+
+.orbit-shell .guild-pill.active {
+  border-radius: 11px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.orbit-shell .guild-pill::before {
+  left: -10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+}
+
+.orbit-shell .guild-pill:hover::before { height: 18px; }
+.orbit-shell .guild-pill.active::before { height: 32px; }
+
+.orbit-shell .guild-pill.ghost {
+  background: var(--bg-2);
+  color: var(--text-dim);
+}
+
+.orbit-shell .guild-pill.ghost:hover {
+  background: var(--ativo);
+  color: var(--text);
+}
+
+.orbit-shell .guild-pill.ghost.cinema:hover {
+  background: #a8323d;
+  color: #fff;
+}
+
+.orbit-shell .guild-pill.ghost.reportar:hover {
+  background: #8a641f;
+  color: #fff;
+}
+
+.orbit-shell .guild-bar-divisor {
+  width: 30px;
+  height: 1px;
+  background: rgba(255, 255, 255, .09);
+}
+
+.orbit-shell .badge {
+  right: -4px;
+  bottom: -3px;
+  min-width: 17px;
+  border-width: 3px;
+  border-color: var(--bg-0);
+  border-radius: 9px;
+  font-size: 10px;
+  line-height: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.orbit-shell .mention-badge {
+  background: var(--danger);
+  color: #fff;
   font-weight: 700;
-  overflow: hidden;
-  transition: border-radius .15s ease, transform .15s ease, background .15s ease;
-}
-.orbit-server-icon:hover, .orbit-server-icon.orbit-active { border-radius: 14px; transform: scale(1.04); }
-.orbit-server-icon.orbit-active, .orbit-home { background: var(--o-primary); color: var(--o-primary-fg); }
-/* Brilho raro e discreto - não constante o bastante pra distrair, só pra
-   dar uma sensação de "vivo" no único ícone decorativo da barra. */
-@keyframes orbit-cintilar {
-  0%   { opacity: .8; transform: scale(1); }
-  4%   { opacity: 1; transform: scale(1.14); }
-  9%   { opacity: .9; transform: scale(1); }
-  14%  { opacity: .8; transform: scale(1); }
-  100% { opacity: .8; transform: scale(1); }
-}
-.orbit-home .icon { animation: orbit-cintilar 5s ease-in-out infinite; transform-origin: 50% 50%; }
-@media (prefers-reduced-motion: reduce) { .orbit-home .icon { animation: none !important; } }
-.orbit-server-icon.orbit-add { background: var(--o-accent); color: var(--o-secondary); }
-.orbit-server-icon.orbit-subtle { background: var(--o-muted); color: var(--o-muted-fg); }
-.orbit-server-icon.orbit-alerta { background: var(--o-muted); color: #f0b232; }
-.orbit-server-icon.orbit-alerta:hover { background: #f0b232; color: #1a1305; }
-.orbit-server-icon-img { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; }
-.orbit-server-icon-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
-
-.orbit-rail-divider { width: 32px; height: 1px; background: var(--o-border); flex: none; }
-
-/* ------------------------------- sidebar -------------------------------- */
-
-.orbit-channel-sidebar {
-  display: flex;
-  flex-direction: column;
-  width: 238px;
-  flex: none;
-  background: var(--o-bg);
-  border-right: 1px solid var(--o-border);
 }
 
-.orbit-server-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 52px;
-  flex: none;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--o-border);
-  font-weight: 700;
-  font-size: 15px;
+/* Channel and DM sidebars */
+
+.orbit-shell .channel-sidebar {
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-2);
+  border-right: 1px solid rgba(0, 0, 0, .16);
 }
 
-button.orbit-server-header-botao {
-  width: 100%;
-  background: none;
-  color: var(--o-fg);
-  transition: background .1s;
+.orbit-shell .sidebar-head {
+  height: var(--orbit-header);
+  padding: 0 10px 0 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, .22);
+  box-shadow: none;
 }
-button.orbit-server-header-botao:hover { background: var(--o-accent); }
-button.orbit-server-header-botao .icon { flex-shrink: 0; color: var(--o-muted-fg); }
 
-.orbit-channel-list { flex: 1; overflow-y: auto; padding: 14px 10px; display: flex; flex-direction: column; gap: 18px; }
-
-.orbit-group-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
+.orbit-shell .guild-name-botao {
+  height: 32px;
   padding: 0 6px;
-  margin-bottom: 4px;
+  border-radius: 4px;
+}
+
+.orbit-shell .guild-name-botao:hover { background: rgba(255, 255, 255, .045); }
+.orbit-shell .guild-name { font-size: 14px; font-weight: 650; }
+
+.orbit-shell .channel-scroll {
+  padding: 8px 7px 10px;
+}
+
+.orbit-shell .group-head {
+  min-height: 28px;
+  padding: 9px 6px 3px;
+  color: var(--text-dim);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: .1em;
-  color: var(--o-muted-fg);
-  text-align: left;
+  letter-spacing: .04em;
 }
-.orbit-group-label:hover { color: var(--o-fg); }
-.orbit-group-label-static { cursor: default; }
-.orbit-group-body { display: flex; flex-direction: column; gap: 2px; }
 
-.orbit-channel-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  /* Largura explícita: o botão virou filho de um <div> de arrasto (ver
-     OrbitApp.jsx), e sem isso ele voltaria a encolher pro tamanho do
-     conteúdo em vez de ocupar a barra inteira, já que só o item direto do
-     flex-column (agora o div) herda o stretch automático. */
-  width: 100%;
-  padding: 7px 9px;
-  border-radius: 6px;
-  color: var(--o-muted-fg);
+.orbit-shell .group-toggle { color: inherit; }
+
+.orbit-shell .channel-row {
+  min-height: 32px;
+  margin: 1px 0;
+  border-radius: 4px;
+}
+
+.orbit-shell .channel-row:hover { background: rgba(255, 255, 255, .045); }
+.orbit-shell .channel-row.active { background: rgba(255, 255, 255, .085); }
+.orbit-shell .channel-row.em-foco { box-shadow: inset 2px 0 0 var(--orbit-focus); }
+
+.orbit-shell .channel-btn {
+  gap: 7px;
+  min-height: 32px;
+  padding: 5px 7px;
+  color: var(--text-dim);
   font-size: 14px;
-  text-align: left;
 }
-.orbit-channel-row:hover { background: color-mix(in srgb, var(--o-accent) 70%, transparent); color: var(--o-fg); }
-.orbit-channel-row.orbit-channel-selected { background: var(--o-accent); color: var(--o-fg); }
-.orbit-channel-row.recebendo-pessoa { background: color-mix(in srgb, var(--o-primary) 30%, transparent); box-shadow: inset 0 0 0 1px var(--o-primary); }
 
-/* Repinta com os tokens do Orbit as classes de arrasto que vêm do CSS
-   compartilhado (componentes.css), pra não chegar com o cinza da pele
-   clássica. */
-.orbit-shell .indicador-de-solte { background: var(--o-primary); }
-.orbit-shell .voz-previa-bolinha { border-color: var(--o-primary); }
-.orbit-shell .voice-members li.voz-previa { color: var(--o-primary); }
-
-/* A lista de participantes de um canal de voz (nome, anel de "falando",
-   badge de "compartilhando") também vem do CSS compartilhado - faltava
-   repintar ela igual às outras acima, e por isso ficava com o indigo/verde
-   da pele clássica (--accent-hover/--ok) em vez do roxo/verde do Orbit. */
-.orbit-shell .voice-members li { color: var(--o-muted-fg); }
-.orbit-shell .voice-members li.falando { color: var(--o-fg); }
-.orbit-shell .voice-members li.falando .avatar { box-shadow: 0 0 0 2px var(--o-secondary); }
-.orbit-shell .voice-members li.compartilhando { color: var(--o-fg); }
-.orbit-shell .compartilhando-badge { background: color-mix(in srgb, var(--o-primary) 20%, transparent); color: var(--o-primary); }
-.orbit-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-.orbit-member-count { border-radius: 4px; background: var(--o-muted); padding: 1px 6px; font-size: 10px; color: var(--o-muted-fg); }
-
-.orbit-dm-entry {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-  border-radius: 8px;
-  color: var(--o-muted-fg);
-  text-align: left;
+.orbit-shell .channel-row.active .channel-btn,
+.orbit-shell .channel-btn:hover {
+  color: var(--text);
 }
-.orbit-dm-entry:hover { background: var(--o-accent); color: var(--o-fg); }
-.orbit-dm-avatar { position: relative; display: flex; }
-.orbit-online-dot {
-  position: absolute;
-  right: -1px;
-  bottom: -1px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--o-secondary);
-  border: 2px solid var(--o-bg);
-}
-.orbit-dm-empty { padding: 8px; }
 
-.orbit-user-panel {
-  display: flex;
-  align-items: center;
+.orbit-shell .hash {
+  color: #80858f;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.orbit-shell .channel-row .badge.small {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border: 0;
+  line-height: 16px;
+}
+
+.orbit-shell .voice-channel .badge.small {
+  background: rgba(255, 255, 255, .075);
+  color: var(--text-soft);
+}
+
+.orbit-shell .voice-members {
+  margin: 0 0 4px;
+  padding-left: 24px;
+}
+
+.orbit-shell .voice-members li {
+  min-height: 28px;
+  padding: 3px 5px;
+  color: var(--text-dim);
+}
+
+.orbit-shell .voice-members li:hover { color: var(--text); }
+.orbit-shell .voice-members li.falando .avatar { box-shadow: 0 0 0 2px var(--ok); }
+
+.orbit-shell .compartilhando-badge {
+  border-radius: 3px;
+  background: rgba(35, 165, 89, .14);
+  color: #62c989;
+}
+
+.orbit-shell .dm-row {
+  min-height: 42px;
+  gap: 9px;
+  padding: 5px 7px;
+  border-radius: 4px;
+}
+
+.orbit-shell .dm-row:hover { background: rgba(255, 255, 255, .045); }
+.orbit-shell .dm-row.active { background: rgba(255, 255, 255, .085); }
+.orbit-shell .dm-nome { font-size: 13px; }
+.orbit-shell .dm-preview { font-size: 11px; }
+
+.orbit-shell .user-panel {
+  min-height: 54px;
   gap: 8px;
-  flex: none;
-  padding: 10px;
-  background: #17181b;
-  border-top: 1px solid var(--o-border);
+  padding: 7px 8px;
+  background: var(--painel);
+  border-top: 1px solid rgba(0, 0, 0, .2);
 }
-.orbit-user-panel-info { min-width: 0; flex: 1; }
-.orbit-user-panel-info p { margin: 0; font-size: 12px; font-weight: 600; }
-.orbit-user-panel-status { color: var(--o-muted-fg) !important; font-weight: 400 !important; font-size: 11px !important; }
-.orbit-icon-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  color: var(--o-muted-fg);
-  flex: none;
+
+.orbit-shell .user-name { font-size: 13px; }
+.orbit-shell .conn { font-size: 10px; }
+.orbit-shell .user-panel .avatar { width: 34px; height: 34px; }
+.orbit-shell .user-panel .icon-btn { width: 30px; height: 30px; }
+
+/* Chat */
+
+.orbit-shell .chat-column,
+.orbit-shell .chat {
+  min-width: 0;
+  min-height: 0;
 }
-.orbit-icon-button:hover { background: var(--o-accent); color: var(--o-fg); }
 
-/* --------------------------------- chat ---------------------------------- */
+.orbit-shell .chat { background: var(--bg-1); }
 
-.orbit-chat-main { display: flex; min-width: 0; flex: 1; flex-direction: column; background: var(--o-card); }
-.orbit-chat-empty { align-items: center; justify-content: center; gap: 14px; text-align: center; }
-
-.orbit-channel-header {
+.orbit-shell .chat-head {
   position: relative;
-  display: flex;
-  align-items: center;
+  z-index: 10;
+  height: var(--orbit-header);
+  gap: 7px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line-claro);
+  background: var(--bg-1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+}
+
+.orbit-shell .chat-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.orbit-shell .chat-topico { font-size: 12px; }
+.orbit-shell .chat-head-acoes { gap: 2px; }
+.orbit-shell .chat-head .icon-btn { width: 30px; height: 30px; }
+
+.orbit-shell .messages {
+  min-height: 0;
+  padding: 8px 0 12px;
+  overflow-x: hidden;
+}
+
+.orbit-shell .chat-note {
+  margin: 0 16px 3px;
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--line-claro);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.orbit-shell .day-divider {
   gap: 10px;
-  height: 52px;
-  flex: none;
-  padding: 0 18px;
-  background: #1a1b1f;
-  border-bottom: 1px solid var(--o-border);
+  margin: 14px 16px 7px;
+  color: #8b919a;
+  font-size: 10px;
+  letter-spacing: .03em;
 }
-.orbit-channel-header h1 { margin: 0; font-size: 15px; font-weight: 700; flex: 1; min-width: 0; }
-.orbit-channel-header svg { color: var(--o-muted-fg); }
 
-.orbit-header-acoes { display: flex; align-items: center; gap: 2px; flex: none; }
-.orbit-icon-button.orbit-ativo { background: var(--o-accent); color: var(--o-fg); }
-
-.orbit-click-fora { position: fixed; inset: 0; z-index: 20; }
-
-.orbit-popover {
-  position: absolute;
-  top: 100%;
-  right: 16px;
-  z-index: 21;
-  width: 280px;
-  max-height: 60vh;
-  overflow-y: auto;
-  margin-top: 8px;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--o-border);
-  background: var(--o-popover);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, .4);
+.orbit-shell .novas-mensagens-divider {
+  margin: 9px 16px 7px;
+  font-size: 10px;
+  letter-spacing: .03em;
 }
-.orbit-popover h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--o-muted-fg); }
-.orbit-popover-item { padding: 8px 0; border-top: 1px solid var(--o-border); }
-.orbit-popover-item:first-child { border-top: none; }
-.orbit-popover-item strong { display: block; font-size: 12px; }
-.orbit-shell .orbit-popover-item p { margin: 2px 0 0; font-size: 12px; color: var(--o-muted-fg); overflow-wrap: anywhere; }
-.orbit-popover-busca input {
+
+.orbit-shell .message {
+  position: relative;
   width: 100%;
-  padding: 8px 10px;
-  margin-bottom: 8px;
-  border-radius: 6px;
-  background: var(--o-input);
-  border: 1px solid var(--o-border);
-  font-size: 13px;
-}
-
-.orbit-message-area { display: flex; min-height: 0; flex: 1; flex-direction: column; background: #1a1b1f; }
-.orbit-messages { flex: 1; overflow-y: auto; padding: 8px 20px; }
-
-.orbit-channel-intro { padding: 28px 6px 20px; }
-.orbit-intro-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--o-accent);
-  color: var(--o-primary);
-}
-.orbit-channel-intro h2 { margin: 12px 0 2px; font-size: 20px; }
-
-.orbit-date-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 16px 20px 4px;
-  color: var(--o-muted-fg);
-  font-size: 11px;
-  font-weight: 700;
-}
-.orbit-date-divider::before, .orbit-date-divider::after { content: ''; height: 1px; flex: 1; background: var(--o-border); }
-
-.orbit-novas-mensagens {
-  display: flex;
-  align-items: center;
+  min-height: 22px;
   gap: 10px;
-  margin: 10px 20px;
-  color: #f23f43;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-}
-.orbit-novas-mensagens::before, .orbit-novas-mensagens::after { content: ''; height: 1px; flex: 1; background: #f23f43; }
-
-/* `position: relative` é o que ancora a barra de ações (.msg-acoes, que é
-   absoluta) na própria mensagem - sem isso ela se penduraria no primeiro
-   ancestral posicionado e apareceria longe da linha certa. */
-.orbit-message-row { position: relative; display: flex; flex-wrap: wrap; gap: 12px; padding: 2px 8px; border-radius: 6px; }
-
-/* A barra vem do CSS compartilhado (componentes.css); aqui só se repinta
-   com os tokens do Orbit, senão ela chega com o cinza da pele clássica. */
-.orbit-shell .msg-acoes { background: var(--o-popover); box-shadow: 0 0 0 1px var(--o-border), 0 2px 6px rgba(0, 0, 0, .35); }
-.orbit-shell .msg-acoes .icon-btn { color: var(--o-muted-fg); }
-.orbit-shell .msg-acoes .icon-btn:hover { background: var(--o-accent); color: var(--o-fg); }
-.orbit-shell .msg-acao-emoji:hover { background: var(--o-accent); }
-
-/* Reações vêm do componente compartilhado; aqui só se repinta com os tokens
-   do Orbit, senão elas chegam com o cinza da pele clássica. */
-.orbit-shell .reacao,
-.orbit-shell .reacao-add {
-  background: var(--o-accent);
-  border: 1px solid transparent;
-  color: var(--o-muted-fg);
-}
-.orbit-shell .reacao:hover,
-.orbit-shell .reacao-add:hover { border-color: var(--o-muted-fg); color: var(--o-fg); }
-.orbit-shell .reacao.minha {
-  background: color-mix(in srgb, var(--o-primary) 24%, transparent);
-  border-color: var(--o-primary);
-  color: var(--o-fg);
+  padding: 2px 16px;
+  border-radius: 0;
+  line-height: 1.35;
 }
 
-/* Lista de fixadas: o item vem da pele clássica, o fundo é o do Orbit. */
-.orbit-shell .pin-item { background: var(--o-accent); color: var(--o-fg); }
-.orbit-shell .pin-item:hover { background: var(--o-muted); }
-.orbit-shell .pin-item .pin-texto { color: var(--o-muted-fg); }
-.orbit-message-row:hover { background: color-mix(in srgb, var(--o-accent) 38%, transparent); }
-.orbit-message-row.orbit-pending { opacity: .6; }
+.orbit-shell .message:not(.grouped) {
+  margin-top: 10px;
+  padding-top: 2px;
+}
 
-/* Bloco de mensagens seguidas da mesma pessoa (ver shouldGroup): sem
-   avatar/nome repetido, só a hora aparecendo discretamente ao passar o
-   mouse - a mesma convenção do Discord de verdade. */
-.orbit-message-row.orbit-agrupada { padding-top: 0; padding-bottom: 0; }
-.orbit-message-hora-fixa {
-  flex: none;
+.orbit-shell .message.grouped { padding-top: 1px; padding-bottom: 1px; }
+
+.orbit-shell .message:hover,
+.orbit-shell .msg:hover {
+  background: rgba(0, 0, 0, .075);
+}
+
+.orbit-shell .message > .avatar {
+  width: 38px;
+  height: 38px;
+}
+
+.orbit-shell .message-meta {
+  min-height: 20px;
+  gap: 7px;
+  align-items: baseline;
+}
+
+.orbit-shell .author {
+  color: #f2f3f5;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.orbit-shell .author:hover { text-decoration: underline; }
+.orbit-shell .time { color: #8b919a; font-size: 10px; }
+
+.orbit-shell .content {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.375;
+}
+
+.orbit-shell .content .msg-fixada-selo.agrupada {
+  display: inline-block;
+  margin: 0 5px 0 0;
+  vertical-align: -1px;
+}
+
+.orbit-shell .gutter-time {
   width: 38px;
   padding-top: 3px;
-  text-align: center;
-  font-size: 10px;
-  color: var(--o-muted-fg);
-  opacity: 0;
+  color: #7f858e;
+  font-size: 9px;
 }
-.orbit-message-row.orbit-agrupada:hover .orbit-message-hora-fixa { opacity: 1; }
-.orbit-message-body { min-width: 0; flex: 1; }
 
-.orbit-message-head { display: flex; align-items: baseline; gap: 8px; margin-left: -7px; }
-button.orbit-message-author { font-size: 17px; font-weight: 700; }
-button.orbit-message-author:hover { text-decoration: underline; }
-.orbit-message-time { font-size: 11px; color: var(--o-muted-fg); }
-p.orbit-message-text { margin: 1px 0 0; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.orbit-reply-linha {
+.orbit-shell .reply-linha {
+  gap: 6px;
+  margin: 0 0 2px 48px;
+  color: #8f959e;
+  font-size: 11px;
+}
+
+.orbit-shell .reply-gancho {
+  width: 24px;
+  border-color: rgba(255, 255, 255, .14);
+}
+
+.orbit-shell .msg-acoes {
+  right: 14px;
+  top: -15px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, .075);
+  border-radius: 5px;
+  background: #282a2f;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, .24);
+}
+
+.orbit-shell .msg-acoes .icon-btn,
+.orbit-shell .msg-acao-emoji {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+}
+
+.orbit-shell .mencao {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: rgba(124, 137, 237, .2);
+  color: #c8ceff;
+}
+
+.orbit-shell .mencao.mim {
+  background: rgba(124, 137, 237, .34);
+  color: #fff;
+}
+
+.orbit-shell .message.mencionado {
+  background: rgba(240, 178, 50, .075);
+  box-shadow: inset 2px 0 0 var(--orbit-mention);
+}
+
+.orbit-shell .message.mencionado:hover { background: rgba(240, 178, 50, .1); }
+
+.orbit-shell .reacoes {
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.orbit-shell .reacao,
+.orbit-shell .reacao-add {
+  min-height: 24px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .045);
+}
+
+.orbit-shell .reacao.minha {
+  border-color: var(--orbit-focus);
+  background: var(--orbit-focus-soft);
+}
+
+.orbit-shell .anexo-imagem,
+.orbit-shell .anexo-video,
+.orbit-shell .link-preview { border-radius: 5px; }
+
+.orbit-shell .typing-line {
+  height: 18px;
+  padding: 0 18px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* One integrated message composer. */
+
+.orbit-shell .composer-contexto {
+  min-height: 34px;
+  margin: 0 16px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, .065);
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: #292b30;
+  font-size: 12px;
+}
+
+.orbit-shell .composer {
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  margin: 0 16px 16px;
+  padding: 5px 6px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 7px;
+  background: var(--bg-3);
+}
+
+.orbit-shell .composer-contexto + .composer {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.orbit-shell .composer:focus-within {
+  border-color: rgba(124, 137, 237, .68);
+  box-shadow: 0 0 0 1px rgba(124, 137, 237, .22);
+}
+
+.orbit-shell .composer-campo-wrap {
   display: flex;
   align-items: center;
-  gap: 6px;
+  min-width: 0;
+}
+
+.orbit-shell .composer textarea {
   width: 100%;
-  margin-bottom: 2px;
-  color: var(--o-muted-fg);
-  font-size: 12px;
-  cursor: pointer;
-}
-.orbit-reply-linha:hover .orbit-reply-texto { color: var(--o-fg); }
-.orbit-reply-gancho {
-  width: 22px;
-  height: 8px;
-  flex: none;
-  border-left: 2px solid var(--o-border);
-  border-top: 2px solid var(--o-border);
-  border-top-left-radius: 5px;
-}
-.orbit-reply-autor { flex: none; font-weight: 600; }
-.orbit-reply-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-
-.orbit-attachment {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--o-border);
-  border-radius: 6px;
-  background: var(--o-input);
-  color: var(--o-primary);
-  font-size: 12px;
+  min-height: 32px;
+  max-height: 160px;
+  padding: 6px 44px 6px 5px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
 }
 
-.orbit-typing { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 26px; font-size: 11px; color: var(--o-muted-fg); }
-.orbit-typing-dots { display: flex; gap: 2px; }
-.orbit-typing-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--o-muted-fg); animation: orbit-dot-bounce 1s infinite; }
-.orbit-typing-dots i:nth-child(2) { animation-delay: .15s; }
-.orbit-typing-dots i:nth-child(3) { animation-delay: .3s; }
-@keyframes orbit-dot-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .4; } 30% { transform: translateY(-3px); opacity: 1; } }
+.orbit-shell .composer textarea::placeholder { color: #858b94; }
 
-.orbit-error { margin: 0 20px 8px; padding: 8px 10px; border-radius: 6px; background: rgba(229, 85, 95, .12); color: #ff9aa1; font-size: 13px; }
-
-.orbit-composer-wrap { padding: 0 20px 18px; flex: none; }
-.orbit-composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--o-radius);
-  background: var(--o-input);
-  border: 1px solid var(--o-border);
-}
-.orbit-composer textarea { flex: 1; min-height: 24px; max-height: 140px; resize: none; font-size: 14px; line-height: 1.5; outline: none; }
-.orbit-composer textarea::placeholder { color: var(--o-muted-fg); }
-.orbit-send-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.orbit-shell .composer-anexar,
+.orbit-shell .composer-enviar {
+  display: grid;
+  place-items: center;
   width: 32px;
   height: 32px;
   flex: none;
-  border-radius: 8px;
-  background: var(--o-primary);
-  color: var(--o-primary-fg);
-}
-.orbit-send-button:hover { opacity: .9; }
-/* "Lançada" no clique - some voando pro canto e reaparece, antes do campo
-   limpar de vez (ver Composer/usePunch.js). */
-@keyframes orbit-lancar {
-  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
-  60%  { transform: translate(7px, -7px) scale(.9); opacity: .4; }
-  61%  { transform: translate(-7px, 7px) scale(.9); opacity: 0; }
-  100% { transform: translate(0, 0) scale(1); opacity: 1; }
-}
-.orbit-send-button.lancar svg { animation: orbit-lancar 260ms cubic-bezier(.34, 1.56, .64, 1); }
-@media (prefers-reduced-motion: reduce) { .orbit-send-button.lancar svg { animation: none !important; } }
-
-.orbit-composer-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border-radius: 50%;
-  color: var(--o-muted-fg);
-}
-.orbit-composer-icon:hover { background: var(--o-accent); color: var(--o-fg); }
-
-/* Mais um ícone dentro da MESMA barra (`.orbit-composer` já é a pílula
-   inteira - anexar, campo, GIF e enviar são todos filhos flex dela), não
-   uma caixa própria do lado. */
-.orbit-composer-gif-wrap { position: relative; flex: none; }
-
-.orbit-composer-gif {
-  height: 26px;
-  padding: 0 8px;
+  padding: 0;
   border-radius: 4px;
-  background: none;
-  color: var(--o-muted-fg);
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: .02em;
+  background: transparent;
+  color: var(--text-dim);
 }
-.orbit-composer-gif:hover, .orbit-composer-gif.ativo { background: var(--o-accent); color: var(--o-fg); }
 
-/* O seletor de GIF é componente compartilhado com a pele clássica; aqui só
-   repinta com os tokens do Orbit. */
-.orbit-shell .gif-picker { background: var(--o-card); border-color: var(--o-border); }
-.orbit-shell .gif-picker-item:hover { outline-color: var(--o-primary); }
+.orbit-shell .composer-anexar:hover {
+  background: rgba(255, 255, 255, .055);
+  color: var(--text);
+}
 
-.orbit-anexo-preview {
+.orbit-shell .composer-enviar { color: #aeb6ff; }
+
+.orbit-shell .composer-enviar:hover:not(:disabled) {
+  background: var(--orbit-focus-soft);
+  color: #fff;
+}
+
+.orbit-shell .composer-enviar:disabled {
+  opacity: .28;
+  cursor: default;
+}
+
+.orbit-shell .composer-gif-wrap {
+  right: 6px;
+  bottom: 3px;
+}
+
+.orbit-shell .composer-gif {
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.orbit-shell .mencao-picker,
+.orbit-shell .slash-menu,
+.orbit-shell .gif-picker,
+.orbit-shell .pins-popover {
+  border: 1px solid rgba(255, 255, 255, .075);
+  border-radius: 7px;
+  background: #202226;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .38);
+}
+
+.orbit-shell .mencao-picker { width: 320px; padding: 5px; }
+
+.orbit-shell .mencao-picker-item {
+  min-height: 38px;
+  border-radius: 4px;
+}
+
+.orbit-shell .mencao-picker-item:hover,
+.orbit-shell .mencao-picker-item.ativo,
+.orbit-shell .slash-item:hover,
+.orbit-shell .slash-item.ativo {
+  background: rgba(255, 255, 255, .075);
+}
+
+.orbit-shell .busca-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 12px;
+  z-index: 22;
+  width: min(390px, calc(100vw - 32px));
+  max-height: min(520px, calc(100vh - 72px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .075);
+  border-radius: 7px;
+  background: #202226;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .38);
+}
+
+.orbit-shell .busca-campo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 20px 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--o-input);
-  border: 1px solid var(--o-border);
+  gap: 7px;
+  margin: 8px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 4px;
+  background: #151619;
+  color: var(--text-dim);
 }
-.orbit-anexo-preview .orbit-attachment,
-.orbit-anexo-preview .anexo-imagem,
-.orbit-anexo-preview .anexo-video { margin: 0; max-height: 80px; }
-.orbit-anexo-preview button {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  color: var(--o-muted-fg);
-  flex: none;
-}
-.orbit-anexo-preview button:hover { background: var(--o-accent); color: var(--o-fg); }
 
-.orbit-muted { color: var(--o-muted-fg); font-size: 13px; }
-.orbit-empty-actions { display: flex; gap: 10px; }
-.orbit-primary-action { padding: 9px 16px; border-radius: 7px; background: var(--o-primary); color: var(--o-primary-fg); font-size: 13px; font-weight: 600; }
-.orbit-primary-action:hover { opacity: .9; }
+.orbit-shell .busca-campo:focus-within { border-color: rgba(124, 137, 237, .68); }
 
-/* --------------------- lista de membros, no padrão do Orbit --------------------- */
-
-/*
- * O <MemberList> é o componente de verdade (mesmo código, mesmos dados) -
- * só a pele muda aqui. Sem isso ele pega as cores do tema clássico
- * (--bg-2 etc.), que ficam meio deslocadas do roxo/arredondado do Orbit.
- */
-.orbit-shell .member-list {
-  background: var(--o-bg);
-  border-left: 1px solid var(--o-border);
-  width: 240px;
-  flex: none;
-  padding: 16px 12px;
-}
-.orbit-shell .group-head {
-  padding: 8px 6px 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--o-muted-fg);
-}
-.orbit-shell .member {
-  border-radius: 8px;
-  padding: 7px 8px;
-}
-.orbit-shell .member:hover { background: var(--o-accent); }
-.orbit-shell .member-name { color: var(--o-fg); font-size: 14px; font-weight: 500; }
-.orbit-shell .member-atividade { color: var(--o-muted-fg); font-size: 11px; }
-.orbit-shell .role {
-  border-radius: 999px;
-  padding: 2px 9px;
-  font-size: 9px;
-  font-weight: 700;
-}
-.orbit-shell .role.owner { background: color-mix(in srgb, var(--o-primary) 25%, transparent); color: var(--o-primary); }
-.orbit-shell .role.admin { background: var(--o-accent); color: var(--o-fg); }
-.orbit-shell .member .icon-btn { border-radius: 999px; color: var(--o-muted-fg); }
-.orbit-shell .member .icon-btn:hover { background: var(--o-muted); color: var(--o-fg); }
-
-.orbit-server-icon.orbit-cinema { color: #f8fafc; }
-.orbit-server-icon.orbit-cinema:hover { background: #e11d48; color: #fff; }
-
-/* Cinema full-page */
-.orbit-shell .cinema-page {
+.orbit-shell .busca-campo input {
   flex: 1;
   min-width: 0;
-  min-height: 0;
-  height: 100%;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 13px;
+}
+
+.orbit-shell .busca-campo button:disabled { opacity: .3; cursor: default; }
+
+.orbit-shell .busca-resultados {
+  max-height: 430px;
+  overflow-y: auto;
+  padding: 0 5px 6px;
+}
+
+.orbit-shell .busca-vazio {
+  margin: 0;
+  padding: 18px 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+}
+
+.orbit-shell .busca-vazio.erro { color: #ff9aa1; }
+
+.orbit-shell .busca-resultado {
   display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 4px;
+  color: var(--text-soft);
+  text-align: left;
+}
+
+.orbit-shell .busca-resultado:hover { background: rgba(255, 255, 255, .065); }
+.orbit-shell .busca-resultado > span { display: grid; min-width: 0; flex: 1; gap: 2px; }
+.orbit-shell .busca-resultado-meta { display: flex; align-items: baseline; gap: 7px; }
+.orbit-shell .busca-resultado-meta strong { color: var(--text); font-size: 12px; }
+.orbit-shell .busca-resultado-meta small { color: var(--text-dim); font-size: 9px; }
+.orbit-shell .busca-resultado-texto { overflow: hidden; color: var(--text-soft); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+
+.orbit-shell .anexo-pendente {
+  margin: 0 16px 6px;
+  border-radius: 6px;
+  background: var(--bg-3);
+}
+
+/* Member list */
+
+.orbit-shell .member-list {
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 6px;
+  background: var(--bg-2);
+  border-left: 1px solid rgba(0, 0, 0, .12);
+}
+
+.orbit-shell .member-list .group-head { padding: 9px 7px 4px; }
+
+.orbit-shell .member {
+  min-height: 36px;
+  gap: 8px;
+  padding: 4px 7px;
+  border-radius: 4px;
+}
+
+.orbit-shell .member:hover { background: rgba(255, 255, 255, .045); }
+.orbit-shell .member-name { color: var(--text-soft); font-size: 13px; font-weight: 550; }
+.orbit-shell .member:hover .member-name { color: var(--text); }
+.orbit-shell .member-atividade { font-size: 10px; }
+
+.orbit-shell .member .role {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .055);
+  color: var(--text-dim);
+  font-size: 8px;
+  letter-spacing: .02em;
+}
+
+.orbit-shell .member .role.owner {
+  background: rgba(124, 137, 237, .12);
+  color: #aeb6ff;
+}
+
+/* Voice stage */
+
+.orbit-shell .voice-stage {
+  min-width: 0;
+  padding: 0;
+  background: #111214;
+}
+
+.orbit-shell .voice-stage-head {
+  min-height: var(--orbit-header);
+  margin: 0;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .055);
+  background: #17181b;
+}
+
+.orbit-shell .voice-stage-status,
+.orbit-shell .voice-apps-btn,
+.orbit-shell .voice-voltar {
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .045);
+  font-size: 11px;
+}
+
+.orbit-shell .voice-blocos-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 300px));
+  gap: 10px;
+  padding: 20px;
+}
+
+.orbit-shell .voice-bloco {
+  width: 100%;
+  max-width: 300px;
+  border-color: rgba(255, 255, 255, .075);
+  border-radius: 6px;
+  background: #1c1d21;
+  box-shadow: none;
+}
+
+.orbit-shell .voice-blocos-grid > .voice-pessoa-bloco:only-child {
+  width: min(380px, 66vh);
+  max-width: 380px;
+  aspect-ratio: 1;
+}
+
+.orbit-shell .voice-pessoa-bloco.falando {
+  border-color: var(--ok);
+  box-shadow: inset 0 0 0 1px var(--ok);
+}
+
+.orbit-shell .voice-screen-bloco:hover,
+.orbit-shell .voice-cinema-bloco:hover,
+.orbit-shell .voice-cinema-bloco.ativo {
+  border-color: rgba(124, 137, 237, .72);
+}
+
+.orbit-shell .voice-bloco-pill,
+.orbit-shell .voice-tile-label,
+.orbit-shell .voice-tile-qualidade { border-radius: 4px; }
+
+.orbit-shell .watch-vote-bar {
+  border-radius: 6px;
+  background: rgba(31, 33, 38, .97);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .32);
+}
+
+/* Cinema is a media surface, so image scrims are functional for legibility. */
+
+.orbit-shell .cinema-page,
+.orbit-shell .cinema-streaming-page,
+.orbit-shell .cinema-home {
+  min-width: 0;
+  min-height: 0;
+  background: #08090b;
+}
+
+.orbit-shell .cinema-page {
+  display: flex;
+  flex: 1;
   flex-direction: column;
-  background: #06070a;
   overflow: hidden;
 }
 
-.orbit-shell .cinema-page-top {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 56px;
-  padding: 0 22px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
-  background: #0b0d12;
-}
-
-.orbit-shell .cinema-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: rgba(255,255,255,.08);
-  color: #f8fafc;
-}
-
-.orbit-shell .cinema-back:hover { background: rgba(255,255,255,.14); }
-
-.orbit-shell .cinema-page .cinema-home {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-  width: 100%;
-  overflow: auto;
-  border-radius: 0;
-  background: #06070a;
-}
-
-.orbit-shell .cinema-page .cinema-hero {
-  min-height: min(540px, 56vh);
-  border-radius: 0;
-}
-
-/* Orbit Cinema streaming redesign */
-.orbit-shell .cinema-streaming-page {
-  color: #fff;
-  background: linear-gradient(180deg, #080808 0%, #090909 52%, #020202 100%);
-  animation: cinema-page-in .42s ease both;
-}
-
 .orbit-shell .cinema-streaming-nav {
-  min-height: 64px;
+  display: grid;
+  grid-template-columns: 210px auto minmax(220px, 420px) auto;
+  align-items: center;
   gap: 18px;
-  padding: 0 28px;
-  background: linear-gradient(180deg, rgba(0,0,0,.92), rgba(0,0,0,.72));
-  border-bottom: 1px solid rgba(255,255,255,.07);
-  backdrop-filter: blur(14px);
-  animation: cinema-nav-in .38s ease both;
+  min-height: 56px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  background: #0b0c0e;
 }
 
 .orbit-shell .cinema-brand {
-  display: flex;
-  flex-direction: column;
-  min-width: 150px;
-  line-height: 1.05;
+  display: grid;
+  gap: 0;
+  min-width: 0;
 }
 
 .orbit-shell .cinema-brand strong {
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 0;
-  color: #e50914;
+  color: #ef3340;
+  font-size: 17px;
+  font-weight: 800;
   text-transform: uppercase;
 }
 
 .orbit-shell .cinema-brand span {
-  margin-top: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  color: rgba(255,255,255,.62);
+  color: #777d86;
+  font-size: 9px;
 }
 
 .orbit-shell .cinema-streaming-nav nav {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
+  align-self: stretch;
+  gap: 2px;
 }
 
 .orbit-shell .cinema-streaming-nav nav button {
-  height: 34px;
-  padding: 0 11px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 700;
-  color: rgba(255,255,255,.72);
+  position: relative;
+  padding: 0 10px;
+  color: #9ca1a9;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.orbit-shell .cinema-streaming-nav nav button:hover,
-.orbit-shell .cinema-streaming-nav nav button.ativo {
-  color: #fff;
-  background: rgba(255,255,255,.1);
+.orbit-shell .cinema-streaming-nav nav button:hover { color: #fff; }
+.orbit-shell .cinema-streaming-nav nav button.ativo { color: #fff; }
+
+.orbit-shell .cinema-streaming-nav nav button.ativo::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 2px;
+  background: #ef3340;
 }
 
 .orbit-shell .cinema-top-search {
-  flex: 1;
-  max-width: 420px;
-  min-width: 190px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 38px;
-  padding: 0 13px;
-  border: 1px solid rgba(255,255,255,.22);
+  gap: 8px;
+  height: 34px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, .14);
   border-radius: 4px;
-  background: rgba(8, 8, 8, .74);
-  color: rgba(255,255,255,.86);
+  background: #15171a;
+  color: #8e949d;
 }
+
+.orbit-shell .cinema-top-search:focus-within { border-color: rgba(255, 255, 255, .3); }
 
 .orbit-shell .cinema-top-search input {
   width: 100%;
-  min-width: 0;
-  font-size: 14px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
 }
 
-.orbit-shell .cinema-top-search input::placeholder { color: rgba(255,255,255,.48); }
-
-.orbit-shell .cinema-streaming-page .cinema-back {
+.orbit-shell .cinema-back,
+.orbit-shell .cinema-fullscreen-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, .08);
   border-radius: 4px;
-  background: rgba(255,255,255,.12);
-  font-weight: 800;
+  background: #202226;
+  color: #e7e9ec;
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.orbit-shell .cinema-streaming-page .cinema-home {
-  padding-bottom: 48px;
-  scrollbar-color: rgba(255,255,255,.28) transparent;
+.orbit-shell .cinema-back:hover,
+.orbit-shell .cinema-fullscreen-btn:hover { background: #292c31; }
+
+.orbit-shell .cinema-home {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 28px;
 }
 
-.orbit-shell .cinema-streaming-page .cinema-hero {
+.orbit-shell .cinema-hero {
   position: relative;
-  min-height: min(680px, 68vh);
-  display: flex;
-  align-items: flex-end;
-  padding: 96px clamp(28px, 5vw, 72px) 76px;
+  min-height: 310px;
+  padding: 54px 42px 76px;
+  border-radius: 0;
+  background-position: center 22%;
   background-size: cover;
-  background-position: center 24%;
-  box-shadow: inset 0 -190px 120px #070707;
-  animation: cinema-hero-in .55s cubic-bezier(.2,.75,.25,1) both;
 }
 
-.orbit-shell .cinema-streaming-page .cinema-hero::after {
-  content: "";
+.orbit-shell .cinema-hero::after {
+  content: '';
   position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.12) 42%, #070707 100%);
+  inset: auto 0 0;
+  height: 90px;
+  background: linear-gradient(180deg, transparent, #08090b);
   pointer-events: none;
 }
 
 .orbit-shell .cinema-hero-copy {
   position: relative;
   z-index: 1;
-  max-width: min(660px, 72vw);
-  animation: cinema-copy-in .62s .08s cubic-bezier(.2,.75,.25,1) both;
-}
-
-.orbit-shell .cinema-hero-copy > strong {
-  display: block;
-  margin-bottom: 12px;
-  font-size: 13px;
-  font-weight: 900;
-  color: #e50914;
+  display: grid;
+  gap: 8px;
+  max-width: 560px;
 }
 
 .orbit-shell .cinema-hero-copy h2 {
-  max-width: 11ch;
-  font-size: clamp(44px, 6.4vw, 88px);
-  line-height: .9;
-  font-weight: 950;
-  text-wrap: balance;
+  margin: 0;
+  color: #fff;
+  font-size: 38px;
+  line-height: 1.05;
 }
 
 .orbit-shell .cinema-hero-copy p {
-  max-width: 58ch;
-  margin-top: 18px;
-  font-size: clamp(15px, 1.45vw, 20px);
-  line-height: 1.45;
-  color: rgba(255,255,255,.86);
+  max-width: 520px;
+  margin: 0;
+  color: rgba(255, 255, 255, .76);
+  font-size: 13px;
 }
 
 .orbit-shell .cinema-hero-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 24px;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .orbit-shell .cinema-hero-actions button {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 22px;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 13px;
   border-radius: 4px;
-  background: #fff;
-  color: #050505;
-  font-size: 15px;
-  font-weight: 900;
+  background: #f0f1f3;
+  color: #151619;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.orbit-shell .cinema-hero-actions button:hover { background: rgba(255,255,255,.82); }
-.orbit-shell .cinema-hero-actions button.secundario { background: rgba(109,109,110,.72); color: #fff; }
-.orbit-shell .cinema-hero-actions button.secundario:hover { background: rgba(109,109,110,.94); }
-
-.orbit-shell .cinema-mobile-search { display: none; padding: 18px 28px 0; }
-
-.orbit-shell .cinema-streaming-page .cinema-kind {
-  display: flex;
-  gap: 8px;
-  padding: 0 clamp(22px, 4vw, 56px);
-  margin-top: -28px;
-  position: relative;
-  z-index: 2;
-}
-
-.orbit-shell .cinema-streaming-page .cinema-kind button {
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 4px;
-  background: rgba(255,255,255,.11);
-  color: rgba(255,255,255,.78);
-  font-weight: 800;
-}
-
-.orbit-shell .cinema-streaming-page .cinema-kind button.ativo {
-  background: #e50914;
+.orbit-shell .cinema-hero-actions button.secundario {
+  background: rgba(76, 79, 86, .86);
   color: #fff;
 }
 
-.orbit-shell .cinema-streaming-page .cinema-row {
-  margin-top: 32px;
-  animation: cinema-row-in .48s ease both;
-  padding: 0 clamp(22px, 4vw, 56px);
+.orbit-shell .cinema-mobile-search { display: none; }
+
+.orbit-shell .cinema-seasons button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 4px;
+  background: #17191d;
+  color: #aeb3ba;
+  font-size: 11px;
+}
+
+.orbit-shell .cinema-seasons button.ativo {
+  border-color: #ef3340;
+  background: #a82833;
+  color: #fff;
+}
+
+.orbit-shell .cinema-row {
+  display: grid;
+  gap: 9px;
+  padding: 0 32px 24px;
 }
 
 .orbit-shell .cinema-row-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
 }
 
 .orbit-shell .cinema-row-head h3 {
-  font-size: clamp(19px, 2vw, 26px);
-  font-weight: 900;
+  margin: 0;
+  color: #f3f4f6;
+  font-size: 16px;
 }
 
-.orbit-shell .cinema-row-head span {
-  font-size: 12px;
-  font-weight: 800;
-  color: rgba(255,255,255,.48);
-}
+.orbit-shell .cinema-row-head span { color: #727780; font-size: 10px; }
 
 .orbit-shell .cinema-row-track {
   display: grid;
+  grid-auto-columns: 174px;
   grid-auto-flow: column;
-  grid-auto-columns: clamp(150px, 13vw, 218px);
-  gap: 12px;
+  gap: 9px;
   overflow-x: auto;
-  overflow-y: visible;
-  padding: 3px 0 24px;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
+  padding: 2px 2px 10px;
 }
 
-.orbit-shell .cinema-streaming-page .cinema-card {
+.orbit-shell .cinema-card {
   position: relative;
-  display: block;
-  min-width: 0;
-  aspect-ratio: 2 / 3;
-  border-radius: 5px;
+  min-height: 261px;
+  padding: 0;
   overflow: hidden;
-  background: #171717;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: #17191d;
+  color: #fff;
   text-align: left;
-  scroll-snap-align: start;
-  transform-origin: center bottom;
-  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+  transition: transform 140ms ease, border-color 140ms ease;
 }
 
-.orbit-shell .cinema-streaming-page .cinema-card:hover,
-.orbit-shell .cinema-streaming-page .cinema-card:focus-visible {
-  transform: translateY(-6px) scale(1.035);
-  z-index: 4;
-  box-shadow: 0 18px 38px rgba(0,0,0,.55);
+.orbit-shell .cinema-card:hover,
+.orbit-shell .cinema-card:focus-visible {
+  z-index: 2;
+  border-color: rgba(255, 255, 255, .3);
+  transform: translateY(-2px);
 }
 
 .orbit-shell .cinema-poster-wrap,
@@ -899,263 +1054,323 @@ p.orbit-message-text { margin: 1px 0 0; font-size: 14px; line-height: 1.5; white
 
 .orbit-shell .cinema-poster-wrap img { object-fit: cover; }
 
-.orbit-shell .cinema-poster-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #181818, #2a1113);
-  color: rgba(255,255,255,.5);
-}
-
-.orbit-shell .cinema-streaming-page .cinema-card::after {
-  content: "";
+.orbit-shell .cinema-card::after {
+  content: '';
   position: absolute;
-  inset: 34% 0 0;
-  background: linear-gradient(180deg, transparent, rgba(0,0,0,.88));
+  inset: 46% 0 0;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .94));
 }
 
 .orbit-shell .cinema-card-info {
   position: absolute;
-  z-index: 2;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  gap: 2px;
+  padding: 34px 9px 9px;
 }
 
 .orbit-shell .cinema-card-info small {
-  font-size: 10px;
-  font-weight: 900;
-  color: #e50914;
+  color: #ff8991;
+  font-size: 8px;
+  font-weight: 800;
   text-transform: uppercase;
 }
 
-.orbit-shell .cinema-card-info strong {
-  font-size: 15px;
-  line-height: 1.12;
-  font-weight: 900;
-  color: #fff;
-}
-
+.orbit-shell .cinema-card-info strong,
 .orbit-shell .cinema-card-info em {
-  min-height: 15px;
-  font-size: 11px;
-  font-style: normal;
-  color: rgba(255,255,255,.66);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-style: normal;
 }
+
+.orbit-shell .cinema-card-info strong { font-size: 12px; }
+.orbit-shell .cinema-card-info em { color: rgba(255, 255, 255, .68); font-size: 10px; }
 
 .orbit-shell .cinema-rank {
   position: absolute;
-  z-index: 3;
-  left: 6px;
-  top: -12px;
-  font-size: clamp(54px, 5vw, 86px);
-  line-height: 1;
-  font-weight: 950;
-  color: rgba(0,0,0,.62);
-  -webkit-text-stroke: 2px rgba(255,255,255,.8);
-  pointer-events: none;
+  top: 7px;
+  left: 7px;
+  z-index: 2;
+  min-width: 22px;
+  padding: 3px 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, .78);
+  color: #fff;
+  font-size: 10px;
+  text-align: center;
 }
 
-.orbit-shell .cinema-streaming-page .cinema-card:active {
-  transform: translateY(-2px) scale(.99);
-  transition-duration: .08s;
+.orbit-shell .cinema-skeleton-card {
+  aspect-ratio: 2 / 3;
+  border-radius: 5px;
+  background: #17191d;
+  animation: orbit-skeleton-pulse 900ms ease-in-out infinite alternate;
 }
 
-.orbit-shell .cinema-streaming-page .cinema-card:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 3px;
+.orbit-shell .cinema-empty {
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+  max-width: 520px;
+  padding: 8px 32px 32px;
+  color: #8f959e;
 }
 
-@keyframes cinema-page-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes cinema-nav-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes cinema-hero-in { from { opacity: 0; transform: scale(1.015); } to { opacity: 1; transform: scale(1); } }
-@keyframes cinema-copy-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes cinema-row-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.orbit-shell .cinema-empty h3,
+.orbit-shell .cinema-empty p { margin: 0; }
+
+.orbit-shell .cinema-empty h3 { color: #f1f2f4; font-size: 16px; }
+.orbit-shell .cinema-empty p { font-size: 12px; }
+.orbit-shell .cinema-empty button { margin-top: 4px; }
+
+@keyframes orbit-skeleton-pulse {
+  from { opacity: .55; }
+  to { opacity: 1; }
+}
+
+.orbit-shell .cinema-detail,
+.orbit-shell .cinema-player {
+  gap: 14px;
+  padding: 20px 24px 30px;
+}
+
+.orbit-shell .cinema-detail-head {
+  border-radius: 6px;
+  background: #111316;
+}
+
+.orbit-shell .cinema-episodes button {
+  border: 1px solid rgba(255, 255, 255, .065);
+  border-radius: 5px;
+  background: #121417;
+}
+
+.orbit-shell .cinema-player iframe { border-radius: 5px; }
+
+/* Shared overlays and settings use the same restrained component language. */
+
+.modal-backdrop {
+  background: rgba(5, 6, 8, .74);
+  backdrop-filter: none;
+}
+
+.modal {
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 8px;
+  background: #2b2d31;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .45);
+}
+
+.modal-head { border-bottom: 1px solid rgba(255, 255, 255, .055); }
+
+.context-menu,
+.status-picker,
+.qualidade-popover {
+  border: 1px solid rgba(255, 255, 255, .075);
+  border-radius: 6px;
+  background: #202226;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .4);
+}
+
+.settings-screen,
+.guild-settings-screen { background: var(--bg-1); }
+
+.settings-nav,
+.guild-settings-nav {
+  background: var(--bg-2);
+  border-right: 1px solid rgba(0, 0, 0, .16);
+}
+
+.settings-item,
+.guild-settings-item { border-radius: 4px; }
+
+.settings-item.ativo,
+.guild-settings-item.ativo {
+  background: rgba(255, 255, 255, .085);
+  color: #fff;
+  box-shadow: inset 2px 0 0 var(--orbit-focus, #7c89ed);
+}
+
+.settings-card-conta,
+.settings-versao,
+.stats-servidor,
+.settings-card,
+.guild-settings-card {
+  border: 1px solid rgba(255, 255, 255, .055);
+  border-radius: 6px;
+  background: var(--bg-2);
+  box-shadow: none;
+}
+
+.aviso-flutuante,
+.convite-call-banner {
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 6px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .4);
+}
+
+.banner-atualizacao { background: #4e5bc8; }
+
+.orbit-mobile-nav-toggle,
+.orbit-sidebar-scrim,
+.orbit-members-scrim { display: none; }
+
+@media (max-width: 1100px) {
+  .orbit-shell { --orbit-sidebar: 220px; }
+
+  .orbit-shell,
+  .orbit-shell.sem-membros,
+  .orbit-shell.modo-chamada {
+    grid-template-columns: var(--orbit-rail) var(--orbit-sidebar) minmax(300px, 1fr);
+  }
+
+  .orbit-shell .member-list { display: none; }
+
+  .orbit-shell:not(.sem-membros):not(.modo-chamada):not(.modo-cinema) .member-list {
+    position: fixed;
+    top: var(--orbit-header);
+    right: 0;
+    bottom: 0;
+    z-index: 44;
+    display: block;
+    width: var(--orbit-members);
+    box-shadow: -8px 0 24px rgba(0, 0, 0, .24);
+  }
+
+  .orbit-shell:not(.sem-membros):not(.modo-chamada):not(.modo-cinema) .orbit-members-scrim {
+    position: fixed;
+    inset: var(--orbit-header) var(--orbit-members) 0 calc(var(--orbit-rail) + var(--orbit-sidebar));
+    z-index: 43;
+    display: block;
+    background: rgba(0, 0, 0, .18);
+  }
+}
+
+@media (max-width: 780px) {
+  .orbit-shell {
+    --orbit-rail: 56px;
+    --orbit-sidebar: 216px;
+  }
+
+  .orbit-shell,
+  .orbit-shell.sem-membros,
+  .orbit-shell.modo-chamada {
+    grid-template-columns: var(--orbit-rail) var(--orbit-sidebar) minmax(260px, 1fr);
+  }
+
+  .orbit-shell .guild-pill { width: 40px; height: 40px; border-radius: 12px; }
+  .orbit-shell .guild-pill::before { left: -8px; }
+
+  .orbit-shell .cinema-streaming-nav {
+    grid-template-columns: 160px 1fr auto;
+  }
+
+  .orbit-shell .cinema-streaming-nav nav { display: none; }
+  .orbit-shell .cinema-hero { min-height: 280px; padding: 46px 28px 62px; }
+  .orbit-shell .cinema-hero-copy h2 { font-size: 31px; }
+  .orbit-shell .cinema-row { padding-right: 22px; padding-left: 22px; }
+}
+
+@media (max-width: 620px) {
+  .orbit-shell,
+  .orbit-shell.sem-membros,
+  .orbit-shell.modo-chamada {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .orbit-shell .guild-bar { grid-column: 1; }
+  .orbit-shell .chat-column { grid-column: 2; }
+
+  .orbit-shell .channel-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 52px;
+    z-index: 42;
+    display: flex;
+    width: min(250px, calc(100vw - 52px));
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(calc(-100% - 52px));
+    transition: transform 160ms ease, visibility 0s linear 160ms;
+  }
+
+  .orbit-shell.painel-canais-aberto .channel-sidebar {
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(0);
+    transition-delay: 0s;
+  }
+
+  .orbit-shell .orbit-sidebar-scrim {
+    position: fixed;
+    inset: 0 0 0 52px;
+    z-index: 41;
+    display: none;
+    background: rgba(0, 0, 0, .56);
+  }
+
+  .orbit-shell.painel-canais-aberto .orbit-sidebar-scrim { display: block; }
+
+  .orbit-shell:not(.sem-membros):not(.modo-chamada):not(.modo-cinema) .orbit-members-scrim {
+    inset: var(--orbit-header) var(--orbit-members) 0 52px;
+  }
+
+  .orbit-shell .orbit-mobile-nav-toggle {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    flex: none;
+    border-radius: 4px;
+    color: var(--text-dim);
+  }
+
+  .orbit-shell .orbit-mobile-nav-toggle:hover {
+    background: rgba(255, 255, 255, .055);
+    color: var(--text);
+  }
+
+  .orbit-shell .message { padding-right: 10px; padding-left: 10px; }
+  .orbit-shell .composer { margin-right: 10px; margin-left: 10px; }
+  .orbit-shell .composer-contexto { margin-right: 10px; margin-left: 10px; }
+
+  .orbit-shell.modo-cinema { grid-template-columns: 52px minmax(0, 1fr); }
+  .orbit-shell .cinema-streaming-nav { grid-template-columns: 1fr auto; padding: 0 10px; }
+  .orbit-shell .cinema-top-search { display: none; }
+  .orbit-shell .cinema-mobile-search { display: block; padding: 12px 14px 0; }
+  .orbit-shell .cinema-mobile-search .cinema-top-search { display: flex; }
+  .orbit-shell .cinema-hero { min-height: 240px; padding: 38px 18px 48px; }
+  .orbit-shell .cinema-hero-copy h2 { font-size: 27px; }
+  .orbit-shell .cinema-row { padding: 0 14px 20px; }
+  .orbit-shell .cinema-row-track { grid-auto-columns: 132px; }
+  .orbit-shell .cinema-card { min-height: 198px; }
+  .orbit-shell .cinema-empty { padding-right: 14px; padding-left: 14px; }
+}
+
+@media (hover: none) {
+  .orbit-shell .message:hover .msg-acoes {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .orbit-shell .message.acoes-abertas .msg-acoes {
+    opacity: 1;
+    visibility: visible;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .orbit-shell .cinema-streaming-page, .orbit-shell .cinema-streaming-nav, .orbit-shell .cinema-streaming-page .cinema-hero, .orbit-shell .cinema-hero-copy, .orbit-shell .cinema-streaming-page .cinema-row { animation: none; }
-  .orbit-shell .cinema-streaming-page .cinema-card { transition: none; }
-}
-
-@media (max-width: 900px) {
-  .orbit-shell .cinema-streaming-nav { flex-wrap: wrap; align-content: center; height: auto; padding: 12px 18px; }
-  .orbit-shell .cinema-streaming-nav nav { order: 3; width: 100%; overflow-x: auto; }
-  .orbit-shell .cinema-streaming-nav > .cinema-top-search { display: none; }
-  .orbit-shell .cinema-mobile-search { display: block; }
-  .orbit-shell .cinema-mobile-search .cinema-top-search { max-width: none; }
-  .orbit-shell .cinema-streaming-page .cinema-hero { min-height: 520px; padding: 64px 24px 64px; }
-  .orbit-shell .cinema-hero-copy { max-width: 92vw; }
-  .orbit-shell .cinema-hero-copy h2 { font-size: clamp(38px, 12vw, 58px); }
-  .orbit-shell .cinema-row-track { grid-auto-columns: 142px; }
-}
-
-
-/* Orbit visual refresh 0.2.20 */
-.orbit-shell {
-  --o-bg: #0d0e11;
-  --o-card: #15171b;
-  --o-popover: #202329;
-  --o-accent: #252832;
-  --o-border: rgba(255,255,255,.075);
-  --o-input: #1b1e24;
-  --o-muted-fg: #a7acb8;
-  background: radial-gradient(900px 520px at 70% -12%, rgba(139,92,246,.12), transparent 60%), var(--o-bg);
-}
-.orbit-shell ::selection { background: rgba(139,92,246,.42); color: #fff; }
-.orbit-shell button, .orbit-shell input, .orbit-shell textarea, .orbit-shell select { transition: background .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease; }
-.orbit-shell button:focus-visible, .orbit-shell input:focus-visible, .orbit-shell textarea:focus-visible, .orbit-shell select:focus-visible { outline: 2px solid var(--o-primary); outline-offset: 2px; }
-.orbit-shell .orbit-channel-header { background: rgba(21,23,27,.88); box-shadow: 0 1px 0 var(--o-border), 0 8px 24px rgba(0,0,0,.12); z-index: 2; }
-.orbit-shell .orbit-channel-header h1 { letter-spacing: .01em; }
-.orbit-shell .orbit-header-acoes { gap: 5px; }
-.orbit-shell .orbit-icon-button { border: 1px solid transparent; }
-.orbit-shell .orbit-icon-button:hover, .orbit-shell .orbit-icon-button.orbit-ativo { border-color: var(--o-border); background: rgba(139,92,246,.14); color: #fff; transform: translateY(-1px); }
-.orbit-shell .orbit-channel-list { padding-top: 16px; }
-.orbit-shell .orbit-group-label { letter-spacing: .13em; }
-.orbit-shell .orbit-channel-row { min-height: 36px; border: 1px solid transparent; }
-.orbit-shell .orbit-channel-row:hover { border-color: var(--o-border); }
-.orbit-shell .orbit-channel-row.orbit-channel-selected { background: linear-gradient(90deg, rgba(139,92,246,.23), rgba(139,92,246,.08)); border-color: rgba(139,92,246,.22); box-shadow: inset 3px 0 0 var(--o-primary); }
-.orbit-shell .orbit-user-panel { background: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,.01)); }
-.orbit-shell .orbit-messages { padding: 14px clamp(14px, 2.5vw, 28px); }
-.orbit-shell .orbit-channel-intro { padding: 34px 8px 26px; }
-.orbit-shell .orbit-intro-mark { box-shadow: 0 10px 28px rgba(139,92,246,.2); }
-.orbit-shell .orbit-message-row { padding: 5px 10px; border: 1px solid transparent; transition: background .16s ease, border-color .16s ease; }
-.orbit-shell .orbit-message-row:hover { border-color: rgba(255,255,255,.045); background: rgba(139,92,246,.075); }
-.orbit-shell .orbit-message-author { color: #fff; }
-.orbit-shell .orbit-message-text { color: #d9dce3; }
-.orbit-shell .orbit-composer-wrap { padding: 0 clamp(14px, 2.5vw, 28px) 20px; }
-.orbit-shell .orbit-composer { border: 1px solid rgba(255,255,255,.09); background: linear-gradient(180deg, #1d2026, #191b20); box-shadow: 0 10px 26px rgba(0,0,0,.18); transition: border-color .16s ease, box-shadow .16s ease; }
-.orbit-shell .orbit-composer:focus-within { border-color: rgba(139,92,246,.62); box-shadow: 0 0 0 3px rgba(139,92,246,.13), 0 12px 28px rgba(0,0,0,.22); }
-.orbit-shell .orbit-send-button { box-shadow: 0 5px 14px rgba(139,92,246,.22); }
-.orbit-shell .member-list { background: rgba(13,14,17,.28); border-left-color: var(--o-border); }
-.orbit-shell .member { border: 1px solid transparent; transition: background .16s ease, border-color .16s ease, transform .16s ease; }
-.orbit-shell .member:hover { border-color: var(--o-border); transform: translateX(-2px); }
-.orbit-shell .settings-screen, .orbit-shell .guild-settings-screen { background: transparent; }
-.orbit-shell .settings-item, .orbit-shell .settings-card, .orbit-shell .profile-card, .orbit-shell .modal { border-color: var(--o-border); background: linear-gradient(145deg, rgba(31,34,41,.96), rgba(21,23,27,.96)); box-shadow: 0 18px 46px rgba(0,0,0,.22); }
-.orbit-shell input, .orbit-shell textarea, .orbit-shell select { border-color: var(--o-border); background: var(--o-input); }
-.orbit-shell input:hover, .orbit-shell textarea:hover, .orbit-shell select:hover { border-color: rgba(255,255,255,.16); }
-.orbit-shell input:focus, .orbit-shell textarea:focus, .orbit-shell select:focus { border-color: var(--o-primary); box-shadow: 0 0 0 3px rgba(139,92,246,.13); }
-.orbit-shell .primary, .orbit-shell .orbit-primary-action { box-shadow: 0 7px 18px rgba(139,92,246,.2); }
-.orbit-shell .primary:hover, .orbit-shell .orbit-primary-action:hover { transform: translateY(-1px); filter: brightness(1.08); }
-.orbit-shell .voice-panel { border-top: 1px solid var(--o-border); background: linear-gradient(180deg, #17191e, #121418); }
-.orbit-shell .voice-btn { border: 1px solid transparent; }
-.orbit-shell .voice-btn:hover { border-color: rgba(255,255,255,.12); transform: translateY(-1px); }
-.orbit-shell .voice-stage { background: radial-gradient(700px 360px at 50% -20%, rgba(139,92,246,.12), transparent 65%), #0c0d10; }
-.orbit-shell .voice-stage-head { background: rgba(15,16,20,.9); border-bottom-color: var(--o-border); }
-.orbit-shell .voice-bloco, .orbit-shell .voice-pessoa-bloco, .orbit-shell .voice-cinema-bloco { border-color: rgba(255,255,255,.09); box-shadow: 0 12px 28px rgba(0,0,0,.2); }
-@media (max-width: 760px) {
-  .orbit-rail { width: 62px; }
-  .orbit-channel-sidebar { width: 210px; }
-  .orbit-shell .orbit-messages { padding-inline: 10px; }
-  .orbit-shell .orbit-composer-wrap { padding-inline: 10px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .orbit-shell button, .orbit-shell input, .orbit-shell textarea, .orbit-shell select, .orbit-shell .orbit-message-row, .orbit-shell .member { transition: none; }
-}
-
-
-/* Orbit Apps navigation refresh 0.2.21 */
-.orbit-shell .modal:has(.watch-modal) {
-  width: min(1060px, calc(100vw - 40px));
-  max-height: min(820px, calc(100vh - 40px));
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,.1);
-  background: #0f1115;
-  box-shadow: 0 30px 90px rgba(0,0,0,.58), 0 0 0 1px rgba(139,92,246,.08);
-}
-.orbit-shell .modal:has(.watch-modal) .modal-head {
-  height: 58px;
-  padding: 0 22px;
-  background: linear-gradient(90deg, rgba(139,92,246,.12), transparent 62%);
-  border-bottom: 1px solid rgba(255,255,255,.08);
-}
-.orbit-shell .modal:has(.watch-modal) .modal-head h2 { font-size: 18px; letter-spacing: .01em; }
-.orbit-shell .modal:has(.watch-modal) .modal-body { padding: 0; overflow: auto; }
-.orbit-shell .watch-modal { gap: 0; min-height: 0; background: #0f1115; }
-.orbit-shell .watch-hero {
-  min-height: 246px;
-  padding: 34px 34px 28px;
-  border-radius: 0;
-  background-position: center 30%;
-  box-shadow: inset 0 -100px 90px #0f1115;
-}
-.orbit-shell .watch-hero::after { background: linear-gradient(180deg, rgba(8,10,16,.18), rgba(8,10,16,.58) 74%, #0f1115); }
-.orbit-shell .watch-eyebrow { color: #a78bfa; letter-spacing: .16em; font-size: 10px; }
-.orbit-shell .watch-hero h2 { max-width: 720px; margin: 7px 0 8px; font-size: clamp(30px, 4vw, 52px); line-height: .98; letter-spacing: -.02em; }
-.orbit-shell .watch-hero p { max-width: 620px; color: rgba(255,255,255,.64); font-size: 13px; }
-.orbit-shell .watch-search.grande {
-  max-width: 560px;
-  height: 44px;
-  margin-top: 22px;
-  border: 1px solid rgba(255,255,255,.16);
-  border-radius: 7px;
-  background: rgba(11,12,16,.8);
-  box-shadow: 0 10px 22px rgba(0,0,0,.22);
-}
-.orbit-shell .watch-search.grande:focus-within { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(139,92,246,.16), 0 12px 26px rgba(0,0,0,.26); }
-.orbit-shell .watch-search.grande input { font-size: 14px; }
-.orbit-shell .watch-tabs { display: flex; align-items: center; gap: 4px; width: auto; padding: 0 28px; background: #15171c; border-bottom: 1px solid rgba(255,255,255,.07); }
-.orbit-shell .watch-tabs button { position: relative; min-height: 46px; padding: 0 12px; border-radius: 0; color: #9da3b0; font-size: 12px; font-weight: 750; }
-.orbit-shell .watch-tabs button:hover { color: #fff; background: rgba(255,255,255,.045); }
-.orbit-shell .watch-tabs button.ativo { color: #fff; background: transparent; }
-.orbit-shell .watch-tabs button.ativo::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; height: 2px; border-radius: 2px; background: #a78bfa; }
-.orbit-shell .watch-kind-tabs { gap: 7px; padding: 18px 28px 4px; border: 0; background: #0f1115; }
-.orbit-shell .watch-kind-tabs button { min-height: 30px; padding: 0 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: #191c22; font-size: 11px; }
-.orbit-shell .watch-kind-tabs button.ativo { border-color: rgba(167,139,250,.5); background: rgba(139,92,246,.2); color: #e9ddff; }
-.orbit-shell .watch-kind-tabs button.ativo::after { display: none; }
-.orbit-shell .watch-row { gap: 12px; padding: 20px 28px 26px; }
-.orbit-shell .watch-row-title { padding-bottom: 2px; }
-.orbit-shell .watch-row-title strong { font-size: 17px; letter-spacing: -.01em; }
-.orbit-shell .watch-carousel { grid-auto-columns: 154px; gap: 12px; padding: 4px 2px 12px; }
-.orbit-shell .watch-card { min-height: 232px; border: 1px solid rgba(255,255,255,.08); border-radius: 7px; background: #191c22; }
-.orbit-shell .watch-card.destaque { grid-column: span 1; }
-.orbit-shell .watch-card:hover { border-color: rgba(167,139,250,.62); box-shadow: 0 15px 28px rgba(0,0,0,.32); transform: translateY(-5px); }
-.orbit-shell .watch-card-meta { padding: 12px; }
-.orbit-shell .watch-card-meta small { color: #b79cff; letter-spacing: .08em; }
-.orbit-shell .watch-card-meta strong { font-size: 13px; }
-.orbit-shell .watch-card-meta em { font-size: 11px; }
-.orbit-shell .watch-serie-view { padding: 26px 30px 34px; }
-.orbit-shell .watch-back { border: 1px solid rgba(255,255,255,.1); border-radius: 6px; background: #191c22; }
-.orbit-shell .watch-back:hover { background: #252832; }
-.orbit-shell .watch-title-row.grande { margin: 22px 0; padding: 18px; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: linear-gradient(120deg, rgba(139,92,246,.12), rgba(255,255,255,.025)); }
-.orbit-shell .watch-title-row.grande strong { font-size: clamp(22px, 3vw, 32px); }
-.orbit-shell .watch-seasons { padding-bottom: 10px; }
-.orbit-shell .watch-seasons button { border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: #191c22; }
-.orbit-shell .watch-seasons button.ativo { background: #8b5cf6; border-color: #a78bfa; }
-.orbit-shell .watch-episode-list { gap: 8px; max-height: none; }
-.orbit-shell .watch-episode { min-height: 78px; border-color: rgba(255,255,255,.08); border-radius: 7px; background: #171a1f; }
-.orbit-shell .watch-episode:hover { border-color: rgba(167,139,250,.55); background: #20232b; transform: translateX(3px); }
-.orbit-shell .watch-episode strong { font-size: 13px; }
-@media (max-width: 680px) {
-  .orbit-shell .modal:has(.watch-modal) { width: calc(100vw - 18px); max-height: calc(100vh - 18px); }
-  .orbit-shell .watch-hero { min-height: 270px; padding: 28px 20px 24px; }
-  .orbit-shell .watch-tabs, .orbit-shell .watch-kind-tabs { padding-left: 18px; padding-right: 18px; overflow-x: auto; }
-  .orbit-shell .watch-row { padding-left: 18px; padding-right: 18px; }
-  .orbit-shell .watch-carousel { grid-auto-columns: 142px; }
-  .orbit-shell .watch-serie-view { padding: 20px 18px 26px; }
-}
-
-
-/* Orbit Cinema motion pass 0.2.24 */
-@keyframes orbit-cinema-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes orbit-cinema-soft-in { from { opacity: 0; } to { opacity: 1; } }
-.cinema-streaming-page .cinema-streaming-nav { animation: orbit-cinema-soft-in .35s ease both; }
-.cinema-streaming-page .cinema-kind, .cinema-streaming-page .cinema-context { animation: orbit-cinema-rise .42s .08s cubic-bezier(.23,1,.32,1) both; }
-.cinema-streaming-page .cinema-row { animation: orbit-cinema-rise .5s cubic-bezier(.23,1,.32,1) both; }
-.cinema-streaming-page .cinema-row:nth-of-type(2) { animation-delay: .08s; }
-.cinema-streaming-page .cinema-row:nth-of-type(3) { animation-delay: .16s; }
-.cinema-streaming-page .cinema-row:nth-of-type(4) { animation-delay: .24s; }
-.cinema-streaming-page .cinema-card { animation: orbit-cinema-rise .42s cubic-bezier(.23,1,.32,1) both; }
-.cinema-streaming-page .cinema-card:nth-child(2) { animation-delay: .04s; }
-.cinema-streaming-page .cinema-card:nth-child(3) { animation-delay: .08s; }
-.cinema-streaming-page .cinema-card:nth-child(4) { animation-delay: .12s; }
-.cinema-streaming-page .cinema-card:nth-child(5) { animation-delay: .16s; }
-.cinema-streaming-page .cinema-card:nth-child(6) { animation-delay: .20s; }
-@media (prefers-reduced-motion: reduce) {
-  .cinema-streaming-page .cinema-streaming-nav, .cinema-streaming-page .cinema-kind, .cinema-streaming-page .cinema-context, .cinema-streaming-page .cinema-row, .cinema-streaming-page .cinema-card { animation: none; }
+  .orbit-shell *,
+  .orbit-shell *::before,
+  .orbit-shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
 }

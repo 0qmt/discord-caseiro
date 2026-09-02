@@ -12,8 +12,7 @@ const ATALHOS = 3;
  * está aqui também está no menu completo - quem descobrir só um dos dois
  * caminhos não fica sem nada.
  *
- * Mora fora das telas porque as duas peles (clássica e Orbit) mostram a
- * mesma barra.
+ * Mora fora da tela principal para continuar sendo uma peça única do chat.
  */
 export default function AcoesDaMensagem({
   message, onReagir, onResponder, onEncaminhar, onAbrirEmoji, onMais, className = '',

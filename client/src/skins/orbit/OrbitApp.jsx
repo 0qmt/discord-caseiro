@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Avatar from '../../components/Avatar.jsx';
 import ChannelSidebar from '../../components/ChannelSidebar.jsx';
 import ChatView from '../../components/ChatView.jsx';
@@ -6,7 +7,6 @@ import DMSidebar from '../../components/DMSidebar.jsx';
 import GuildBar from '../../components/GuildBar.jsx';
 import MemberList from '../../components/MemberList.jsx';
 import VoiceStage, { VoiceAudioSink } from '../../components/VoiceStage.jsx';
-import './orbit.css';
 
 /**
  * Orbit é somente a composição visual oficial. Chat, barras laterais e
@@ -110,11 +110,21 @@ export default function OrbitApp({
   arrasto,
   aoArrastarMembro,
 }) {
+  const [painelCanaisAberto, setPainelCanaisAberto] = useState(false);
   const semServidor = !dmMode && guilds.length === 0;
+  const chamadaAberta = callMaximizada && Boolean(voice.channelId);
 
   return (
     <div
-      className={`orbit-shell app ${membrosVisiveis && !dmMode ? '' : 'sem-membros'}`}
+      className={[
+        'orbit-shell',
+        'app',
+        membrosVisiveis && !dmMode && !chamadaAberta && !cinemaAberto ? '' : 'sem-membros',
+        dmMode ? 'modo-dm' : '',
+        chamadaAberta ? 'modo-chamada' : '',
+        cinemaAberto ? 'modo-cinema' : '',
+        painelCanaisAberto ? 'painel-canais-aberto' : '',
+      ].filter(Boolean).join(' ')}
       data-theme="discord-dark"
     >
       <VoiceAudioSink voice={voice} />
@@ -126,8 +136,8 @@ export default function OrbitApp({
         unreadDmTotal={unreadDmTotal}
         unreadByGuild={unreadByGuild}
         mentionByGuild={mentionByGuild}
-        onSelect={onSelectGuild}
-        onOpenDms={onOpenDms}
+        onSelect={(guildId) => { onSelectGuild(guildId); setPainelCanaisAberto(true); }}
+        onOpenDms={() => { onOpenDms(); setPainelCanaisAberto(true); }}
         onCreate={onCreateGuild}
         onJoin={onJoinGuild}
         onOpenCinema={onOpenCinema}
@@ -140,7 +150,7 @@ export default function OrbitApp({
           activeDmId={activeDmId}
           unreadByDm={unreadByDm}
           onlineIds={onlineIds}
-          onSelectDm={onSelectDm}
+          onSelectDm={(dmId) => { onSelectDm(dmId); setPainelCanaisAberto(false); }}
           onNovaConversa={onNovaConversa}
           me={me}
           connected={connected}
@@ -153,7 +163,7 @@ export default function OrbitApp({
           activeChannelId={activeChannel?.id ?? null}
           unreadByChannel={unreadByChannel}
           mentionByChannel={mentionByChannel}
-          onSelectChannel={onSelectChannel}
+          onSelectChannel={(channelId) => { onSelectChannel(channelId); setPainelCanaisAberto(false); }}
           onCreateChannel={onCreateChannel}
           onOpenInvite={onOpenInvite}
           me={me}
@@ -181,6 +191,24 @@ export default function OrbitApp({
           arrasto={arrasto}
         />
       ))}
+
+      {!cinemaAberto && (
+        <button
+          type="button"
+          className="orbit-sidebar-scrim"
+          aria-label="Fechar lista de canais"
+          onClick={() => setPainelCanaisAberto(false)}
+        />
+      )}
+
+      {membrosVisiveis && !dmMode && !cinemaAberto && !chamadaAberta && (
+        <button
+          type="button"
+          className="orbit-members-scrim"
+          aria-label="Fechar lista de membros"
+          onClick={onAlternarMembros}
+        />
+      )}
 
       <div className="chat-column">
         {cinemaAberto ? (
@@ -232,6 +260,7 @@ export default function OrbitApp({
               onDenunciar={onDenunciar}
               onRodarComando={onRodarComando}
               inserirNoCampo={inserirNoCampo}
+              onAlternarCanais={() => setPainelCanaisAberto((aberto) => !aberto)}
               icon={<Avatar user={activeDm.otherUser} size={22} className="small" />}
               emptyMessage="Escolhe uma conversa na barra ao lado."
               placeholder={`Mensagem para ${activeDm.otherUser.username}`}
@@ -275,6 +304,7 @@ export default function OrbitApp({
             onAlternarMembros={onAlternarMembros}
             membrosVisiveis={membrosVisiveis}
             inserirNoCampo={inserirNoCampo}
+            onAlternarCanais={() => setPainelCanaisAberto((aberto) => !aberto)}
             naoLidasAoAbrir={naoLidasAoAbrir}
           />
         ) : (

@@ -27,9 +27,8 @@ const copiar = (texto) => navigator.clipboard?.writeText(texto).catch(() => {});
 /**
  * Os itens do menu de botão direito de uma mensagem.
  *
- * Fica fora dos componentes de tela porque as duas peles (clássica e Orbit)
- * mostram o mesmo menu - deixar uma cópia em cada uma garantiria que elas
- * saíssem de sincronia no primeiro item novo.
+ * Fica fora da tela principal para que menu, atalhos e chat compartilhem a
+ * mesma fonte de ações e não saiam de sincronia.
  *
  * Cada ação é opcional: o que não recebe handler simplesmente não aparece,
  * em vez de aparecer desabilitado sem explicação.
@@ -121,7 +120,7 @@ export function itensDeMensagem({
 
   itens.push({
     label: 'Copiar ID',
-    icone: '#',
+    icone: <Icon name="hash" size={15} />,
     onClick: () => copiar(message.id),
   });
 

@@ -9,7 +9,6 @@ import {
   tocarSomDeMencao,
 } from './lib/notificacaoDeMencao.js';
 import { useArrastar } from './lib/arrastar.js';
-import { itensDeMensagem } from './lib/menuDeMensagem.jsx';
 import {
   chaveDe, configDe, deveNotificar, DURACOES_DE_SILENCIO, NIVEIS, PARA_SEMPRE,
 } from './lib/notificacoes.js';
@@ -18,15 +17,10 @@ import { notificar, pedirPermissaoDeNotificacao } from './lib/notificar.js';
 import { useVoice } from './lib/useVoice.js';
 import AuthView from './components/AuthView.jsx';
 import Avatar from './components/Avatar.jsx';
-import ChannelSidebar from './components/ChannelSidebar.jsx';
-import CinemaHome from './components/CinemaHome.jsx';
-import ChatView from './components/ChatView.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import ContextMenu, { useContextMenu } from './components/ContextMenu.jsx';
-import DMSidebar from './components/DMSidebar.jsx';
-import GuildBar from './components/GuildBar.jsx';
 import Icon from './components/Icon.jsx';
-import MemberList, { itensDoMembro } from './components/MemberList.jsx';
+import { itensDoMembro } from './components/MemberList.jsx';
 import EncaminharModal from './components/EncaminharModal.jsx';
 import GuildSettingsScreen from './components/GuildSettingsScreen.jsx';
 import OrbitApp from './skins/orbit/OrbitApp.jsx';
@@ -36,7 +30,7 @@ import ProfileEditor from './components/ProfileEditor.jsx';
 import ReportBugModal from './components/ReportBugModal.jsx';
 import SettingsScreen from './components/SettingsScreen.jsx';
 import { itensDeStatus } from './components/UserPanel.jsx';
-import VoiceStage, { temVideoDeOutros, VoiceAudioSink } from './components/VoiceStage.jsx';
+import { temVideoDeOutros } from './components/VoiceStage.jsx';
 import WatchTogetherModal from './components/WatchTogetherModal.jsx';
 
 const TYPING_TTL = 4000;
@@ -235,9 +229,6 @@ export default function App() {
   // chat (ver selectChannel). Fica até trocar de canal e voltar.
   const [marcadorNaoLidas, setMarcadorNaoLidas] = useState({});
 
-  // Orbit é a interface oficial do app. O estado antigo da pele clássica fica ignorado para que instalações antigas não voltem para a tela anterior.
-  const interfaceTeste = true;
-
   // Mensagens diretas vivem paralelas aos servidores: mesma forma dos estados
   // acima (mensagens/estado do canal/nao-lidas), so que por dmChannelId.
   const [dmMode, setDmMode] = useState(false);
@@ -288,7 +279,9 @@ export default function App() {
   // `token` faz o efeito disparar de novo mesmo mencionando a mesma pessoa.
   const [inserirNoCampo, setInserirNoCampo] = useState(null);
   const [meuStatus, setMeuStatus] = useState('online');
-  const [membrosVisiveis, setMembrosVisiveis] = useState(true);
+  const [membrosVisiveis, setMembrosVisiveis] = useState(
+    () => typeof window === 'undefined' || window.innerWidth > 1100,
+  );
   // socketId de quem estamos assistindo a transmissao; null = ninguem.
   const [telaAssistida, setTelaAssistida] = useState(null);
   // Quando a pessoa escreve a atividade com /jogando, a detecção automática
@@ -623,9 +616,8 @@ export default function App() {
               count: (prev[message.channelId]?.count ?? 0) + 1,
             },
           }));
-          // Notifica só quem foi marcado de verdade (@nome ou @everyone) -
-          // mensagem normal já tem o indicador de não-lida, isso aqui é
-          // pra não deixar passar batido quando é com você mesmo.
+          // Mensagens comuns seguem as preferências daqui; menções usam o
+          // evento dirigido abaixo para som, contador e regra de foco.
           const ehMencao = mensagemMenciona(message.content, me.id);
           if (!ehMencao && deveNotificar({
             settings: notifSettingsRef.current,
@@ -1121,9 +1113,26 @@ export default function App() {
     emitAck(socketRef.current, 'message:edit', { messageId, content })
       .then((r) => { if (r?.error) setSendError(r.error); });
 
-  const fixarMensagem = (messageId, pinned) =>
-    emitAck(socketRef.current, 'message:pin', { messageId, pinned })
-      .then((r) => { if (r?.error) setSendError(r.error); });
+  const fixarMensagem = async (messageId, pinned) => {
+    const resposta = await emitAck(socketRef.current, 'message:pin', { messageId, pinned });
+    if (resposta?.error) {
+      setSendError(resposta.error);
+      return;
+    }
+
+    // O broadcast mantém os outros clientes sincronizados. A confirmação
+    // local evita que o selo dependa da volta desse mesmo broadcast pela rede.
+    setMessages((prev) => {
+      const next = {};
+      for (const [channelId, list] of Object.entries(prev)) {
+        next[channelId] = list.map((message) => (message.id === messageId
+          ? { ...message, pinnedAt: pinned ? Date.now() : null }
+          : message));
+      }
+      return next;
+    });
+    setSendError(null);
+  };
 
   /*
    * Voltar o foco pra janela com um canal aberto marca ele como lido.
@@ -1535,25 +1544,6 @@ export default function App() {
     ];
   });
 
-  /*
-   * Menu de mensagem da versão de teste. A pele clássica monta o dela dentro
-   * do ChatView (que tem responder/editar no próprio estado); aqui em cima
-   * só existe o que dá pra fazer de fora, então responder e editar ficam de
-   * fora em vez de aparecerem sem funcionar.
-   */
-  const menuDaMensagem = (message) => menuContexto.abrirCom(() => itensDeMensagem({
-    message,
-    meId: me.id,
-    podeModerar: podeGerenciarMensagens,
-    canalId: activeChannelId,
-    onReagir: reagir,
-    onFixarMensagem: fixarMensagem,
-    onApagar: apagarMensagem,
-    onEncaminhar: (m) => setModal({ type: 'encaminhar', mensagem: m }),
-    onMarcarNaoLido: marcarComoNaoLido,
-    onDenunciar: (m) => setModal({ type: 'reportar-bug', mensagem: m }),
-  }));
-
   const menuDaGuild = menuContexto.abrirCom(() => {
     if (!guild) return [];
     const itens = [{ tipo: 'titulo', label: guild.name }];
@@ -1756,7 +1746,6 @@ export default function App() {
         </div>
       )}
 
-      {interfaceTeste ? (
         <OrbitApp
           me={me}
           guilds={guilds}
@@ -1862,200 +1851,6 @@ export default function App() {
             icone: '🔊',
           })}
         />
-      ) : (
-        <div className={`app ${membrosVisiveis && !dmMode ? '' : 'sem-membros'}`}>
-      <GuildBar
-        guilds={guilds}
-        activeGuildId={activeGuildId}
-        dmMode={dmMode}
-        unreadDmTotal={unreadDmTotal}
-        unreadByGuild={unreadByGuild}
-        onSelect={(guildId) => { setCinemaAberto(false); setDmMode(false); setActiveGuildId(guildId); }}
-        onOpenDms={() => { setCinemaAberto(false); setDmMode(true); }}
-        onCreate={() => setModal({ type: 'create-guild' })}
-        onJoin={() => setModal({ type: 'join' })}
-        onOpenCinema={() => setCinemaAberto(true)}
-        onReportarBug={() => setModal({ type: 'reportar-bug' })}
-      />
-
-      {dmMode ? (
-        <DMSidebar
-          conversations={dms}
-          activeDmId={activeDmId}
-          unreadByDm={dmUnread}
-          onlineIds={onlineIds}
-          onSelectDm={selectDm}
-          onNovaConversa={() => setModal({ type: 'nova-conversa' })}
-          me={me}
-          connected={connected}
-          onOpenSettings={() => setConfiguracoesAbertas(true)}
-          onOpenProfile={() => setModal({ type: 'profile', userId: me.id })}
-        />
-      ) : (
-        <ChannelSidebar
-          guild={guild}
-          activeChannelId={activeChannelId}
-          unreadByChannel={unreadByChannel}
-          onSelectChannel={selectChannel}
-          onCreateChannel={(channelType, categoryId) =>
-            setModal({ type: 'create-channel', channelType, categoryId })}
-          onOpenInvite={() => setModal({ type: 'invite' })}
-          me={me}
-          connected={connected}
-          onOpenSettings={() => setConfiguracoesAbertas(true)}
-          onOpenProfile={() => setModal({ type: 'profile', userId: me.id })}
-          voice={voice}
-          voiceRooms={voiceRooms}
-          voiceActions={voiceActions}
-          voiceChannelName={voiceChannelName}
-          callMaximizada={callMaximizada}
-          onToggleVoiceChannel={alternarCanalDeVoz}
-          onMenuDoCanal={menuDoCanal}
-          onMenuDaGuild={menuDaGuild}
-          onMenuDaCategoria={menuDaCategoria}
-          onMenuDoParticipanteDeVoz={menuDoParticipanteDeVoz}
-          podeOrdenarCanais={podeGerenciarCanais}
-          podeMoverNaCall={podeMoverNaCall}
-          onReordenarCanais={reordenarCanais}
-          onPuxarParaCall={puxarParaCall}
-          onMoverParaFim={moverParaFim}
-          arrasto={arrasto}
-          onAbrirMenuDeStatus={menuDeStatus}
-          meuStatus={meuStatus}
-          minhaAtividade={minhaAtividade}
-        />
-      )}
-
-      {/* O áudio da call precisa continuar mesmo com ela minimizada. */}
-      <VoiceAudioSink voice={voice} />
-
-      <div className="chat-column">
-        {cinemaAberto ? (
-          <CinemaHome onClose={() => setCinemaAberto(false)} onErro={setAviso} />
-        ) : callMaximizada && voice.channelId ? (
-          <VoiceStage
-            voice={voice}
-            me={me}
-            channelName={voiceChannelName}
-            onMinimizar={() => setCallMaximizada(false)}
-            podeExpulsar={temPermissao(guildMembroDeMim, guild, PERM.MOVER_MEMBROS)}
-            votacoes={voiceVotacoes}
-            onExpulsar={voiceActions.expulsar}
-            onVotarExpulsao={voiceActions.votarExpulsao}
-            telaAssistida={telaAssistida}
-            onAssistir={setTelaAssistida}
-            onPararDeAssistir={() => setTelaAssistida(null)}
-            watchSession={voiceWatch}
-            onOpenApps={() => setModal({ type: 'watch-app' })}
-            onStopWatch={async (sessionId) => {
-              const resposta = await voiceActions.watchStop(voice.channelId, sessionId);
-              if (resposta?.error) setAviso(resposta.error);
-            }}
-            onJoinWatch={(sessionId) => voiceActions.watchJoin(voice.channelId, sessionId)}
-            onLeaveWatch={(sessionId) => voiceActions.watchLeave(voice.channelId, sessionId)}
-            onProposeWatch={(sessionId, control) => voiceActions.watchProposeControl(voice.channelId, sessionId, control)}
-            onVoteWatch={(proposalId, approve) => voiceActions.watchVoteControl(voice.channelId, proposalId, approve)}
-          />
-        ) : dmMode ? (
-          activeDm ? (
-            <ChatView
-              channel={{ id: activeDm.id, name: activeDm.otherUser.username }}
-              messages={dmMessages[activeDmId] ?? []}
-              loading={dmChannelState[activeDmId]?.loading ?? false}
-              hasMore={dmChannelState[activeDmId]?.hasMore ?? false}
-              onLoadMore={() => loadDmHistory(activeDmId, dmMessages[activeDmId]?.[0]?.id)}
-              onSend={sendDmMessage}
-              onTyping={() => {}}
-              typingUsers={[]}
-              onOpenProfile={(author) => setModal({ type: 'profile', userId: author.id })}
-              error={sendError}
-              meId={me.id}
-              onReagir={reagir}
-              onEditarMensagem={editarMensagem}
-              onApagarMensagem={apagarMensagem}
-              onEncaminhar={(m) => setModal({ type: 'encaminhar', mensagem: m })}
-              onDenunciar={(m) => setModal({ type: 'reportar-bug', mensagem: m })}
-              onRodarComando={rodarComando}
-              inserirNoCampo={inserirNoCampo}
-              icon={<Avatar user={activeDm.otherUser} size={22} className="small" />}
-              emptyMessage="Escolhe uma conversa na barra ao lado."
-              placeholder={`Mensagem para ${activeDm.otherUser.username}`}
-              beginningNote={
-                <>Este e o comeco da sua conversa com <strong>{activeDm.otherUser.username}</strong>.</>
-              }
-            />
-          ) : (
-            <main className="chat empty">
-              <p>Escolhe uma conversa na barra ao lado, ou clica em + pra começar uma.</p>
-            </main>
-          )
-        ) : guilds.length === 0 ? (
-          <main className="chat empty">
-            <p>Voce ainda nao esta em nenhum servidor.</p>
-            <div className="empty-actions">
-              <button className="primary" onClick={() => setModal({ type: 'create-guild' })}>
-                Criar um servidor
-              </button>
-              <button onClick={() => setModal({ type: 'join' })}>Entrar com um convite</button>
-            </div>
-          </main>
-        ) : (
-          <ChatView
-            channel={activeChannel}
-            messages={messages[activeChannelId] ?? []}
-            loading={channelState[activeChannelId]?.loading ?? false}
-            hasMore={channelState[activeChannelId]?.hasMore ?? false}
-            onLoadMore={() => loadHistory(activeChannelId, messages[activeChannelId]?.[0]?.id)}
-            onSend={sendMessage}
-            onTyping={() => socketRef.current?.emit('typing:start', { channelId: activeChannelId })}
-            typingUsers={typingUsers}
-            onOpenProfile={(author) => setModal({ type: 'profile', userId: author.id })}
-            error={sendError}
-            members={guild?.members}
-            roles={guild?.roles}
-            meId={me.id}
-            onReagir={reagir}
-            onEditarMensagem={editarMensagem}
-            onApagarMensagem={apagarMensagem}
-            onFixarMensagem={fixarMensagem}
-            onEncaminhar={(m) => setModal({ type: 'encaminhar', mensagem: m })}
-            onMarcarNaoLido={marcarComoNaoLido}
-            onDenunciar={(m) => setModal({ type: 'reportar-bug', mensagem: m })}
-            podeModerar={podeGerenciarMensagens}
-            onRodarComando={rodarComando}
-            onAlternarMembros={() => setMembrosVisiveis((v) => !v)}
-            membrosVisiveis={membrosVisiveis}
-            inserirNoCampo={inserirNoCampo}
-            naoLidasAoAbrir={marcadorNaoLidas[activeChannelId] ?? 0}
-          />
-        )}
-      </div>
-
-      {!cinemaAberto && <MemberList
-        membroArrastavel={podeMoverNaCall || Boolean(voice.channelId)}
-        aoArrastarMembro={(membro) => arrasto.comecar({
-          tipo: 'membro',
-          id: membro.id,
-          userId: membro.id,
-          nome: nomeExibido(membro),
-          rotulo: nomeExibido(membro),
-          icone: '🔊',
-        })}
-        aoSoltarMembro={arrasto.terminar}
-        guild={dmMode ? null : guild}
-        presencas={presencas}
-        meId={me.id}
-        visivel={membrosVisiveis}
-        onOpenProfile={(member) => setModal({ type: 'profile', userId: member.id })}
-        onPromote={(member, role) => api.setMemberRole(guild.id, member.id, role).catch(() => {})}
-        onKick={acoesDoMembro.expulsar}
-        podeChamarParaCall={Boolean(voice.channelId)}
-        onChamarParaCall={(member) => voiceActions.convidar(member.id)}
-        onMenuDoMembro={menuDoMembro}
-      />}
-        </div>
-      )}
-
       <ContextMenu estado={menuContexto.estado} onFechar={menuContexto.fechar} />
 
       {aviso && (
