@@ -108,6 +108,8 @@ export const api = {
   auditoria: (guildId) => request('GET', `/guilds/${guildId}/audit`),
 
   naoLidas: (guildId) => request('GET', `/guilds/${guildId}/unread`),
+  mencoesNaoLidas: () => request('GET', '/mentions/unread'),
+  marcarMencoesLidas: (channelId) => request('POST', `/mentions/channels/${channelId}/read`, {}),
   createChannel: (guildId, payload) => request('POST', `/guilds/${guildId}/channels`, payload),
   deleteChannel: (guildId, channelId) => request('DELETE', `/guilds/${guildId}/channels/${channelId}`),
   reordenarCanais: (guildId, ordem) => request('PATCH', `/guilds/${guildId}/channels-ordem`, { ordem }),

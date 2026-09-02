@@ -11,7 +11,7 @@ const initials = (name) =>
 
 export default function GuildBar({
   guilds, activeGuildId, dmMode, unreadDmTotal, onSelect, onOpenDms, onCreate, onJoin, unreadByGuild,
-  onReportarBug, onOpenCinema,
+  mentionByGuild = {}, onReportarBug, onOpenCinema,
 }) {
   return (
     <nav className="guild-bar">
@@ -37,7 +37,11 @@ export default function GuildBar({
               <img key={guild.iconUrl} src={guild.iconUrl} alt="" style={cropStyle(guild.iconCrop)} />
             </span>
           ) : initials(guild.name)}
-          {unreadByGuild[guild.id] > 0 && guild.id !== activeGuildId && (
+          {mentionByGuild[guild.id] > 0 ? (
+            <span className="badge mention-badge" aria-label={`${mentionByGuild[guild.id]} menções`}>
+              {mentionByGuild[guild.id]}
+            </span>
+          ) : unreadByGuild[guild.id] > 0 && guild.id !== activeGuildId && (
             <span className="badge">{unreadByGuild[guild.id]}</span>
           )}
         </button>

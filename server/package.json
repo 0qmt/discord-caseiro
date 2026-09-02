@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning --watch src/index.js",
     "start": "node --disable-warning=ExperimentalWarning src/index.js",
-    "smoke": "node scripts/smoke.js"
+    "smoke": "node scripts/smoke.js",
+    "teste:mencoes": "node scripts/teste-mencoes.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

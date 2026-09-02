@@ -3,6 +3,11 @@ import { api, clearToken, getToken } from './api.js';
 import { createSocket, emitAck } from './socket.js';
 import { nomeExibido, PERM, podeAgirSobre as podeAgirSobreMembro, temPermissao } from './lib/cargos.js';
 import { mensagemMenciona, textoLegivel } from './lib/mencoes.js';
+import {
+  appEstaEmPrimeiroPlano,
+  deveExibirNotificacaoNativaDeMencao,
+  tocarSomDeMencao,
+} from './lib/notificacaoDeMencao.js';
 import { useArrastar } from './lib/arrastar.js';
 import { itensDeMensagem } from './lib/menuDeMensagem.jsx';
 import {
@@ -224,6 +229,7 @@ export default function App() {
   const [messages, setMessages] = useState({});
   const [channelState, setChannelState] = useState({});
   const [unread, setUnread] = useState({});
+  const [mentionUnread, setMentionUnread] = useState({});
   // Quantas mensagens estavam não lidas quando cada canal foi aberto - é o
   // que decide se a tela abre em cima da primeira não lida ou no fim do
   // chat (ver selectChannel). Fica até trocar de canal e voltar.
@@ -492,7 +498,14 @@ export default function App() {
     if (!me) return undefined;
 
     const socket = createSocket(getToken(), {
-      connect: () => setConnected(true),
+      connect: () => {
+        setConnected(true);
+        // Reconexões podem ter perdido eventos enquanto o servidor estava
+        // fora; o contador volta sempre da fonte persistente.
+        api.mencoesNaoLidas()
+          .then(({ mentions }) => setMentionUnread(mentions ?? {}))
+          .catch(() => {});
+      },
       disconnect: () => setConnected(false),
 
       'presence:sync': ({ online, presences }) => {
@@ -558,6 +571,9 @@ export default function App() {
 
       'guild:banned': ({ guildId }) => {
         setGuilds((prev) => prev.filter((g) => g.id !== guildId));
+        setMentionUnread((prev) => Object.fromEntries(
+          Object.entries(prev).filter(([, info]) => info.guildId !== guildId),
+        ));
         if (activeGuildRef.current === guildId) { setActiveGuildId(null); setGuild(null); }
       },
 
@@ -565,6 +581,9 @@ export default function App() {
       // estava dentro, sem ninguém ficar olhando pra um servidor fantasma.
       'guild:deleted': ({ guildId }) => {
         setGuilds((prev) => prev.filter((g) => g.id !== guildId));
+        setMentionUnread((prev) => Object.fromEntries(
+          Object.entries(prev).filter(([, info]) => info.guildId !== guildId),
+        ));
         if (activeGuildRef.current === guildId) {
           setActiveGuildId(null);
           setGuild(null);
@@ -577,6 +596,7 @@ export default function App() {
       'message:new': ({ guildId, message }) => {
         upsertMessage(message.channelId, message);
         const estouVendoEsseCanal = !dmModeRef.current && message.channelId === activeChannelRef.current;
+        const estaEmPrimeiroPlano = appEstaEmPrimeiroPlano();
 
         /*
          * Mensagem que chega com o canal aberto na frente já nasce lida.
@@ -591,11 +611,11 @@ export default function App() {
          * aberto atrás de outra janela" - nesse segundo caso a mensagem
          * continua não lida, que é o certo.
          */
-        if (estouVendoEsseCanal && document.hasFocus()) {
+        if (estouVendoEsseCanal && estaEmPrimeiroPlano) {
           socketRef.current?.emit('channel:read', { channelId: message.channelId });
         }
 
-        if (!estouVendoEsseCanal && message.author.id !== me.id) {
+        if ((!estouVendoEsseCanal || !estaEmPrimeiroPlano) && message.author.id !== me.id) {
           setUnread((prev) => ({
             ...prev,
             [message.channelId]: {
@@ -607,12 +627,12 @@ export default function App() {
           // mensagem normal já tem o indicador de não-lida, isso aqui é
           // pra não deixar passar batido quando é com você mesmo.
           const ehMencao = mensagemMenciona(message.content, me.id);
-          if (deveNotificar({
+          if (!ehMencao && deveNotificar({
             settings: notifSettingsRef.current,
             status: statusRef.current,
             guildId,
             channelId: message.channelId,
-            ehMencao,
+            ehMencao: false,
           })) {
             const corpo = textoLegivel(message.content, guildRef.current?.members) || '📎 anexo';
             notificar(
@@ -621,6 +641,51 @@ export default function App() {
             );
           }
         }
+      },
+
+      'mention:new': ({ guildId, channelId, message }) => {
+        if (!message || message.author.id === me.id) return;
+        setMentionUnread((prev) => ({
+          ...prev,
+          [channelId]: {
+            guildId,
+            count: (prev[channelId]?.count ?? 0) + 1,
+          },
+        }));
+        tocarSomDeMencao();
+
+        if (deveExibirNotificacaoNativaDeMencao({
+          channelId,
+          activeChannelId: activeChannelRef.current,
+          dmMode: dmModeRef.current,
+          appFocado: appEstaEmPrimeiroPlano(),
+        })) {
+          const corpo = textoLegivel(message.content, guildRef.current?.members) || 'anexo';
+          notificar(`${message.author.username} marcou você`, corpo, {
+            icone: message.author.avatarUrl ?? undefined,
+          });
+        }
+      },
+
+      'mention:removed': ({ channelId }) => {
+        setMentionUnread((prev) => {
+          const atual = prev[channelId];
+          if (!atual) return prev;
+          const count = Math.max(0, atual.count - 1);
+          if (count > 0) return { ...prev, [channelId]: { ...atual, count } };
+          const next = { ...prev };
+          delete next[channelId];
+          return next;
+        });
+      },
+
+      'mention:read': ({ channelId }) => {
+        setMentionUnread((prev) => {
+          if (!prev[channelId]) return prev;
+          const next = { ...prev };
+          delete next[channelId];
+          return next;
+        });
       },
 
       'dm:new': ({ message }) => {
@@ -680,6 +745,12 @@ export default function App() {
             ? { ...prev, channels: prev.channels.filter((c) => c.id !== id) }
             : prev);
         if (activeChannelRef.current === id) setActiveChannelId(null);
+        setMentionUnread((prev) => {
+          if (!prev[id]) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
       },
 
       'user:updated': ({ user }) => applyUserUpdate(user),
@@ -740,6 +811,13 @@ export default function App() {
       .then(({ settings }) => setNotifSettings(Object.fromEntries(
         settings.map((s) => [chaveDe(s.scopeType, s.scopeId), s]),
       )))
+      .catch(() => {});
+  }, [me?.id]);
+
+  useEffect(() => {
+    if (!me) return;
+    api.mencoesNaoLidas()
+      .then(({ mentions }) => setMentionUnread(mentions ?? {}))
       .catch(() => {});
   }, [me?.id]);
 
@@ -1005,7 +1083,14 @@ export default function App() {
     setSendError(null);
     // Marca no servidor, senão o contador voltaria ao recarregar a página.
     socketRef.current?.emit('channel:read', { channelId });
+    api.marcarMencoesLidas(channelId).catch(() => {});
     setUnread((prev) => {
+      if (!prev[channelId]) return prev;
+      const next = { ...prev };
+      delete next[channelId];
+      return next;
+    });
+    setMentionUnread((prev) => {
       if (!prev[channelId]) return prev;
       const next = { ...prev };
       delete next[channelId];
@@ -1249,7 +1334,11 @@ export default function App() {
 
   const acoesDoMembro = {
     abrirPerfil: (m) => setModal({ type: 'profile', userId: m.id }),
-    mencionar: (m) => setInserirNoCampo({ texto: `@${m.username} `, token: Date.now() }),
+    mencionar: (m) => setInserirNoCampo({
+      texto: `@${nomeExibido(m)} `,
+      userId: m.id,
+      token: Date.now(),
+    }),
     abrirDm: async (m) => {
       try {
         const { dm } = await api.openDm(m.id);
@@ -1599,7 +1688,7 @@ export default function App() {
     clearToken();
     setMe(null);
     setGuilds([]); setGuild(null); setActiveGuildId(null); setActiveChannelId(null);
-    setMessages({}); setChannelState({}); setUnread({}); setOnlineIds(new Set());
+    setMessages({}); setChannelState({}); setUnread({}); setMentionUnread({});
     setDmMode(false); setDms([]); setActiveDmId(null);
     setDmMessages({}); setDmChannelState({}); setDmUnread({});
   }
@@ -1631,6 +1720,19 @@ export default function App() {
   const unreadDmTotal = useMemo(
     () => Object.values(dmUnread).reduce((total, n) => total + n, 0),
     [dmUnread]);
+
+  const mentionByChannel = useMemo(
+    () => Object.fromEntries(Object.entries(mentionUnread).map(([id, info]) => [id, info.count])),
+    [mentionUnread],
+  );
+
+  const mentionByGuild = useMemo(() => {
+    const totals = {};
+    for (const info of Object.values(mentionUnread)) {
+      totals[info.guildId] = (totals[info.guildId] ?? 0) + info.count;
+    }
+    return totals;
+  }, [mentionUnread]);
 
   const activeChannel = guild?.channels.find((c) => c.id === activeChannelId) ?? null;
   const activeDm = dms.find((c) => c.id === activeDmId) ?? null;
@@ -1669,6 +1771,18 @@ export default function App() {
           messages={messages[activeChannelId] ?? []}
           naoLidasAoAbrir={marcadorNaoLidas[activeChannelId] ?? 0}
           dmMessages={dmMessages[activeDmId] ?? []}
+          channelLoading={channelState[activeChannelId]?.loading ?? false}
+          channelHasMore={channelState[activeChannelId]?.hasMore ?? false}
+          onLoadMore={() => loadHistory(activeChannelId, messages[activeChannelId]?.[0]?.id)}
+          dmLoading={dmChannelState[activeDmId]?.loading ?? false}
+          dmHasMore={dmChannelState[activeDmId]?.hasMore ?? false}
+          onLoadMoreDm={() => loadDmHistory(activeDmId, dmMessages[activeDmId]?.[0]?.id)}
+          unreadDmTotal={unreadDmTotal}
+          unreadByGuild={unreadByGuild}
+          unreadByChannel={unreadByChannel}
+          unreadByDm={dmUnread}
+          mentionByGuild={mentionByGuild}
+          mentionByChannel={mentionByChannel}
           typingUsers={typingUsers}
           sendError={sendError}
           connected={connected}
@@ -1677,6 +1791,8 @@ export default function App() {
           callMaximizada={callMaximizada}
           voiceVotacoes={voiceVotacoes}
           voiceWatch={voiceWatch}
+          voiceRooms={voiceRooms}
+          voiceChannelName={voiceChannelName}
           onSelectGuild={(guildId) => { setCinemaAberto(false); setDmMode(false); setActiveGuildId(guildId); }}
           onOpenDms={() => { setCinemaAberto(false); setDmMode(true); }}
           onSelectChannel={selectChannel}
@@ -1688,6 +1804,9 @@ export default function App() {
           onNovaConversa={() => setModal({ type: 'nova-conversa' })}
           onCreateGuild={() => setModal({ type: 'create-guild' })}
           onJoinGuild={() => setModal({ type: 'join' })}
+          onCreateChannel={(channelType, categoryId) =>
+            setModal({ type: 'create-channel', channelType, categoryId })}
+          onOpenInvite={() => setModal({ type: 'invite' })}
           onOpenCinema={() => setCinemaAberto(true)}
           onReportarBug={() => setModal({ type: 'reportar-bug' })}
           cinemaAberto={cinemaAberto}
@@ -1704,6 +1823,7 @@ export default function App() {
           onOpenApps={() => setModal({ type: 'watch-app' })}
           presencas={presencas}
           minhaAtividade={minhaAtividade}
+          meuStatus={meuStatus}
           membrosVisiveis={membrosVisiveis}
           onAlternarMembros={() => setMembrosVisiveis((v) => !v)}
           onPromote={(member, role) => api.setMemberRole(guild.id, member.id, role).catch(() => {})}
@@ -1712,14 +1832,21 @@ export default function App() {
           podeModerarVoz={podeModerarVoz}
           onChamarParaCall={(member) => voiceActions.convidar(member.id)}
           onMenuDoMembro={menuDoMembro}
-          voiceRooms={voiceRooms}
           onMenuDoParticipanteDeVoz={menuDoParticipanteDeVoz}
           onMenuDaGuild={menuDaGuild}
-          onMenuDaMensagem={menuDaMensagem}
-          acoesDaMensagem={{
-            onReagir: reagir,
-            onEncaminhar: (m) => setModal({ type: 'encaminhar', mensagem: m }),
-          }}
+          onMenuDoCanal={menuDoCanal}
+          onMenuDaCategoria={menuDaCategoria}
+          onAbrirMenuDeStatus={menuDeStatus}
+          onReagir={reagir}
+          onEditarMensagem={editarMensagem}
+          onApagarMensagem={apagarMensagem}
+          onFixarMensagem={fixarMensagem}
+          onEncaminhar={(m) => setModal({ type: 'encaminhar', mensagem: m })}
+          onMarcarNaoLido={marcarComoNaoLido}
+          onDenunciar={(m) => setModal({ type: 'reportar-bug', mensagem: m })}
+          podeModerar={podeGerenciarMensagens}
+          onRodarComando={rodarComando}
+          inserirNoCampo={inserirNoCampo}
           podeOrdenarCanais={podeGerenciarCanais}
           podeMoverNaCall={podeMoverNaCall}
           onReordenarCanais={reordenarCanais}

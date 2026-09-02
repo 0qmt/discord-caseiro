@@ -158,6 +158,19 @@ CREATE TABLE IF NOT EXISTS read_state (
   PRIMARY KEY (user_id, channel_id)
 );
 
+-- Menções são recibos próprios, separados da contagem genérica de não lidas.
+-- O conteúdo continua guardando <@id>, enquanto esta tabela permite contar,
+-- reconhecer e limpar a menção sem depender do nome atual da pessoa.
+CREATE TABLE IF NOT EXISTS message_mentions (
+  message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  guild_id   TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+  channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  read_at    INTEGER,
+  PRIMARY KEY (message_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS guild_bans (
   guild_id   TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
   user_id    TEXT NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
@@ -215,3 +228,5 @@ CREATE INDEX IF NOT EXISTS idx_invites_guild     ON invites(guild_id);
 CREATE INDEX IF NOT EXISTS idx_dm_messages_dm    ON dm_messages(dm_channel_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_dm_channels_a     ON dm_channels(user_a_id);
 CREATE INDEX IF NOT EXISTS idx_dm_channels_b     ON dm_channels(user_b_id);
+CREATE INDEX IF NOT EXISTS idx_mentions_user     ON message_mentions(user_id, read_at, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mentions_channel  ON message_mentions(user_id, channel_id, read_at);

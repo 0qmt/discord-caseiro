@@ -81,6 +81,7 @@ export default function ChannelSidebar({
   guild,
   activeChannelId,
   unreadByChannel,
+  mentionByChannel = {},
   onSelectChannel,
   onCreateChannel,
   onOpenInvite,
@@ -205,7 +206,11 @@ export default function ChannelSidebar({
         >
           <span className="hash">#</span>
           <span className="channel-label">{channel.name}</span>
-          {unreadByChannel[channel.id] > 0 && channel.id !== activeChannelId && (
+          {mentionByChannel[channel.id] > 0 ? (
+            <span className="badge small mention-badge" aria-label={`${mentionByChannel[channel.id]} menções`}>
+              {mentionByChannel[channel.id]}
+            </span>
+          ) : unreadByChannel[channel.id] > 0 && channel.id !== activeChannelId && (
             <span className="badge small">{unreadByChannel[channel.id]}</span>
           )}
         </button>

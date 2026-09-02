@@ -9,6 +9,18 @@
  * um deles mexendo no outro sem perceber.
  */
 import { chaveDe, deveNotificar, PARA_SEMPRE } from '../src/lib/notificacoes.js';
+import {
+  ajustarMencoesAposEdicao,
+  codificarMencoes,
+  codificarMencoesComEntidades,
+  decodificarMencoesParaEdicao,
+  encontrarConsultaMencao,
+  mensagemMenciona,
+} from '../src/lib/mencoes.js';
+import {
+  deveExibirNotificacaoNativaDeMencao,
+  tocarSomDeMencao,
+} from '../src/lib/notificacaoDeMencao.js';
 
 let passou = 0;
 const falhas = [];
@@ -88,6 +100,74 @@ check('dm silenciada nao notifica',
   deveNotificar({ settings: dmSilenciada, status: 'online', dmChannelId: 'd1', ehMencao: true }) === false);
 check('silencio de servidor nao vaza pra dm',
   deveNotificar({ settings: silenciadoAte, status: 'online', dmChannelId: 'd1', ehMencao: true }) === true);
+
+console.log('\nmenções: identidade e edição');
+const membros = [
+  { id: 'u1', username: 'ana', nickname: 'Ana Silva' },
+  { id: 'u2', username: 'bia', nickname: 'Bia' },
+];
+const consulta = encontrarConsultaMencao('oi @Bi', 6);
+check('digitar @ abre uma consulta com intervalo correto',
+  consulta?.termo === 'Bi' && consulta.inicio === 3 && consulta.fim === 6);
+
+const entidadeBia = { userId: 'u2', rotulo: '@Bia', inicio: 3, fim: 7 };
+check('menção escolhida é serializada pelo ID real',
+  codificarMencoesComEntidades('oi @Bia', [entidadeBia], membros) === 'oi <@u2>');
+
+const nomesIguais = [
+  { id: 'u3', username: 'alex' },
+  { id: 'u4', username: 'alex' },
+];
+check('nome ambíguo digitado à mão não escolhe um ID arbitrário',
+  codificarMencoes('oi @alex', nomesIguais) === 'oi @alex');
+
+check('alteração de nickname não muda o ID já selecionado',
+  codificarMencoesComEntidades('oi @Bia', [entidadeBia], [{ ...membros[1], nickname: 'Beatriz' }]) === 'oi <@u2>');
+
+const deslocadas = ajustarMencoesAposEdicao('oi @Bia', 'bom dia, oi @Bia', [entidadeBia]);
+check('editar antes da menção desloca a entidade sem perder o ID',
+  deslocadas[0]?.inicio === 12 && deslocadas[0]?.fim === 16);
+check('editar dentro da menção a transforma em texto normal',
+  ajustarMencoesAposEdicao('oi @Bia', 'oi @Bixa', [entidadeBia]).length === 0);
+
+const reaberta = decodificarMencoesParaEdicao('olá <@u2>', membros);
+check('editar mensagem existente recupera texto legível e ID',
+  reaberta.texto === 'olá @Bia' && reaberta.entidades[0]?.userId === 'u2');
+check('detecção da menção usa ID, não nome', mensagemMenciona('olá <@u2>', 'u2') === true);
+
+console.log('\nmenções: notificação nativa');
+check('canal aberto e app em foco não duplica notificação do Windows',
+  deveExibirNotificacaoNativaDeMencao({
+    channelId: 'c1', activeChannelId: 'c1', dmMode: false, appFocado: true,
+  }) === false);
+check('menção em outro canal notifica mesmo com app em foco',
+  deveExibirNotificacaoNativaDeMencao({
+    channelId: 'c2', activeChannelId: 'c1', dmMode: false, appFocado: true,
+  }) === true);
+check('menção no canal aberto notifica quando o app está em segundo plano',
+  deveExibirNotificacaoNativaDeMencao({
+    channelId: 'c1', activeChannelId: 'c1', dmMode: false, appFocado: false,
+  }) === true);
+
+let tonsIniciados = 0;
+globalThis.AudioContext = class AudioContextFake {
+  constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {}; }
+  createGain() {
+    return {
+      gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} },
+      connect() {},
+    };
+  }
+  createOscillator() {
+    return {
+      type: 'sine', frequency: { setValueAtTime() {} }, connect() {},
+      start() { tonsIniciados += 1; }, stop() {},
+    };
+  }
+};
+tocarSomDeMencao();
+check('som de menção dispara os dois tons do aviso', tonsIniciados === 2);
+delete globalThis.AudioContext;
 
 const total = passou + falhas.length;
 console.log(`\n${passou}/${total} verificacoes passaram`);

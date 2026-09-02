@@ -3,7 +3,13 @@ import { api } from '../api.js';
 import { corDoMembro, nomeExibido } from '../lib/cargos.js';
 import { lerComando, sugestoes } from '../lib/comandos.js';
 import { linkify } from '../lib/linkify.js';
-import { codificarMencoes, mensagemMenciona } from '../lib/mencoes.js';
+import {
+  ajustarMencoesAposEdicao,
+  codificarRascunho,
+  decodificarMencoesParaEdicao,
+  encontrarConsultaMencao,
+  mensagemMenciona,
+} from '../lib/mencoes.js';
 import { itensDeImagem } from '../lib/menuDeImagem.jsx';
 import { EMOJIS_RAPIDOS, itensDeMensagem } from '../lib/menuDeMensagem.jsx';
 import { useMensagensNovas } from '../lib/mensagensNovas.js';
@@ -111,31 +117,56 @@ export function Anexo({ anexo }) {
 
 const EVERYONE_BATE = (termo) => 'everyone'.startsWith(termo) || 'all'.startsWith(termo) || 'todos'.startsWith(termo);
 
-/** Lista pra marcar alguém ou @everyone, aparece assim que digita "@". */
-function MencaoPicker({ termo, membros, onEscolher }) {
+function opcoesDeMencao(termo, membros) {
+  if (termo === null) return [];
   const termoBaixo = termo.toLowerCase();
-  const filtrados = membros
-    .filter((m) => nomeExibido(m).toLowerCase().startsWith(termoBaixo))
-    .slice(0, 6);
-  const mostraTodos = EVERYONE_BATE(termoBaixo);
+  const pessoas = (membros ?? [])
+    .filter((m) => [nomeExibido(m), m.username, m.handle]
+      .filter(Boolean)
+      .some((nome) => nome.toLowerCase().startsWith(termoBaixo)))
+    .slice(0, 6)
+    .map((membro) => ({ id: membro.id, nome: nomeExibido(membro), membro }));
+  return [
+    ...(EVERYONE_BATE(termoBaixo) ? [{ id: 'everyone', nome: 'everyone', everyone: true }] : []),
+    ...pessoas,
+  ];
+}
 
-  if (!mostraTodos && filtrados.length === 0) return null;
+/** Lista pra marcar alguém ou @everyone, aparece assim que digita "@". */
+function MencaoPicker({ opcoes, ativo, onEscolher }) {
+  if (opcoes.length === 0) return null;
 
   return (
-    <div className="mencao-picker">
-      {mostraTodos && (
-        <button type="button" className="mencao-picker-item" onClick={() => onEscolher('everyone')}>
-          <span className="mencao-picker-icone"><Icon name="users" size={16} /></span>
-          <div>
-            <span className="mencao-picker-nome">@everyone</span>
-            <span className="mencao-picker-dica">avisa todo mundo do servidor</span>
-          </div>
-        </button>
-      )}
-      {filtrados.map((m) => (
-        <button key={m.id} type="button" className="mencao-picker-item" onClick={() => onEscolher(m.username)}>
-          <Avatar user={m} size={22} />
-          <span className="mencao-picker-nome">{nomeExibido(m)}</span>
+    <div className="mencao-picker" role="listbox" aria-label="Mencionar alguém">
+      {opcoes.map((opcao, indice) => (
+        <button
+          key={opcao.id}
+          type="button"
+          role="option"
+          aria-selected={indice === ativo}
+          className={`mencao-picker-item ${indice === ativo ? 'ativo' : ''}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onEscolher(opcao)}
+        >
+          {opcao.everyone ? (
+            <>
+              <span className="mencao-picker-icone"><Icon name="users" size={16} /></span>
+              <span className="mencao-picker-texto">
+                <span className="mencao-picker-nome">@everyone</span>
+                <span className="mencao-picker-dica">avisa todo o servidor</span>
+              </span>
+            </>
+          ) : (
+            <>
+              <Avatar user={opcao.membro} size={24} />
+              <span className="mencao-picker-texto">
+                <span className="mencao-picker-nome">{opcao.nome}</span>
+                {opcao.membro.username !== opcao.nome && (
+                  <span className="mencao-picker-dica">@{opcao.membro.username}</span>
+                )}
+              </span>
+            </>
+          )}
         </button>
       ))}
     </div>
@@ -271,7 +302,9 @@ export default function ChatView({
   const [enviandoAnexo, setEnviandoAnexo] = useState(false);
   const [erroAnexo, setErroAnexo] = useState(null);
   const [gifAberto, setGifAberto] = useState(false);
-  const [mencaoTermo, setMencaoTermo] = useState(null); // null = fechado
+  const [mencaoTermo, setMencaoTermo] = useState(null); // null | { inicio, fim, termo }
+  const [mencoesEscolhidas, setMencoesEscolhidas] = useState([]);
+  const [mencaoAtiva, setMencaoAtiva] = useState(0);
   const [slashAtivo, setSlashAtivo] = useState(0);
   const [respondendo, setRespondendo] = useState(null); // mensagem sendo respondida
   const [editando, setEditando] = useState(null);       // { id, texto }
@@ -290,6 +323,10 @@ export default function ChatView({
   const menu = useContextMenu();
 
   const listaSlash = useMemo(() => (onRodarComando ? sugestoes(draft) : []), [draft, onRodarComando]);
+  const opcoesMencao = useMemo(
+    () => opcoesDeMencao(mencaoTermo?.termo ?? null, members),
+    [mencaoTermo, members],
+  );
 
   const novas = useMensagensNovas(messages, channel?.id);
 
@@ -332,6 +369,7 @@ export default function ChatView({
     posicionouNaoLida.current = false;
     setMarcadorId(null);
     setDraft('');
+    setMencoesEscolhidas([]);
     setAnexoPendente(null);
     setErroAnexo(null);
     setRespondendo(null);
@@ -343,7 +381,23 @@ export default function ChatView({
   // cada pedido, então mencionar a mesma pessoa duas vezes funciona.
   useEffect(() => {
     if (!inserirNoCampo?.texto) return;
-    setDraft((d) => (d.endsWith(' ') || !d ? d : `${d} `) + inserirNoCampo.texto);
+    setDraft((atual) => {
+      const separador = atual.endsWith(' ') || !atual ? '' : ' ';
+      const rotulo = inserirNoCampo.texto.trimEnd();
+      const inicio = atual.length + separador.length;
+      const proximo = `${atual}${separador}${rotulo} `;
+      setMencoesEscolhidas((prev) => {
+        const reposicionadas = ajustarMencoesAposEdicao(atual, proximo, prev);
+        if (!inserirNoCampo.userId) return reposicionadas;
+        return [...reposicionadas, {
+          userId: inserirNoCampo.userId,
+          rotulo,
+          inicio,
+          fim: inicio + rotulo.length,
+        }];
+      });
+      return proximo;
+    });
     campoRef.current?.focus();
   }, [inserirNoCampo?.token]);
 
@@ -377,12 +431,14 @@ export default function ChatView({
   async function submit(e) {
     e?.preventDefault();
     const bruto = draft.trim();
+    const conteudo = members ? codificarRascunho(draft, mencoesEscolhidas, members) : bruto;
 
     // Editando: Enter salva a edição em vez de mandar mensagem nova.
     if (editando) {
-      if (bruto) await onEditarMensagem?.(editando.id, bruto);
+      if (bruto) await onEditarMensagem?.(editando.id, conteudo);
       setEditando(null);
       setDraft('');
+      setMencoesEscolhidas([]);
       return;
     }
 
@@ -393,6 +449,7 @@ export default function ChatView({
     const lido = onRodarComando ? lerComando(bruto) : null;
     if (lido?.comando) {
       setDraft('');
+      setMencoesEscolhidas([]);
       setMencaoTermo(null);
       await onRodarComando(lido);
       return;
@@ -404,26 +461,52 @@ export default function ChatView({
 
     stickToBottom.current = true;
     setDraft('');
+    setMencoesEscolhidas([]);
     setMencaoTermo(null);
-    onSend(members ? codificarMencoes(bruto, members) : bruto, anexoPendente, respondendo?.id ?? null);
+    onSend(conteudo, anexoPendente, respondendo?.id ?? null);
     setAnexoPendente(null);
     setRespondendo(null);
   }
 
   function iniciarEdicao(message) {
+    const decodificada = members
+      ? decodificarMencoesParaEdicao(message.content, members)
+      : { texto: message.content, entidades: [] };
     setEditando({ id: message.id });
     setRespondendo(null);
-    setDraft(message.content);
+    setDraft(decodificada.texto);
+    setMencoesEscolhidas(decodificada.entidades);
     campoRef.current?.focus();
   }
 
   function cancelarContexto() {
     setEditando(null);
     setRespondendo(null);
-    if (editando) setDraft('');
+    if (editando) {
+      setDraft('');
+      setMencoesEscolhidas([]);
+    }
   }
 
   function handleKeyDown(e) {
+    if (mencaoTermo !== null && opcoesMencao.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMencaoAtiva((i) => (i + 1) % opcoesMencao.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMencaoAtiva((i) => (i - 1 + opcoesMencao.length) % opcoesMencao.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        escolherMencao(opcoesMencao[mencaoAtiva] ?? opcoesMencao[0]);
+        return;
+      }
+    }
+
     // Enquanto o menu de comandos está aberto, as setas navegam nele.
     if (listaSlash.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -455,7 +538,7 @@ export default function ChatView({
       if (minha) { e.preventDefault(); iniciarEdicao(minha); return; }
     }
 
-    if (e.key === 'Enter' && !e.shiftKey && mencaoTermo === null) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
       return;
@@ -476,18 +559,34 @@ export default function ChatView({
 
   function handleChange(e) {
     const valor = e.target.value;
+    const cursor = e.target.selectionStart;
+    setMencoesEscolhidas((prev) => ajustarMencoesAposEdicao(draft, valor, prev));
     setDraft(valor);
     setSlashAtivo(0);
+    setMencaoAtiva(0);
     if (!members) return;
-    // Só olha o "@parcial" bem no fim do texto - cobre o jeito normal de
-    // digitar (a maioria das mensagens é escrita do início pro fim).
-    const m = valor.match(/(?:^|\s)@([\p{L}\p{N}_]*)$/u);
-    setMencaoTermo(m ? m[1] : null);
+    setMencaoTermo(encontrarConsultaMencao(valor, cursor));
   }
 
-  function escolherMencao(nome) {
-    setDraft((d) => d.replace(/@[\p{L}\p{N}_]*$/u, `@${nome} `));
+  function escolherMencao(escolha) {
+    if (!mencaoTermo) return;
+    const rotulo = `@${escolha.nome}`;
+    const proximo = `${draft.slice(0, mencaoTermo.inicio)}${rotulo} ${draft.slice(mencaoTermo.fim)}`;
+    const reposicionadas = ajustarMencoesAposEdicao(draft, proximo, mencoesEscolhidas);
+    setDraft(proximo);
+    setMencoesEscolhidas([...reposicionadas, {
+      userId: escolha.id,
+      rotulo,
+      inicio: mencaoTermo.inicio,
+      fim: mencaoTermo.inicio + rotulo.length,
+    }]);
     setMencaoTermo(null);
+    setMencaoAtiva(0);
+    requestAnimationFrame(() => {
+      const cursor = mencaoTermo.inicio + rotulo.length + 1;
+      campoRef.current?.focus();
+      campoRef.current?.setSelectionRange(cursor, cursor);
+    });
   }
 
   async function enviarArquivoParaAnexo(arquivo) {
@@ -781,7 +880,11 @@ export default function ChatView({
 
         <div className="composer-campo-wrap">
           {mencaoTermo !== null && members && (
-            <MencaoPicker termo={mencaoTermo} membros={members} onEscolher={escolherMencao} />
+            <MencaoPicker
+              opcoes={opcoesMencao}
+              ativo={mencaoAtiva}
+              onEscolher={escolherMencao}
+            />
           )}
           {mencaoTermo === null && (
             <SlashMenu lista={listaSlash} ativo={slashAtivo} onEscolher={escolherComando} />

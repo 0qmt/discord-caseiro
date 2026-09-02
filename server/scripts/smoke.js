@@ -229,6 +229,64 @@ async function main() {
   check('a outra ponta recebe message:new', received?.message?.content === 'oi pessoal');
   check('mensagem vem com o autor', received?.message?.author?.username === 'alice');
 
+  console.log('\nmenções por ID');
+  const mencaoChegou = waitFor(bobSocket, 'mention:new');
+  const mencaoAck = await new Promise((resolve) => aliceSocket.emit('message:send', {
+    channelId: textChannel.id,
+    content: `oi <@${bob.user.id}>`,
+  }, resolve));
+  const mencao = await mencaoChegou.catch(() => null);
+  check('evento de menção chega diretamente ao ID marcado',
+    mencao?.messageId === mencaoAck?.message?.id && mencao?.message?.content.includes(bob.user.id),
+    JSON.stringify(mencao));
+
+  const pendentesBob = await api('GET', '/api/mentions/unread', { token: bob.token });
+  check('contador de menções persiste no servidor',
+    pendentesBob.data?.mentions?.[textChannel.id]?.count === 1,
+    JSON.stringify(pendentesBob.data));
+  const pendentesAlice = await api('GET', '/api/mentions/unread', { token: alice.token });
+  check('autor não cria menção para si mesmo',
+    !pendentesAlice.data?.mentions?.[textChannel.id]);
+
+  const leuMencoes = await api('POST', `/api/mentions/channels/${textChannel.id}/read`, {
+    token: bob.token, body: {},
+  });
+  check('clicar no canal reconhece suas menções',
+    leuMencoes.status === 200 && leuMencoes.data?.acknowledged === 1,
+    JSON.stringify(leuMencoes.data));
+  const zeradas = await api('GET', '/api/mentions/unread', { token: bob.token });
+  check('menção reconhecida sai do contador persistente',
+    !zeradas.data?.mentions?.[textChannel.id]);
+
+  const mensagemEditavel = await new Promise((resolve) => aliceSocket.emit('message:send', {
+    channelId: textChannel.id, content: 'ainda sem marcar ninguém',
+  }, resolve));
+  const mencaoPorEdicao = waitFor(bobSocket, 'mention:new');
+  await new Promise((resolve) => aliceSocket.emit('message:edit', {
+    messageId: mensagemEditavel.message.id,
+    content: `agora marquei <@${bob.user.id}>`,
+  }, resolve));
+  check('editar uma mensagem para incluir o ID cria a menção',
+    (await mencaoPorEdicao.catch(() => null))?.messageId === mensagemEditavel.message.id);
+
+  const mencaoRemovida = waitFor(bobSocket, 'mention:removed');
+  await new Promise((resolve) => aliceSocket.emit('message:edit', {
+    messageId: mensagemEditavel.message.id, content: 'removi a marcação',
+  }, resolve));
+  check('editar e retirar a marcação corrige o contador em tempo real',
+    (await mencaoRemovida.catch(() => null))?.messageId === mensagemEditavel.message.id);
+
+  const todosChegou = waitFor(bobSocket, 'mention:new');
+  await new Promise((resolve) => aliceSocket.emit('message:send', {
+    channelId: textChannel.id, content: 'atenção <@everyone> <@everyone>',
+  }, resolve));
+  check('@everyone duplicado gera um único recibo por pessoa',
+    (await todosChegou.catch(() => null))?.channelId === textChannel.id);
+  const todosPendentes = await api('GET', '/api/mentions/unread', { token: bob.token });
+  check('@everyone incrementa uma vez por mensagem',
+    todosPendentes.data?.mentions?.[textChannel.id]?.count === 1,
+    JSON.stringify(todosPendentes.data));
+
   const empty = await new Promise((resolve) =>
     aliceSocket.emit('message:send', { channelId: textChannel.id, content: '   ' }, resolve));
   check('mensagem vazia e recusada', Boolean(empty?.error));

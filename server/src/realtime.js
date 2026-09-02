@@ -4,6 +4,7 @@ import { q } from './db.js';
 import { userFromToken } from './lib/auth.js';
 import { setIo } from './lib/bus.js';
 import { newId } from './lib/ids.js';
+import { sincronizarMencoes } from './lib/mencoes.js';
 import {
   canInChannel, dmParticipants, estaDeCastigo, guildIdOfChannel, isMember, PERM,
 } from './lib/permissions.js';
@@ -141,6 +142,19 @@ const emojiValido = (bruto) => {
   return emoji.length >= 1 && emoji.length <= 16 && !/[<>\s]/.test(emoji) ? emoji : null;
 };
 
+function emitirMudancasDeMencao(io, { guildId, channelId, message }, mudancas) {
+  for (const userId of mudancas.adicionados) {
+    io.to(`user:${userId}`).emit('mention:new', {
+      guildId, channelId, messageId: message.id, message,
+    });
+  }
+  for (const userId of mudancas.removidos) {
+    io.to(`user:${userId}`).emit('mention:removed', {
+      guildId, channelId, messageId: message.id,
+    });
+  }
+}
+
 export function attachRealtime(httpServer) {
   const io = new Server(httpServer, {
     cors: { origin: config.clientOrigins, credentials: true },
@@ -249,6 +263,15 @@ export function attachRealtime(httpServer) {
       // Vai pra guild inteira (nao so pro canal aberto) pra alimentar
       // indicador de nao-lidas nos outros canais.
       io.to(`guild:${guildId}`).emit('message:new', { guildId, message: dto });
+      const mencoes = sincronizarMencoes({
+        messageId: message.id,
+        guildId,
+        channelId,
+        authorId: user.id,
+        content,
+        createdAt: now,
+      });
+      emitirMudancasDeMencao(io, { guildId, channelId, message: dto }, mencoes);
       respond({ message: dto, nonce: payload.nonce ?? null });
     });
 
@@ -369,6 +392,15 @@ export function attachRealtime(httpServer) {
       if (daGuild) {
         const guildId = guildIdOfChannel(msg.channel_id);
         io.to(`guild:${guildId}`).emit('message:updated', { guildId, message: dto });
+        const mencoes = sincronizarMencoes({
+          messageId: id,
+          guildId,
+          channelId: msg.channel_id,
+          authorId: user.id,
+          content: texto,
+          createdAt: msg.created_at,
+        });
+        emitirMudancasDeMencao(io, { guildId, channelId: msg.channel_id, message: dto }, mencoes);
       } else {
         for (const pid of dmParticipants(msg.dm_channel_id) ?? []) {
           io.to(`user:${pid}`).emit('message:updated', { message: dto });
@@ -390,11 +422,19 @@ export function attachRealtime(httpServer) {
         if (daGuild.author_id !== user.id && !podeModerar) {
           return respond({ error: 'permissao insuficiente' });
         }
+        const mencoesPendentes = q.all(
+          'SELECT user_id FROM message_mentions WHERE message_id = ? AND read_at IS NULL', id,
+        );
         q.run('DELETE FROM messages WHERE id = ?', id);
         q.run('DELETE FROM message_reactions WHERE message_id = ?', id);
         io.to(`guild:${guildId}`).emit('message:deleted', {
           guildId, channelId: daGuild.channel_id, messageId: id,
         });
+        for (const alvo of mencoesPendentes) {
+          io.to(`user:${alvo.user_id}`).emit('mention:removed', {
+            guildId, channelId: daGuild.channel_id, messageId: id,
+          });
+        }
         return respond({ ok: true });
       }
 
