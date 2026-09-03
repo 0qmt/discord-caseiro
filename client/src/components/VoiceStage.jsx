@@ -240,19 +240,15 @@ function Tile({
             <Icon name="picture-in-picture" size={13} />
           </button>
         )}
-        {ehTela && (
-          <button
-            className={`icon-btn troca-janela ${expandido ? 'aberto' : ''}`}
-            title={expandido ? 'Sair da tela cheia' : 'Ocupar a janela'}
-            onClick={alternarExpandido}
-          >
-            {/* Girar o ícone inteiro (versão antiga) quase não mudava nada -
-                "expand" tem 4 cantos parecidos em qualquer rotação de 90°.
-                Troquei por um crossfade de verdade entre os dois desenhos. */}
-            <span className="camada base"><Icon name="expand" size={14} /></span>
-            <span className="camada corte"><Icon name="x" size={16} /></span>
-          </button>
-        )}
+        <button
+          className={`icon-btn troca-janela ${expandido ? 'aberto' : ''}`}
+          title={expandido ? 'Sair da tela cheia' : 'Abrir câmera em tela cheia'}
+          onClick={alternarExpandido}
+        >
+          {/* O mesmo controle vale para câmera e compartilhamento de tela. */}
+          <span className="camada base"><Icon name="expand" size={14} /></span>
+          <span className="camada corte"><Icon name="x" size={16} /></span>
+        </button>
       </span>
       {/* Botão de sair sempre visível enquanto expandido, sem depender de
           passar o mouse em cima - `.voice-tile-acoes` só some/aparece no
