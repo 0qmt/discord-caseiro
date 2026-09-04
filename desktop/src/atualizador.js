@@ -7,7 +7,7 @@ const INTERVALO_MS = 30 * 60 * 1000;
 const REAVISO_MS = 20 * 60 * 1000;
 
 autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.autoInstallOnAppQuit = true;
 // Atualizacao vem do GitHub Releases (ver "publish" em package.json), nao
 // mais do nosso tunel - o instalador e grande (~90MB) e baixar ele pelo
 // tunel caseiro toda hora e o que estourava a banda gratis do ngrok.

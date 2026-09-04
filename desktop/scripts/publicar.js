@@ -32,11 +32,12 @@ const DIST = path.join(__dirname, '..', 'dist');
 const DESTINO = path.join(__dirname, '..', '..', 'data', 'updates');
 
 const versao = pkg.version;
+const produto = pkg.build?.productName ?? pkg.name;
 /** Como o electron-builder gera (com espaços). */
-const geradoExe = `Discord Caseiro Setup ${versao}.exe`;
+const geradoExe = `${produto} Setup ${versao}.exe`;
 const geradoBlockmap = `${geradoExe}.blockmap`;
 /** Como precisa chegar no GitHub (com hífens, igual ao latest.yml). */
-const publicadoExe = `Discord-Caseiro-Setup-${versao}.exe`;
+const publicadoExe = geradoExe.replace(/\s+/g, '-');
 const publicadoBlockmap = `${publicadoExe}.blockmap`;
 const latestYml = 'latest.yml';
 
@@ -53,8 +54,13 @@ fs.copyFileSync(path.join(DIST, geradoExe), path.join(DESTINO, publicadoExe));
 fs.copyFileSync(path.join(DIST, geradoBlockmap), path.join(DESTINO, publicadoBlockmap));
 fs.copyFileSync(path.join(DIST, latestYml), path.join(DESTINO, latestYml));
 
-const nomeEstavel = 'discord-caseiro-setup-latest.exe';
-fs.copyFileSync(path.join(DIST, geradoExe), path.join(DESTINO, nomeEstavel));
+const nomesEstaticos = [
+  'discordia-setup-latest.exe',
+  'discord-caseiro-setup-latest.exe',
+];
+for (const nomeEstavel of nomesEstaticos) {
+  fs.copyFileSync(path.join(DIST, geradoExe), path.join(DESTINO, nomeEstavel));
+}
 
 /*
  * A trava: lê do latest.yml o nome que o app VAI pedir e confere que é
@@ -79,10 +85,14 @@ console.log(`[publicar] pronto em ${DESTINO}:`);
 console.log(`  - ${publicadoExe}`);
 console.log(`  - ${publicadoBlockmap}`);
 console.log(`  - ${latestYml}  (confere: pede "${pedido}")`);
-console.log(`  - ${nomeEstavel} (~${tamanhoMb} MB, cópia pra pagina de download)`);
+for (const nomeEstavel of nomesEstaticos) {
+  console.log(`  - ${nomeEstavel} (~${tamanhoMb} MB, cópia pra pagina de download)`);
+}
 console.log('[publicar] falta so publicar:');
 console.log(`  gh release create v${versao} --title "v${versao}" --notes "..." \\`);
 console.log(`    "data/updates/${publicadoExe}" \\`);
 console.log(`    "data/updates/${publicadoBlockmap}" \\`);
 console.log(`    "data/updates/${latestYml}" \\`);
-console.log(`    "data/updates/${nomeEstavel}"`);
+for (const nomeEstavel of nomesEstaticos) {
+  console.log(`    "data/updates/${nomeEstavel}" \\`);
+}

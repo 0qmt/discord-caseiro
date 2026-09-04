@@ -9,6 +9,7 @@ const jogos = require('./jogos.js');
 const { instalarPermissoes, instalarCapturaDeTela } = require('./sessao.js');
 
 const DEV_URL = process.env.DISCORD_CASEIRO_DEV_URL ?? null;
+const NOME_DO_APP = 'discordia';
 
 // Sem isso o Windows não sabe de qual "app" é a notificação e simplesmente
 // não mostra nada, em silêncio - sem erro nenhum no console pra avisar.
@@ -199,6 +200,7 @@ function mostrarSplash() {
 
 function criarJanela() {
   janela = new BrowserWindow({
+    title: NOME_DO_APP,
     width: 1280,
     height: 800,
     minWidth: 900,
@@ -222,6 +224,10 @@ function criarJanela() {
 
   janela.on('enter-full-screen', () => emitirEstadoDeTelaCheia(true));
   janela.on('leave-full-screen', () => emitirEstadoDeTelaCheia(false));
+  janela.webContents.on('page-title-updated', (evento) => {
+    evento.preventDefault();
+    janela.setTitle(NOME_DO_APP);
+  });
 
   // Fechar no X so minimiza pra bandeja - continua recebendo chamada e
   // mensagem por trás. So sai de verdade pelo menu/bandeja "Sair".
@@ -257,9 +263,9 @@ function mostrarJanelaPrincipal() {
 function montarBandeja() {
   const icone = nativeImage.createFromPath(paginaLocal('logo.png')).resize({ width: 32, height: 32 });
   bandeja = new Tray(icone);
-  bandeja.setToolTip('Discord Caseiro');
+  bandeja.setToolTip(NOME_DO_APP);
   bandeja.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Abrir Discord Caseiro', click: mostrarJanelaPrincipal },
+    { label: `Abrir ${NOME_DO_APP}`, click: mostrarJanelaPrincipal },
     { type: 'separator' },
     {
       label: 'Sair',
@@ -327,7 +333,7 @@ ipcMain.on('app:notificar', (evento, payload = {}) => {
   if (!Notification.isSupported()) return;
 
   const aviso = new Notification({
-    title: String(payload.titulo ?? 'Discord Caseiro').slice(0, 120),
+    title: String(payload.titulo ?? NOME_DO_APP).slice(0, 120),
     body: String(payload.corpo ?? '').slice(0, 400),
     silent: false,
   });
@@ -547,6 +553,6 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   process.on('uncaughtException', (erro) => {
-    dialog.showErrorBox('Discord Caseiro', String(erro?.stack ?? erro));
+    dialog.showErrorBox(NOME_DO_APP, String(erro?.stack ?? erro));
   });
 }
