@@ -31,7 +31,7 @@ export default function AuthView({ onAuthenticated }) {
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={submit}>
-        <h1>Discord Caseiro</h1>
+        <h1>discordia</h1>
         <p className="auth-sub">
           {isRegister ? 'Cria sua conta neste servidor' : 'Entra com a sua conta'}
         </p>

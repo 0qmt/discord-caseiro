@@ -232,7 +232,7 @@ function SecaoNotificacoes() {
         )}
         <button
           onClick={() => {
-            notificar('Discord Caseiro', 'Se você está lendo isso, as notificações funcionam.');
+            notificar('discordia', 'Se você está lendo isso, as notificações funcionam.');
             setTestada(true);
           }}
         >
@@ -335,7 +335,7 @@ export default function SettingsScreen({
         </div>
 
         <div className="settings-grupo">
-          <span className="settings-grupo-titulo">Discord Caseiro</span>
+          <span className="settings-grupo-titulo">discordia</span>
           <button
             className={`settings-item ${aba === 'sobre' ? 'ativo' : ''}`}
             onClick={() => setAba('sobre')}
@@ -383,7 +383,7 @@ export default function SettingsScreen({
           <section className="settings-secao">
             <h2>Sobre</h2>
             <p className="hint">
-              Discord Caseiro — comunicação em tempo real self-hosted: servidor, canais,
+              discordia — comunicação em tempo real self-hosted: servidor, canais,
               chat e chamadas rodando na sua própria máquina.
             </p>
             <div className="settings-versao">
@@ -461,7 +461,7 @@ function SecaoServidor() {
   return (
     <section className="settings-secao">
       <h2>Servidor</h2>
-      <p className="hint">Saúde da máquina que está hospedando o Discord Caseiro, ao vivo.</p>
+      <p className="hint">Saúde da máquina que está hospedando o discordia, ao vivo.</p>
 
       {erro && <div className="auth-error">{erro}</div>}
       {!stats && !erro && <p className="hint">carregando...</p>}
