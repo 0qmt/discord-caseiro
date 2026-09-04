@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const {
   app, BrowserWindow, Menu, Notification, Tray, nativeImage, ipcMain, session, shell, dialog,
   screen,
@@ -12,6 +13,7 @@ const DEV_URL = process.env.DISCORD_CASEIRO_DEV_URL ?? null;
 // Sem isso o Windows não sabe de qual "app" é a notificação e simplesmente
 // não mostra nada, em silêncio - sem erro nenhum no console pra avisar.
 app.setAppUserModelId('com.discordcaseiro.app');
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 let janela = null;
 let janelaPlayer = null;
@@ -34,6 +36,32 @@ if (config.precisaLiberarOrigemInsegura(servidorAtual)) {
 const ehNossoServidor = (url) => config.mesmaOrigem(url, servidorAtual);
 
 const paginaLocal = (nome) => path.join(__dirname, nome);
+const SOM_DE_MENCAO = pathToFileURL(paginaLocal('som-mencao.mp3')).toString();
+
+function tocarSomDeMencao(webContents) {
+  if (!webContents || webContents.isDestroyed()) return;
+
+  const codigo = `
+    (() => {
+      const url = ${JSON.stringify(SOM_DE_MENCAO)};
+      const chave = '__discordiaSomDeMencao';
+      let audio = window[chave];
+      if (!audio || audio.src !== url) {
+        audio = new Audio(url);
+        audio.preload = 'auto';
+        audio.volume = 1;
+        window[chave] = audio;
+      }
+      audio.currentTime = 0;
+      const tocando = audio.play();
+      if (tocando && typeof tocando.catch === 'function') tocando.catch(() => {});
+    })();
+  `;
+
+  webContents.executeJavaScript(codigo, true).catch((erro) => {
+    console.warn('[notificacao] nao foi possivel tocar o som de mencao', erro);
+  });
+}
 
 function emitirEstadoDeTelaCheia(ativa) {
   if (!janela || janela.isDestroyed()) return;
@@ -295,6 +323,7 @@ function veioDaNossaPagina(evento) {
 
 ipcMain.on('app:notificar', (evento, payload = {}) => {
   if (!veioDaNossaPagina(evento)) return;
+  tocarSomDeMencao(evento.sender);
   if (!Notification.isSupported()) return;
 
   const aviso = new Notification({
