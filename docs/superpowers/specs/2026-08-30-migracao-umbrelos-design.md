@@ -19,7 +19,7 @@ processos e reinicia sozinho qualquer um que caia:
 
 O usuário instalou um servidor dedicado rodando **UmbrelOS** (Debian 13 por
 baixo, Docker 28 + Compose v5 já disponíveis) na mesma rede de casa,
-endereço `192.168.0.56`, e quer migrar tudo pra lá e desligar o Termux de
+endereço `192.168.0.63`, e quer migrar tudo pra lá e desligar o Termux de
 vez.
 
 Investigação feita na sessão anterior à escrita desta spec, direto no
@@ -103,7 +103,7 @@ exatamente como hoje, só que rodando no Umbrel em vez do celular.
 ## Passo manual do usuário (fora do meu alcance)
 
 No roteador de casa, trocar o destino do encaminhamento de porta de
-`192.168.0.5` (celular) pra `192.168.0.56` (Umbrel), para:
+`192.168.0.5` (celular) pra `192.168.0.63` (Umbrel), para:
 - `3001` (TCP) — o app em si.
 - `3478` (TCP **e** UDP) — TURN (hoje só passava por túnel Pinggy só-TCP;
   a partir daqui, aberto direto, com UDP de verdade — deve até melhorar a
@@ -117,7 +117,7 @@ chegar nessa etapa do plano.
 
 1. Subir os três containers no Umbrel com os dados já copiados, **com o
    celular ainda no ar** — nada em produção é afetado ainda.
-2. Testar localmente contra o Umbrel (`http://192.168.0.56:3001`): login
+2. Testar localmente contra o Umbrel (`http://192.168.0.63:3001`): login
    com a conta existente, mensagens antigas aparecem, chamada de voz
    conecta e o TURN funciona.
 3. Só depois de validado: usuário troca o encaminhamento de porta no
@@ -130,7 +130,7 @@ chegar nessa etapa do plano.
 ## Teste
 
 - Reusar o `server/scripts/smoke.js` e `server/scripts/smoke-config-servidor.js`
-  existentes, rodando contra `http://192.168.0.56:3001` — mesmo padrão já
+  existentes, rodando contra `http://192.168.0.63:3001` — mesmo padrão já
   usado nesta sessão pra validar o celular depois de cada deploy.
 - Teste manual de chamada de voz entre dois dispositivos reais (o smoke não
   cobre WebRTC/TURN de ponta a ponta).
