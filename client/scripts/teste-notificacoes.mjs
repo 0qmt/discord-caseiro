@@ -149,6 +149,12 @@ check('menção no canal aberto notifica quando o app está em segundo plano',
     channelId: 'c1', activeChannelId: 'c1', dmMode: false, appFocado: false,
   }) === true);
 
+let chamadasDaPonte = 0;
+globalThis.window = { appDesktop: { tocarSomDeMencao: () => { chamadasDaPonte += 1; } } };
+tocarSomDeMencao();
+check('som de menção no desktop chama o MP3 empacotado', chamadasDaPonte === 1);
+delete globalThis.window;
+
 let tonsIniciados = 0;
 globalThis.AudioContext = class AudioContextFake {
   constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {}; }
@@ -166,7 +172,7 @@ globalThis.AudioContext = class AudioContextFake {
   }
 };
 tocarSomDeMencao();
-check('som de menção dispara os dois tons do aviso', tonsIniciados === 2);
+check('som de menção no navegador mantém o aviso local', tonsIniciados === 2);
 delete globalThis.AudioContext;
 
 const total = passou + falhas.length;
