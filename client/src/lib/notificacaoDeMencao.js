@@ -10,9 +10,15 @@ export function deveExibirNotificacaoNativaDeMencao({ channelId, activeChannelId
 
 let contextoDeAudio = null;
 
-/** Toque curto de dois tons, gerado localmente e sem carregar mídia externa. */
+/** Som de menção. No desktop usa o MP3 empacotado no app. */
 export function tocarSomDeMencao() {
   try {
+    const ponte = globalThis.window?.appDesktop;
+    if (ponte?.tocarSomDeMencao) {
+      ponte.tocarSomDeMencao();
+      return;
+    }
+
     const AudioContext = globalThis.AudioContext ?? globalThis.webkitAudioContext;
     if (!AudioContext) return;
     contextoDeAudio ??= new AudioContext();

@@ -329,17 +329,22 @@ function veioDaNossaPagina(evento) {
 
 ipcMain.on('app:notificar', (evento, payload = {}) => {
   if (!veioDaNossaPagina(evento)) return;
-  tocarSomDeMencao(evento.sender);
+  if (payload.tocarSom) tocarSomDeMencao(evento.sender);
   if (!Notification.isSupported()) return;
 
   const aviso = new Notification({
     title: String(payload.titulo ?? NOME_DO_APP).slice(0, 120),
     body: String(payload.corpo ?? '').slice(0, 400),
-    silent: false,
+    silent: Boolean(payload.silenciosa),
   });
   // Clicar na notificacao leva pro app, que e o que a pessoa espera.
   aviso.on('click', mostrarJanelaPrincipal);
   aviso.show();
+});
+
+ipcMain.on('app:tocar-som-mencao', (evento) => {
+  if (!veioDaNossaPagina(evento)) return;
+  tocarSomDeMencao(evento.sender);
 });
 
 ipcMain.handle('app:tela-cheia', (evento, ativa) => {
