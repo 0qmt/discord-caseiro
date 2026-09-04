@@ -17,6 +17,7 @@ app.setAppUserModelId('com.discordcaseiro.app');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 let janela = null;
+let janelaAudio = null;
 let janelaPlayer = null;
 let splash = null;
 let bandeja = null;
@@ -39,9 +40,26 @@ const ehNossoServidor = (url) => config.mesmaOrigem(url, servidorAtual);
 const paginaLocal = (nome) => path.join(__dirname, nome);
 const SOM_DE_MENCAO = pathToFileURL(paginaLocal('som-mencao.mp3')).toString();
 
-function tocarSomDeMencao(webContents) {
-  if (!webContents || webContents.isDestroyed()) return;
+async function janelaLocalDeAudio() {
+  if (janelaAudio && !janelaAudio.isDestroyed()) return janelaAudio;
 
+  janelaAudio = new BrowserWindow({
+    width: 1,
+    height: 1,
+    show: false,
+    skipTaskbar: true,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  janelaAudio.on('closed', () => { janelaAudio = null; });
+  await janelaAudio.loadFile(paginaLocal('audio.html'));
+  return janelaAudio;
+}
+
+async function tocarSomDeMencao() {
   const codigo = `
     (() => {
       const url = ${JSON.stringify(SOM_DE_MENCAO)};
@@ -59,7 +77,9 @@ function tocarSomDeMencao(webContents) {
     })();
   `;
 
-  webContents.executeJavaScript(codigo, true).catch((erro) => {
+  const player = await janelaLocalDeAudio();
+  if (player.isDestroyed()) return;
+  player.webContents.executeJavaScript(codigo, true).catch((erro) => {
     console.warn('[notificacao] nao foi possivel tocar o som de mencao', erro);
   });
 }
@@ -329,7 +349,7 @@ function veioDaNossaPagina(evento) {
 
 ipcMain.on('app:notificar', (evento, payload = {}) => {
   if (!veioDaNossaPagina(evento)) return;
-  if (payload.tocarSom) tocarSomDeMencao(evento.sender);
+  if (payload.tocarSom) tocarSomDeMencao();
   if (!Notification.isSupported()) return;
 
   const aviso = new Notification({
@@ -344,7 +364,7 @@ ipcMain.on('app:notificar', (evento, payload = {}) => {
 
 ipcMain.on('app:tocar-som-mencao', (evento) => {
   if (!veioDaNossaPagina(evento)) return;
-  tocarSomDeMencao(evento.sender);
+  tocarSomDeMencao();
 });
 
 ipcMain.handle('app:tela-cheia', (evento, ativa) => {
