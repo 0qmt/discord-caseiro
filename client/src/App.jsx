@@ -290,6 +290,8 @@ export default function App() {
   const menuContexto = useContextMenu();
   // Níveis de notificação por servidor/canal/DM, carregados do servidor.
   const [notifSettings, setNotifSettings] = useState({});
+  const [chamadaSaindo, setChamadaSaindo] = useState(null);
+  const [avisoCallAnimado, setAvisoCallAnimado] = useState(false);
   // Os handlers do socket são montados uma vez só; sem refs eles leriam para
   // sempre o valor que essas variáveis tinham na primeira renderização.
   const notifSettingsRef = useRef({});
@@ -310,6 +312,8 @@ export default function App() {
       recusou: 'recusou sua chamada.',
       'nao-atendeu': 'não atendeu sua chamada.',
     };
+    setChamadaSaindo(null);
+    setAvisoCallAnimado(voiceResultadoConvite.resultado === 'nao-atendeu');
     setAviso(`${voiceResultadoConvite.resultado === 'aceitou' ? 'A pessoa' : 'O usuário'} ${mensagens[voiceResultadoConvite.resultado] ?? 'encerrou o convite.'}`);
   }, [voiceResultadoConvite]);
 
@@ -901,9 +905,17 @@ export default function App() {
   /** O aviso flutuante some sozinho - clicar nele também fecha. */
   useEffect(() => {
     if (!aviso) return undefined;
-    const timer = setTimeout(() => setAviso(null), AVISO_TTL);
+    const timer = setTimeout(() => {
+      setAviso(null);
+      setAvisoCallAnimado(false);
+    }, AVISO_TTL);
     return () => clearTimeout(timer);
   }, [aviso]);
+
+  function fecharAviso() {
+    setAviso(null);
+    setAvisoCallAnimado(false);
+  }
 
   /** Limpa quem parou de digitar. */
   useEffect(() => {
@@ -1287,7 +1299,7 @@ export default function App() {
       return;
     }
     voiceActions.convidar(carga.userId);
-    setAviso(`Convite enviado pra ${carga.nome}.`);
+    setChamadaSaindo({ id: carga.userId, nome: carga.nome });
   }
 
   /**
@@ -1388,7 +1400,7 @@ export default function App() {
     },
     chamarParaCall: voice.channelId ? (m) => {
       voiceActions.convidar(m.id);
-      setAviso(`Chamei ${m.username} pra call.`);
+      setChamadaSaindo({ id: m.id, nome: m.username });
     } : null,
     abrirNota: (m) => setModal({ type: 'nota', membro: m }),
     mudarApelido: (m) => setModal({ type: 'apelido', membro: m }),
@@ -1891,7 +1903,7 @@ export default function App() {
       <ContextMenu estado={menuContexto.estado} onFechar={menuContexto.fechar} />
 
       {aviso && (
-        <div className="aviso-flutuante" role="status" onClick={() => setAviso(null)}>
+        <div className={`aviso-flutuante${avisoCallAnimado ? ' aviso-call-animado' : ''}`} role="status" onClick={fecharAviso}>
           {aviso}
         </div>
       )}
@@ -1974,6 +1986,20 @@ export default function App() {
           </span>
           <button className="primary" onClick={aceitarConviteDeCall}>Aceitar</button>
           <button className="recusar" onClick={recusarConviteDeCall}>Recusar</button>
+        </div>
+      )}
+
+      {chamadaSaindo && !voiceConvite && (
+        <div className="convite-call-banner chamada-saindo-banner" role="status">
+          <span className="chamada-saindo-icone" aria-hidden="true">☎</span>
+          <span className="convite-texto">
+            Chamando <strong>{chamadaSaindo.nome ?? 'alguém'}</strong>
+          </span>
+          <span className="chamada-pontos" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
         </div>
       )}
 
