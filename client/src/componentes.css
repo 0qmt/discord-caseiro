@@ -734,8 +734,15 @@
 .convite-call-banner button.recusar:hover { background: #b83234; }
 
 .chamada-saindo-banner {
+  left: 50%;
+  right: auto;
+  top: 18px;
+  bottom: auto;
+  z-index: 70;
   min-width: 250px;
   border: 1px solid rgba(88, 166, 255, .2);
+  transform: translateX(-50%);
+  animation: chamada-saindo-desce .16s ease-out;
 }
 
 .chamada-saindo-icone {
@@ -772,6 +779,11 @@
 @keyframes chamada-ponto-onda {
   0%, 70%, 100% { transform: translateY(0); opacity: .45; }
   35% { transform: translateY(-6px); opacity: 1; }
+}
+
+@keyframes chamada-saindo-desce {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
 /* ========================================================================== */
