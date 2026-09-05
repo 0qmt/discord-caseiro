@@ -390,6 +390,14 @@ ipcMain.handle('app:versao', (evento) => {
   return app.getVersion();
 });
 
+ipcMain.handle('app:reiniciar', (evento) => {
+  if (!veioDaNossaPagina(evento)) return false;
+  saindoDeVerdade = true;
+  app.relaunch();
+  app.exit(0);
+  return true;
+});
+
 ipcMain.handle('app:abrir-player-tela-cheia', async (evento, bruto) => {
   if (!veioDaNossaPagina(evento)) return false;
 

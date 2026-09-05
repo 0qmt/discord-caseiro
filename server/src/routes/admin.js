@@ -7,11 +7,10 @@ import { getIo } from '../lib/bus.js';
 export const adminRoutes = Router();
 adminRoutes.use(requireAuth);
 
-/** So quem administra pelo menos um servidor ve a saude da maquina. */
-function souDono(userId) {
-  return q.get(
-    "SELECT 1 FROM guild_members WHERE user_id = ? AND role = 'owner' LIMIT 1", userId,
-  ) !== null;
+const EMAIL_DONO_DO_PROJETO = 'yjoaoga@gmail.com';
+
+function souDonoDoProjeto(user) {
+  return String(user?.email ?? '').trim().toLowerCase() === EMAIL_DONO_DO_PROJETO;
 }
 
 /**
@@ -39,8 +38,8 @@ function usoDeCpu() {
 }
 
 adminRoutes.get('/stats', async (req, res) => {
-  if (!souDono(req.user.id)) {
-    return res.status(403).json({ error: 'so quem administra um servidor ve isso' });
+  if (!souDonoDoProjeto(req.user)) {
+    return res.status(403).json({ error: 'so o dono do projeto ve isso' });
   }
 
   const memTotal = os.totalmem();
@@ -56,14 +55,14 @@ adminRoutes.get('/stats', async (req, res) => {
 });
 
 /**
- * Avisa todo mundo conectado pra recarregar a pagina - assim toda
- * atualizacao de codigo chega sem precisar pedir pra cada pessoa fechar e
- * abrir o app na mao. Quem esta numa chamada recarrega junto e volta pra
- * ela sozinho logo depois (ver App.jsx).
+ * Avisa todo mundo conectado pra reiniciar o app. No desktop novo isso fecha
+ * e abre o processo de verdade; em navegador/desktop antigo cai no reload da
+ * pagina. Quem esta numa chamada grava o estado antes e tenta voltar logo
+ * depois (ver App.jsx).
  */
 adminRoutes.post('/reload', (req, res) => {
-  if (!souDono(req.user.id)) {
-    return res.status(403).json({ error: 'so quem administra um servidor pode fazer isso' });
+  if (!souDonoDoProjeto(req.user)) {
+    return res.status(403).json({ error: 'so o dono do projeto pode fazer isso' });
   }
   getIo()?.emit('app:reload');
   res.json({ ok: true });

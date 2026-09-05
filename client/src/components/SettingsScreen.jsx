@@ -487,13 +487,13 @@ function SecaoServidor() {
         </div>
       )}
 
-      <h2 className="settings-subtitulo">Atualizar todo mundo</h2>
+      <h2 className="settings-subtitulo">Reiniciar todo mundo</h2>
       <p className="hint">
-        Depois de publicar uma mudança, isso recarrega o app de todo mundo sozinho —
-        quem estiver numa chamada volta pra ela logo em seguida, automaticamente.
+        Depois de publicar uma mudança, isso reinicia o app de todo mundo sozinho.
+        Quem estiver numa chamada volta pra ela logo em seguida, automaticamente.
       </p>
       <button className="primary" onClick={avisarTodoMundo} disabled={pedindoReload}>
-        {reloadPedido ? 'Aviso enviado' : pedindoReload ? 'Enviando...' : 'Recarregar todo mundo'}
+        {reloadPedido ? 'Reinício enviado' : pedindoReload ? 'Enviando...' : 'Reiniciar todo mundo'}
       </button>
     </section>
   );

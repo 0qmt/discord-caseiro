@@ -211,6 +211,7 @@ export default function App() {
   // Lazy initializer (função, não valor): roda UMA vez, no primeiro render,
   // antes de qualquer efeito - ver o porquê em `lerMarcaDeRetomar`.
   const [marcaDeRetomar] = useState(lerMarcaDeRetomar);
+  const midiaParaRetomarRef = useRef(marcaDeRetomar);
   const [me, setMe] = useState(null);
   const [booting, setBooting] = useState(true);
   const [connected, setConnected] = useState(false);
@@ -351,11 +352,19 @@ export default function App() {
     if (!atualizacaoPendente) return;
     if (voice.channelId) {
       localStorage.setItem(CHAVE_RETOMAR_CALL, JSON.stringify({
-        guildId: activeGuildId, channelId: voice.channelId, ts: Date.now(),
+        guildId: activeGuildId,
+        channelId: voice.channelId,
+        ts: Date.now(),
+        camera: voice.self.camera,
+        screen: voice.self.screen,
+        muted: voice.self.muted,
+        deafened: voice.self.deafened,
+        callMaximizada,
       }));
     }
-    window.location.reload();
-  }, [atualizacaoPendente, voice.channelId, activeGuildId]);
+    const reiniciar = window.appDesktop?.reiniciarApp?.();
+    if (!reiniciar) window.location.reload();
+  }, [atualizacaoPendente, voice.channelId, activeGuildId, voice.self.camera, voice.self.screen, voice.self.muted, voice.self.deafened, callMaximizada]);
 
   /*
    * Avisa o app de desktop se estamos numa call agora - é o que decide lá
@@ -968,6 +977,21 @@ export default function App() {
     entrarNaVoz(marcaDeRetomar.channelId, marcaDeRetomar.guildId);
     setCallMaximizada(true);
   }, [me, connected, marcaDeRetomar]);
+
+  useEffect(() => {
+    const marca = midiaParaRetomarRef.current;
+    if (!marca || voice.channelId !== marca.channelId) return;
+    midiaParaRetomarRef.current = null;
+
+    if (marca.callMaximizada) setCallMaximizada(true);
+    if (marca.muted && !voice.self.muted) voiceActions.toggleMute();
+    if (marca.deafened && !voice.self.deafened) voiceActions.toggleDeafen();
+    if (marca.camera && !voice.self.camera) voiceActions.toggleCamera();
+    if (marca.screen && !voice.self.screen) {
+      setAviso('Selecione a tela de novo para voltar a compartilhar.');
+      voiceActions.toggleScreen();
+    }
+  }, [voice.channelId, voice.self.muted, voice.self.deafened, voice.self.camera, voice.self.screen, voiceActions]);
 
   useEffect(() => {
     if (!activeGuildId) { setGuild(null); return; }
