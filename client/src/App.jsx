@@ -440,6 +440,17 @@ export default function App() {
   const activeDmRef = useRef(null);
   const dmModeRef = useRef(false);
   const guildRef = useRef(null);
+  const mencoesComSomRef = useRef(new Set());
+
+  const tocarSomDeMencaoUmaVez = useCallback((messageId) => {
+    if (!messageId || mencoesComSomRef.current.has(messageId)) return;
+    mencoesComSomRef.current.add(messageId);
+    tocarSomDeMencao();
+    if (mencoesComSomRef.current.size > 200) {
+      const primeiro = mencoesComSomRef.current.values().next().value;
+      mencoesComSomRef.current.delete(primeiro);
+    }
+  }, []);
 
   activeChannelRef.current = activeChannelId;
   activeGuildRef.current = activeGuildId;
@@ -588,6 +599,9 @@ export default function App() {
 
       'message:new': ({ guildId, message }) => {
         upsertMessage(message.channelId, message);
+        if (message.author.id !== me.id && mensagemMenciona(message.content, me.id)) {
+          tocarSomDeMencaoUmaVez(message.id);
+        }
         const estouVendoEsseCanal = !dmModeRef.current && message.channelId === activeChannelRef.current;
         const estaEmPrimeiroPlano = appEstaEmPrimeiroPlano();
 
@@ -644,7 +658,7 @@ export default function App() {
             count: (prev[channelId]?.count ?? 0) + 1,
           },
         }));
-        tocarSomDeMencao();
+        tocarSomDeMencaoUmaVez(message.id);
 
         if (deveExibirNotificacaoNativaDeMencao({
           channelId,
