@@ -22,6 +22,8 @@ const votosDeExpulsao = new Map();
 // Sessao de assistir junto por canal de voz. Tambem vive so em memoria.
 const watchSessions = new Map();
 const watchVotes = new Map();
+const convitesDeCall = new Map();
+const DURACAO_CONVITE_MS = 30_000;
 
 const ESTADO_INICIAL = {
   muted: false, hasMic: true, camera: false, screen: false, deafened: false,
@@ -366,13 +368,39 @@ export function registerVoiceHandlers(io, socket) {
     const entry = rooms.get(meuCanal).get(socket.id);
     if (!isMember(entry.guildId, String(userId ?? ''))) return;
 
+    const alvoId = String(userId);
+    const conviteAnterior = [...convitesDeCall.values()].find((convite) => convite.alvoId === alvoId);
+    if (conviteAnterior) return;
+
     const canalInfo = q.get('SELECT name FROM channels WHERE id = ?', meuCanal);
-    io.to(`user:${userId}`).emit('voice:convite', {
+    const id = `${socket.id}:${Date.now()}`;
+    const convite = { id, chamadorSocketId: socket.id, chamadorId: user.id, alvoId, channelId: meuCanal };
+    convitesDeCall.set(id, convite);
+    const expira = setTimeout(() => {
+      if (!convitesDeCall.delete(id)) return;
+      io.to(`user:${alvoId}`).emit('voice:convite-expirou', { id });
+      io.to(socket.id).emit('voice:convite-resultado', { id, resultado: 'nao-atendeu' });
+    }, DURACAO_CONVITE_MS);
+    convite.expira = expira;
+
+    io.to(`user:${alvoId}`).emit('voice:convite', {
+      id,
       de: user,
       channelId: meuCanal,
       guildId: entry.guildId,
       channelName: canalInfo?.name ?? 'chamada',
+      expiresAt: Date.now() + DURACAO_CONVITE_MS,
     });
+  });
+
+  socket.on('voice:convite-responder', ({ id, resposta } = {}) => {
+    const convite = convitesDeCall.get(String(id ?? ''));
+    if (!convite || convite.alvoId !== user.id) return;
+    clearTimeout(convite.expira);
+    convitesDeCall.delete(convite.id);
+    const resultado = resposta === 'aceitar' ? 'aceitou' : 'recusou';
+    io.to(convite.chamadorSocketId).emit('voice:convite-resultado', { id: convite.id, resultado });
+    io.to(socket.id).emit('voice:convite-encerrado', { id: convite.id });
   });
 
   socket.on('watch:start', ({ channelId, media } = {}, ack) => {

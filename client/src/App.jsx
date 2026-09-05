@@ -295,7 +295,23 @@ export default function App() {
   const notifSettingsRef = useRef({});
   const statusRef = useRef('online');
 
-  const { voice, voiceRooms, voiceVotacoes, voiceConvite, voiceWatch, voiceActions } = useVoice(socket);
+  const { voice, voiceRooms, voiceVotacoes, voiceConvite, voiceResultadoConvite, voiceWatch, voiceActions } = useVoice(socket);
+
+  useEffect(() => {
+    if (!voiceConvite) return undefined;
+    window.appDesktop?.iniciarSomDeChamada?.();
+    return () => window.appDesktop?.pararSomDeChamada?.();
+  }, [voiceConvite?.id]);
+
+  useEffect(() => {
+    if (!voiceResultadoConvite) return;
+    const mensagens = {
+      aceitou: 'aceitou sua chamada.',
+      recusou: 'recusou sua chamada.',
+      'nao-atendeu': 'não atendeu sua chamada.',
+    };
+    setAviso(`${voiceResultadoConvite.resultado === 'aceitou' ? 'A pessoa' : 'O usuário'} ${mensagens[voiceResultadoConvite.resultado] ?? 'encerrou o convite.'}`);
+  }, [voiceResultadoConvite]);
 
   // A barra de DM só precisa saber quem está online; monta o Set a partir das
   // presenças pra não manter dois estados dizendo a mesma coisa.
@@ -1625,10 +1641,17 @@ export default function App() {
   /** Aceitar um convite pra call: troca pro servidor certo e entra direto. */
   function aceitarConviteDeCall() {
     if (!voiceConvite) return;
+    voiceActions.responderConvite(voiceConvite.id, 'aceitar');
     setDmMode(false);
     setActiveGuildId(voiceConvite.guildId);
     entrarNaVoz(voiceConvite.channelId, voiceConvite.guildId);
     setCallMaximizada(true);
+    voiceActions.limparConvite();
+  }
+
+  function recusarConviteDeCall() {
+    if (!voiceConvite) return;
+    voiceActions.responderConvite(voiceConvite.id, 'recusar');
     voiceActions.limparConvite();
   }
 
@@ -1949,8 +1972,8 @@ export default function App() {
             <strong>{voiceConvite.de?.username ?? 'alguém'}</strong> te chamou pra call em{' '}
             <strong>{voiceConvite.channelName}</strong>
           </span>
-          <button className="primary" onClick={aceitarConviteDeCall}>Entrar</button>
-          <button onClick={voiceActions.limparConvite}>Ignorar</button>
+          <button className="primary" onClick={aceitarConviteDeCall}>Aceitar</button>
+          <button className="recusar" onClick={recusarConviteDeCall}>Recusar</button>
         </div>
       )}
 

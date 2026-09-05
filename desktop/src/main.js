@@ -59,7 +59,7 @@ async function janelaLocalDeAudio() {
   return janelaAudio;
 }
 
-async function tocarSomDeMencao() {
+async function tocarSomDeMencao(loop = false) {
   const codigo = `
     (() => {
       const url = ${JSON.stringify(SOM_DE_MENCAO)};
@@ -71,6 +71,7 @@ async function tocarSomDeMencao() {
         audio.volume = 1;
         window[chave] = audio;
       }
+      audio.loop = ${loop ? 'true' : 'false'};
       audio.currentTime = 0;
       const tocando = audio.play();
       if (tocando && typeof tocando.catch === 'function') tocando.catch(() => {});
@@ -365,6 +366,16 @@ ipcMain.on('app:notificar', (evento, payload = {}) => {
 ipcMain.on('app:tocar-som-mencao', (evento) => {
   if (!veioDaNossaPagina(evento)) return;
   tocarSomDeMencao();
+});
+
+ipcMain.on('app:iniciar-som-chamada', (evento) => {
+  if (!veioDaNossaPagina(evento)) return;
+  tocarSomDeMencao(true);
+});
+
+ipcMain.on('app:parar-som-chamada', (evento) => {
+  if (!veioDaNossaPagina(evento)) return;
+  janelaAudio?.webContents.executeJavaScript("window.__discordiaSomDeMencao?.pause(); window.__discordiaSomDeMencao.currentTime = 0;").catch(() => {});
 });
 
 ipcMain.handle('app:tela-cheia', (evento, ativa) => {

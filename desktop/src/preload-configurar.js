@@ -23,6 +23,8 @@ if (location.protocol === 'file:') {
 contextBridge.exposeInMainWorld('appDesktop', {
   notificar: (payload) => ipcRenderer.send('app:notificar', payload),
   tocarSomDeMencao: () => ipcRenderer.send('app:tocar-som-mencao'),
+  iniciarSomDeChamada: () => ipcRenderer.send('app:iniciar-som-chamada'),
+  pararSomDeChamada: () => ipcRenderer.send('app:parar-som-chamada'),
   /** Alterna o modo de tela cheia nativo da janela do Electron. */
   telaCheia: (ativa) => ipcRenderer.invoke('app:tela-cheia', Boolean(ativa)),
   abrirPlayerTelaCheia: (url) => ipcRenderer.invoke('app:abrir-player-tela-cheia', String(url ?? '')),

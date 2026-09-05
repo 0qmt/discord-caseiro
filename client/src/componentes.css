@@ -730,6 +730,8 @@
 .convite-call-banner button { padding: 7px 14px; border-radius: 6px; background: var(--bg-3); font-size: 13px; font-weight: 600; }
 .convite-call-banner button.primary { width: auto; background: var(--ok); }
 .convite-call-banner button.primary:hover { background: #1e9150; }
+.convite-call-banner button.recusar { background: #d83c3e; color: #fff; }
+.convite-call-banner button.recusar:hover { background: #b83234; }
 
 /* ========================================================================== */
 /*  Cabecalho do chat e aviso flutuante                                       */

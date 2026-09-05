@@ -34,11 +34,12 @@ export function useVoice(socket) {
   const [votacoes, setVotacoes] = useState({});
   // Convite mais recente pra entrar numa call; null quando não há nenhum.
   const [convite, setConvite] = useState(null);
+  const [resultadoConvite, setResultadoConvite] = useState(null);
   const [watch, setWatch] = useState({ sessions: [], proposals: [] });
   const clientRef = useRef(null);
 
   useEffect(() => {
-    if (!socket) { setVoice(VAZIO); setRooms({}); setVotacoes({}); setConvite(null); setWatch({ sessions: [], proposals: [] }); return undefined; }
+    if (!socket) { setVoice(VAZIO); setRooms({}); setVotacoes({}); setConvite(null); setResultadoConvite(null); setWatch({ sessions: [], proposals: [] }); return undefined; }
 
     const client = new VoiceClient(socket, setVoice);
     clientRef.current = client;
@@ -73,6 +74,9 @@ export function useVoice(socket) {
       setVotacoes((prev) => ({ ...prev, [socketId]: { votos, necessario } }));
 
     const aoConvidar = (payload) => setConvite(payload);
+    const aoExpirarConvite = ({ id }) => setConvite((atual) => atual?.id === id ? null : atual);
+    const aoEncerrarConvite = ({ id }) => setConvite((atual) => atual?.id === id ? null : atual);
+    const aoResultadoConvite = (payload) => setResultadoConvite(payload);
     const aoSerModerado = (payload) => clientRef.current?.aplicarModeracao(payload);
     const aoSerMovido = ({ channelId }) => clientRef.current?.moverPara(channelId);
     const aoWatch = ({ session, sessions, proposals } = {}) => setWatch({
@@ -85,6 +89,9 @@ export function useVoice(socket) {
     socket.on('voice:kicked', aoSerExpulso);
     socket.on('voice:votacao', aoVotar);
     socket.on('voice:convite', aoConvidar);
+    socket.on('voice:convite-expirou', aoExpirarConvite);
+    socket.on('voice:convite-encerrado', aoEncerrarConvite);
+    socket.on('voice:convite-resultado', aoResultadoConvite);
     socket.on('voice:moderado', aoSerModerado);
     socket.on('voice:mover-para', aoSerMovido);
     socket.on('watch:sync', aoWatch);
@@ -96,6 +103,9 @@ export function useVoice(socket) {
       socket.off('voice:kicked', aoSerExpulso);
       socket.off('voice:votacao', aoVotar);
       socket.off('voice:convite', aoConvidar);
+      socket.off('voice:convite-expirou', aoExpirarConvite);
+      socket.off('voice:convite-encerrado', aoEncerrarConvite);
+      socket.off('voice:convite-resultado', aoResultadoConvite);
       socket.off('voice:moderado', aoSerModerado);
       socket.off('voice:mover-para', aoSerMovido);
       socket.off('watch:sync', aoWatch);
@@ -106,6 +116,7 @@ export function useVoice(socket) {
       setRooms({});
       setVotacoes({});
       setConvite(null);
+      setResultadoConvite(null);
       setWatch({ sessions: [], proposals: [] });
     };
   }, [socket]);
@@ -134,6 +145,7 @@ export function useVoice(socket) {
     expulsar: (socketId) => clientRef.current?.expulsar(socketId),
     votarExpulsao: (socketId) => clientRef.current?.votarExpulsao(socketId),
     convidar: (userId) => clientRef.current?.convidar(userId),
+    responderConvite: (id, resposta) => socket?.emit('voice:convite-responder', { id, resposta }),
     limparConvite: () => setConvite(null),
     watchStart: (channelId, media) => new Promise((resolve) => socket?.emit('watch:start', { channelId, media }, resolve)),
     watchJoin: (channelId, sessionId) => new Promise((resolve) => socket?.emit('watch:join', { channelId, sessionId }, resolve)),
@@ -144,5 +156,5 @@ export function useVoice(socket) {
     watchVoteControl: (channelId, proposalId, approve = true) => new Promise((resolve) => socket?.emit('watch:vote-control', { channelId, proposalId, approve }, resolve)),
   }), [socket]);
 
-  return { voice, voiceRooms: rooms, voiceVotacoes: votacoes, voiceConvite: convite, voiceWatch: watch, voiceActions: actions };
+  return { voice, voiceRooms: rooms, voiceVotacoes: votacoes, voiceConvite: convite, voiceResultadoConvite: resultadoConvite, voiceWatch: watch, voiceActions: actions };
 }
