@@ -39,6 +39,7 @@ const ehNossoServidor = (url) => config.mesmaOrigem(url, servidorAtual);
 
 const paginaLocal = (nome) => path.join(__dirname, nome);
 const SOM_DE_MENCAO = pathToFileURL(paginaLocal('som-mencao.mp3')).toString();
+const SOM_DE_CHAMADA = pathToFileURL(paginaLocal('som-chamada.mp3')).toString();
 
 async function janelaLocalDeAudio() {
   if (janelaAudio && !janelaAudio.isDestroyed()) return janelaAudio;
@@ -59,10 +60,10 @@ async function janelaLocalDeAudio() {
   return janelaAudio;
 }
 
-async function tocarSomDeMencao(loop = false) {
+async function tocarSomDeMencao(loop = false, url = SOM_DE_MENCAO) {
   const codigo = `
     (() => {
-      const url = ${JSON.stringify(SOM_DE_MENCAO)};
+      const url = ${JSON.stringify(url)};
       const chave = '__discordiaSomDeMencao';
       let audio = window[chave];
       if (!audio || audio.src !== url) {
@@ -370,7 +371,7 @@ ipcMain.on('app:tocar-som-mencao', (evento) => {
 
 ipcMain.on('app:iniciar-som-chamada', (evento) => {
   if (!veioDaNossaPagina(evento)) return;
-  tocarSomDeMencao(true);
+  tocarSomDeMencao(true, SOM_DE_CHAMADA);
 });
 
 ipcMain.on('app:parar-som-chamada', (evento) => {
