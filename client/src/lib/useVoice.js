@@ -145,6 +145,7 @@ export function useVoice(socket) {
     expulsar: (socketId) => clientRef.current?.expulsar(socketId),
     votarExpulsao: (socketId) => clientRef.current?.votarExpulsao(socketId),
     convidar: (userId) => clientRef.current?.convidar(userId),
+    cancelarConvite: (userId) => socket?.emit('voice:convite-cancelar', { userId }),
     responderConvite: (id, resposta) => socket?.emit('voice:convite-responder', { id, resposta }),
     limparConvite: () => setConvite(null),
     watchStart: (channelId, media) => new Promise((resolve) => socket?.emit('watch:start', { channelId, media }, resolve)),

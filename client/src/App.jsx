@@ -1994,15 +1994,26 @@ export default function App() {
 
       {chamadaSaindo && !voiceConvite && (
         <div className="convite-call-banner chamada-saindo-banner" role="status">
-          <span className="chamada-saindo-icone" aria-hidden="true">☎</span>
-          <span className="convite-texto">
-            Chamando <strong>{chamadaSaindo.nome ?? 'alguém'}</strong>
-          </span>
-          <span className="chamada-pontos" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
+          <div className="chamada-saindo-linha">
+            <span className="chamada-saindo-icone" aria-hidden="true">☎</span>
+            <span className="convite-texto">
+              Chamando <strong>{chamadaSaindo.nome ?? 'alguém'}</strong>
+            </span>
+            <span className="chamada-pontos" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
+          <button
+            className="chamada-parar"
+            onClick={() => {
+              voiceActions.cancelarConvite(chamadaSaindo.id);
+              setChamadaSaindo(null);
+            }}
+          >
+            Parar de chamar
+          </button>
         </div>
       )}
 

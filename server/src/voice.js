@@ -403,6 +403,18 @@ export function registerVoiceHandlers(io, socket) {
     io.to(socket.id).emit('voice:convite-encerrado', { id: convite.id });
   });
 
+  socket.on('voice:convite-cancelar', ({ userId } = {}) => {
+    const alvoId = String(userId ?? '');
+    const convite = [...convitesDeCall.values()].find((item) => (
+      item.chamadorSocketId === socket.id && item.alvoId === alvoId
+    ));
+    if (!convite) return;
+
+    clearTimeout(convite.expira);
+    convitesDeCall.delete(convite.id);
+    io.to(`user:${convite.alvoId}`).emit('voice:convite-encerrado', { id: convite.id });
+  });
+
   socket.on('watch:start', ({ channelId, media } = {}, ack) => {
     const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
     const { membros, entry, channelId: canal } = membroDaVoz(channelId, socket.id);
