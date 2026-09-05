@@ -1868,7 +1868,10 @@ export default function App() {
           onKick={acoesDoMembro.expulsar}
           podeChamarParaCall={Boolean(voice.channelId)}
           podeModerarVoz={podeModerarVoz}
-          onChamarParaCall={(member) => voiceActions.convidar(member.id)}
+          onChamarParaCall={(member) => {
+            voiceActions.convidar(member.id);
+            setChamadaSaindo({ id: member.id, nome: member.username });
+          }}
           onMenuDoMembro={menuDoMembro}
           onMenuDoParticipanteDeVoz={menuDoParticipanteDeVoz}
           onMenuDaGuild={menuDaGuild}
