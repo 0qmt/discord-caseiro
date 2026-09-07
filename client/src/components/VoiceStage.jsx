@@ -111,12 +111,8 @@ function Tile({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [arrastando, setArrastando] = useState(false);
-  // "Tela cheia" tentada via Fullscreen API do navegador (`requestFullscreen`)
-  // não se comportava direito dentro do Electron (o botão parava de
-  // responder, ou entrava sem cobrir a tela de verdade) - troquei por um
-  // "ocupar a janela" só em CSS: o tile vira position:fixed cobrindo a
-  // janela inteira do app, sem depender de nenhuma API do navegador.
   const [expandido, setExpandido] = useState(false);
+  const [telaCheiaNativa, setTelaCheiaNativa] = useState(false);
   const ehTela = tipo === 'screen';
 
   useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, [stream]);
@@ -127,6 +123,23 @@ function Tile({
     const aoTeclar = (e) => { if (e.key === 'Escape') setExpandido(false); };
     document.addEventListener('keydown', aoTeclar);
     return () => document.removeEventListener('keydown', aoTeclar);
+  }, [expandido]);
+
+  useEffect(() => window.appDesktop?.onTelaCheia?.((ativa) => {
+    if (!ativa && telaCheiaNativa && !document.fullscreenElement) {
+      setTelaCheiaNativa(false);
+      setExpandido(false);
+    }
+  }), [telaCheiaNativa]);
+
+  useEffect(() => {
+    const aoMudarTelaCheia = () => {
+      const ativo = document.fullscreenElement === containerRef.current;
+      setTelaCheiaNativa(ativo);
+      if (!ativo && expandido) setExpandido(false);
+    };
+    document.addEventListener('fullscreenchange', aoMudarTelaCheia);
+    return () => document.removeEventListener('fullscreenchange', aoMudarTelaCheia);
   }, [expandido]);
 
   /** Não deixa arrastar a imagem pra fora do quadro - a sobra depende de quanto deu zoom. */
@@ -173,17 +186,33 @@ function Tile({
   // Os dois cobrem o mesmo vídeo por cima de tudo - deixar os dois ligados
   // ao mesmo tempo é o popup (câmera ou outra janela) flutuando por cima do
   // tile expandido. Um sempre fecha o outro antes de abrir.
-  function alternarExpandido() {
-    if (!expandido && document.pictureInPictureElement) {
+  async function alternarExpandido() {
+    if (expandido) {
+      if (document.fullscreenElement) await document.exitFullscreen?.().catch(() => {});
+      if (telaCheiaNativa) await window.appDesktop?.telaCheia?.(false).catch(() => {});
+      setTelaCheiaNativa(false);
+      setExpandido(false);
+      return;
+    }
+    if (document.pictureInPictureElement) {
       document.exitPictureInPicture().catch(() => {});
     }
-    setExpandido((v) => !v);
+    setExpandido(true);
+    try {
+      await containerRef.current?.requestFullscreen?.();
+      setTelaCheiaNativa(Boolean(document.fullscreenElement));
+    } catch {
+      // Electron/embedded Chromium pode recusar a API do documento; a ponte
+      // tira a moldura da janela, e o tile expandido já cobre toda a área.
+      const ativou = await window.appDesktop?.telaCheia?.(true).catch(() => false);
+      setTelaCheiaNativa(Boolean(ativou));
+    }
   }
 
   const [pipPop, dispararPipPop] = usePunch(280, 'pop');
 
   async function abrirPopup() {
-    setExpandido(false);
+    if (expandido) await alternarExpandido();
     dispararPipPop();
     await videoRef.current?.requestPictureInPicture?.().catch(() => {});
   }
@@ -473,13 +502,15 @@ function ParticipantControls({ peer, actions, podeModerarVoz }) {
   );
 }
 
-function FaceBlock({ user, falando, muted, hasMic, connectionState, children }) {
+function FaceBlock({ user, falando, muted, hasMic, connectionState, diagnostic, onReconectar, children }) {
   return (
     <div className={'voice-bloco voice-pessoa-bloco ' + (falando ? 'falando' : '')}>
       <Avatar user={user} size={56} />
       <strong>{user?.username ?? 'conectando...'}</strong>
       {(muted || !hasMic) && <small>{hasMic ? 'mutado' : 'sem microfone'}</small>}
       {connectionState && connectionState !== 'connected' && <small className="voice-connection-state">{connectionState === 'failed' ? 'conexao com falha' : connectionState === 'connecting' ? 'conectando...' : 'conexao instavel'}</small>}
+      {diagnostic && <small className="voice-connection-state">{diagnostic}</small>}
+      {onReconectar && <button className="link voice-reconnect" onClick={onReconectar}>Reconectar</button>}
       {children}
     </div>
   );
@@ -541,6 +572,7 @@ export default function VoiceStage({
   const cinemaAssistidoId = cinemaAssistido ?? sessoesCinema.find((s) => s.viewers?.includes(voice.socketId))?.id ?? null;
   const cinemaAtual = cinemaAssistidoId ? sessoesCinema.find((s) => s.id === cinemaAssistidoId) : null;
   const propostaAtual = cinemaAtual ? propostasCinema.find((p) => p.sessionId === cinemaAtual.id) : null;
+  const peersComProblema = voice.peers.filter((peer) => peer.connectionState === 'failed' || peer.connectionState === 'disconnected' || peer.reconnecting);
   const vistosRef = useRef(new Set());
 
   useEffect(() => {
@@ -577,6 +609,7 @@ export default function VoiceStage({
         <span className="hint">{voice.peers.length + 1} na chamada</span>
         {voice.connectionStatus === 'reconnecting' && <span className="voice-stage-status instavel">Reconectando...</span>}
         {voice.connectionStatus === 'connected' && <span className="voice-stage-status">Conexao ativa</span>}
+        {peersComProblema.length > 0 && <button className="voice-stage-status instavel" onClick={() => voiceActions?.reconnect()}>Reconectar conexões</button>}
 
         {modoAssistindo && (
           <button className="voice-voltar" onClick={() => { setCinemaAssistido(null); onPararDeAssistir?.(); }}>
@@ -607,7 +640,16 @@ export default function VoiceStage({
         <div className="voice-blocos-grid">
           <FaceBlock user={me} falando={voice.self.speaking} muted={voice.self.muted} hasMic={voice.self.hasMic} />
           {voice.peers.map((peer) => (
-            <FaceBlock key={peer.socketId} user={peer.user ?? { username: '?' }} falando={peer.speaking} muted={peer.state.muted} hasMic={peer.state.hasMic}>
+            <FaceBlock
+              key={peer.socketId}
+              user={peer.user ?? { username: '?' }}
+              falando={peer.speaking}
+              muted={peer.state.muted}
+              hasMic={peer.state.hasMic}
+              connectionState={peer.connectionState}
+              diagnostic={peer.diagnostic}
+              onReconectar={peer.connectionState !== 'connected' || peer.diagnostic ? () => voiceActions?.reconnect(peer.socketId) : null}
+            >
               <span className="voice-face-acoes">
                 <ParticipantControls peer={peer} actions={voiceActions} podeModerarVoz={podeModerarVoz} />
                 <AcaoExpulsar

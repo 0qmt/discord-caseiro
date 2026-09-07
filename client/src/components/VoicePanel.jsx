@@ -34,7 +34,7 @@ export default function VoicePanel({ voice, channelName, actions }) {
         : conectado ? 'conectado' : 'negociando...';
 
   const {
-    muted, hasMic, camera, screen, deafened, telaResolucaoId, telaFpsId,
+    muted, hasMic, camera, screen, deafened, telaResolucaoId, telaFpsId, pushToTalk, transmitting,
   } = voice.self;
 
   return (
@@ -44,6 +44,7 @@ export default function VoicePanel({ voice, channelName, actions }) {
           {situacao}
         </span>
         {voice.channelId && <span className="voice-canal">{channelName}</span>}
+        {pushToTalk && <span className={`voice-ptt-status ${transmitting ? 'transmitindo' : ''}`}>{transmitting ? 'transmitindo' : 'aperte para falar'}</span>}
       </div>
 
       {voice.error && (

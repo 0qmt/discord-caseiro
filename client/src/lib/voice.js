@@ -46,6 +46,8 @@ function montarRestricoesMic() {
 
 const LIMIAR_FALA = 0.02;
 const INTERVALO_ESTATISTICAS = 2000;
+const ATRASO_RECONEXAO_MS = 5_000;
+const MAX_TENTATIVAS_RECONEXAO = 3;
 
 /**
  * Resolução e fps de tela compartilhada são escolhidos em dois eixos
@@ -115,6 +117,8 @@ export class VoiceClient {
     this.error = null;
     this.connectionStatus = 'connected';
     this.reconexaoCanal = null;
+    this.reconexoes = new Map();
+    this.pttPressionado = false;
 
     this.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
     this.micStream = null;
@@ -175,7 +179,12 @@ export class VoiceClient {
       connectionStatus: this.connectionStatus,
       connecting: this.connecting,
       error: this.error,
-      self: { ...this.self },
+      self: {
+        ...this.self,
+        pushToTalk: this.usandoPushToTalk(),
+        pushToTalkPressed: this.pttPressionado,
+        transmitting: this.podeTransmitir(),
+      },
       local: { camera: this.cameraStream, screen: this.screenStream },
       peers: [...this.peers.entries()].map(([socketId, peer]) => ({
         socketId,
@@ -185,6 +194,9 @@ export class VoiceClient {
         speaking: peer.speaking,
         screenStats: peer.screenStats ?? null,
         connectionState: peer.pc?.connectionState ?? 'new',
+        diagnostic: peer.diagnostic ?? null,
+        reconnecting: Boolean(peer.reconnecting),
+        retryCount: peer.retryCount ?? 0,
         // Já resolvido aqui pra o <audio> só ter que obedecer.
         volume: this.volumeParaTocar(socketId),
         silenciadoLocal: this.silenciadosLocal.has(socketId),
@@ -207,6 +219,24 @@ export class VoiceClient {
     this.self = { ...this.self, camera: false, screen: false, speaking: false };
     this.error = 'Conexao perdida. Tentando voltar para a chamada...';
     this.avisar();
+  }
+
+  preferenciasDeTransmissao() {
+    return getEntradaAudio();
+  }
+
+  usandoPushToTalk() {
+    return this.preferenciasDeTransmissao().transmissionMode === 'ptt';
+  }
+
+  podeTransmitir() {
+    return Boolean(this.self.hasMic && !this.self.muted && !this.self.serverMuted
+      && !this.self.deafened && (!this.usandoPushToTalk() || this.pttPressionado));
+  }
+
+  aplicarTransmissao() {
+    for (const track of this.micStream?.getAudioTracks() ?? []) track.enabled = this.podeTransmitir();
+    if (!this.podeTransmitir()) this.self.speaking = false;
   }
 
   aoConectar() {
@@ -284,6 +314,7 @@ export class VoiceClient {
     this.iniciarDeteccaoDeFala();
     this.iniciarEstatisticas();
     if (this.micStream) this.observarFala('self', this.micStream);
+    this.aplicarTransmissao();
 
     // Nós somos quem chegou: oferecemos para todo mundo que já estava.
     for (const participante of resposta.participants) {
@@ -341,7 +372,7 @@ export class VoiceClient {
 
   /* -------------------------------- pares ------------------------------ */
 
-  criarPar(socketId, user, state, souOOfertante) {
+  criarPar(socketId, user, state, souOOfertante, { retryCount = 0 } = {}) {
     if (this.peers.has(socketId)) return this.peers.get(socketId);
 
     const pc = new RTCPeerConnection({ iceServers: this.iceServers });
@@ -356,6 +387,10 @@ export class VoiceClient {
       speaking: false,
       screenStats: null,
       pendentes: [],
+      souOOfertante,
+      retryCount,
+      reconnecting: false,
+      diagnostic: null,
     };
     this.peers.set(socketId, peer);
 
@@ -391,10 +426,9 @@ export class VoiceClient {
 
     pc.onconnectionstatechange = () => {
       console.log(`[voz] conexão com ${socketId}: ${pc.connectionState}`);
-      if (pc.connectionState === 'failed') {
-        console.log(`[voz] tentando de novo com ${socketId} (restartIce)`);
-        pc.restartIce();
-      }
+      if (pc.connectionState === 'connected') this.cancelarReconexao(socketId, peer);
+      if (pc.connectionState === 'failed') this.agendarReconexao(socketId, 'A conexão falhou. Tentando restaurar...');
+      if (pc.connectionState === 'disconnected') this.agendarReconexao(socketId, 'A conexão ficou instável. Verificando...');
       this.avisar();
     };
 
@@ -425,10 +459,74 @@ export class VoiceClient {
     peer.pc.ontrack = null;
     peer.pc.onconnectionstatechange = null;
     peer.pc.close();
+    const pendente = this.reconexoes.get(socketId);
+    if (pendente) clearTimeout(pendente);
+    this.reconexoes.delete(socketId);
     this.peers.delete(socketId);
     this.analisadores.delete(socketId);
     this.statsAnteriores.delete(`${socketId}-screen`);
     this.avisar();
+  }
+
+  cancelarReconexao(socketId, peer = this.peers.get(socketId)) {
+    const pendente = this.reconexoes.get(socketId);
+    if (pendente) clearTimeout(pendente);
+    this.reconexoes.delete(socketId);
+    if (peer) {
+      peer.reconnecting = false;
+      peer.diagnostic = null;
+      peer.retryCount = 0;
+    }
+  }
+
+  agendarReconexao(socketId, diagnostic, { imediato = false, force = false } = {}) {
+    const peer = this.peers.get(socketId);
+    if (!peer || (!force && (peer.reconnecting || this.reconexoes.has(socketId)))) return;
+    const pendente = this.reconexoes.get(socketId);
+    if (pendente) clearTimeout(pendente);
+    this.reconexoes.delete(socketId);
+    if (force) peer.reconnecting = false;
+    peer.diagnostic = diagnostic;
+    const disparar = () => this.reconectarPar(socketId);
+    const timer = setTimeout(disparar, imediato ? 0 : ATRASO_RECONEXAO_MS);
+    this.reconexoes.set(socketId, timer);
+    this.avisar();
+  }
+
+  reconectarPar(socketId) {
+    const timer = this.reconexoes.get(socketId);
+    if (timer) clearTimeout(timer);
+    this.reconexoes.delete(socketId);
+    const peer = this.peers.get(socketId);
+    if (!peer || !this.channelId) return;
+
+    if (!peer.souOOfertante) {
+      peer.diagnostic = 'Pedindo ao outro participante para refazer a conexão...';
+      peer.reconnecting = true;
+      this.sinalizar(socketId, { requestReconnect: true });
+      this.avisar();
+      return;
+    }
+
+    const tentativas = (peer.retryCount ?? 0) + 1;
+    if (tentativas > MAX_TENTATIVAS_RECONEXAO) {
+      peer.reconnecting = false;
+      peer.diagnostic = 'Não foi possível restaurar esta conexão. Tente reconectar.';
+      this.avisar();
+      return;
+    }
+
+    const { user, state } = peer;
+    this.removerPar(socketId);
+    const novo = this.criarPar(socketId, user, state, true, { retryCount: tentativas });
+    novo.reconnecting = true;
+    novo.diagnostic = `Reconectando (${tentativas}/${MAX_TENTATIVAS_RECONEXAO})...`;
+    this.avisar();
+  }
+
+  reconectar(socketId = null) {
+    if (socketId) this.agendarReconexao(socketId, 'Reconectando por solicitação...', { imediato: true, force: true });
+    else for (const id of this.peers.keys()) this.agendarReconexao(id, 'Reconectando por solicitação...', { imediato: true, force: true });
   }
 
   sinalizar(to, payload) {
@@ -439,9 +537,23 @@ export class VoiceClient {
     let peer = this.peers.get(from);
     console.log(`[voz] sinal de ${from}:`, payload.description?.type ?? (payload.candidate ? 'candidate' : '?'));
 
+    if (payload.requestReconnect) {
+      const existente = this.peers.get(from);
+      if (existente?.souOOfertante) this.agendarReconexao(from, 'O participante pediu uma nova conexão.', { imediato: true });
+      return;
+    }
+
     if (payload.description) {
       if (payload.description.type === 'offer') {
         // Alguém chegou depois de nós e está oferecendo.
+        // Depois de uma falha, a outra ponta recria a conexão e envia uma
+        // nova oferta. Não podemos aplicar essa oferta em um RTCPeerConnection
+        // encerrado ou em recuperação.
+        if (peer && (peer.reconnecting || ['failed', 'closed'].includes(peer.pc.connectionState))) {
+          const { user, state, retryCount } = peer;
+          this.removerPar(from);
+          peer = this.criarPar(from, user, state, false, { retryCount });
+        }
         if (!peer) peer = this.criarPar(from, null, null, false);
         await peer.pc.setRemoteDescription(payload.description);
         this.adotarTransceivers(peer);
@@ -582,9 +694,7 @@ export class VoiceClient {
       this.self.muted = this.mutadoAntesDeEnsurdecer ?? false;
     }
 
-    for (const track of this.micStream?.getAudioTracks() ?? []) {
-      track.enabled = !this.self.muted;
-    }
+    this.aplicarTransmissao();
     this.publicarEstado();
     this.avisar();
   }
@@ -654,7 +764,7 @@ export class VoiceClient {
     if (this.self.serverMuted) {
       this.self.muted = true;
       this.self.speaking = false;
-      for (const track of this.micStream?.getAudioTracks() ?? []) track.enabled = false;
+      this.aplicarTransmissao();
     }
     if (this.self.serverDeafened) this.self.deafened = true;
 
@@ -692,6 +802,7 @@ export class VoiceClient {
       this.self.muted = false;
       this.substituirEmTodos('audio', this.micStream.getAudioTracks()[0]);
       this.observarFala('self', this.micStream);
+      this.aplicarTransmissao();
       this.publicarEstado();
       this.avisar();
       return;
@@ -699,9 +810,7 @@ export class VoiceClient {
 
     this.self.muted = !this.self.muted;
     // enabled=false mantém a conexão de pé e só manda silêncio.
-    for (const track of this.micStream?.getAudioTracks() ?? []) {
-      track.enabled = !this.self.muted;
-    }
+    this.aplicarTransmissao();
     if (this.self.muted) this.self.speaking = false;
     this.publicarEstado();
     this.avisar();
@@ -837,6 +946,9 @@ export class VoiceClient {
    */
   async aoMudarEntradaAudio(prefs) {
     if (this.gainNode) this.gainNode.gain.value = prefs.ganho;
+    if (prefs.transmissionMode !== 'ptt') this.pttPressionado = false;
+    this.aplicarTransmissao();
+    this.avisar();
 
     if (!this.micStreamCru) return;
 
@@ -851,12 +963,19 @@ export class VoiceClient {
         await this.abrirMicrofone();
         this.substituirEmTodos('audio', this.micStream.getAudioTracks()[0]);
         this.observarFala('self', this.micStream);
-        // Troca de dispositivo no meio da call não deve desmutar sozinha.
-        for (const track of this.micStream.getAudioTracks()) track.enabled = !this.self.muted;
+        // Troca de dispositivo no meio da call não deve desmutar nem ignorar PTT.
+        this.aplicarTransmissao();
       } catch {
         // Dispositivo escolhido sumiu/sem permissão - continua com o antigo.
       }
     }
+  }
+
+  setPushToTalkPressed(pressed) {
+    if (!this.usandoPushToTalk() || this.pttPressionado === Boolean(pressed)) return;
+    this.pttPressionado = Boolean(pressed);
+    this.aplicarTransmissao();
+    this.avisar();
   }
 
   pararMicrofone() {
@@ -907,7 +1026,7 @@ export class VoiceClient {
         const falando = volume > LIMIAR_FALA;
 
         if (chave === 'self') {
-          const valor = falando && !this.self.muted;
+          const valor = falando && this.podeTransmitir();
           if (valor !== this.self.speaking) { this.self.speaking = valor; mudou = true; }
         } else {
           const peer = this.peers.get(chave);

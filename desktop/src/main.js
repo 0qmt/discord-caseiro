@@ -16,6 +16,13 @@ const NOME_DO_APP = 'discordia';
 app.setAppUserModelId('com.discordcaseiro.app');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
+// O Electron registra o executável instalado no Login do Windows. Mantemos a
+// janela visível ao entrar na conta, como o usuário espera de um cliente de
+// comunicação, e nunca criamos essa entrada durante o desenvolvimento.
+if (process.platform === 'win32' && app.isPackaged) {
+  app.setLoginItemSettings({ openAtLogin: true, openAsHidden: false });
+}
+
 let janela = null;
 let janelaAudio = null;
 let janelaPlayer = null;

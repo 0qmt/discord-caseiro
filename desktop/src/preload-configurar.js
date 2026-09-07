@@ -27,6 +27,11 @@ contextBridge.exposeInMainWorld('appDesktop', {
   pararSomDeChamada: () => ipcRenderer.send('app:parar-som-chamada'),
   /** Alterna o modo de tela cheia nativo da janela do Electron. */
   telaCheia: (ativa) => ipcRenderer.invoke('app:tela-cheia', Boolean(ativa)),
+  onTelaCheia: (callback) => {
+    const handler = (_event, ativa) => callback(Boolean(ativa));
+    ipcRenderer.on('app:tela-cheia', handler);
+    return () => ipcRenderer.removeListener('app:tela-cheia', handler);
+  },
   abrirPlayerTelaCheia: (url) => ipcRenderer.invoke('app:abrir-player-tela-cheia', String(url ?? '')),
   versao: () => ipcRenderer.invoke('app:versao'),
   reiniciarApp: () => ipcRenderer.invoke('app:reiniciar'),

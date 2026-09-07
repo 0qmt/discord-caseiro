@@ -747,6 +747,20 @@
   font-size: 11px;
 }
 
+.orbit-shell .voice-ptt-status {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.orbit-shell .voice-ptt-status.transmitindo,
+.orbit-shell .voice-reconnect {
+  color: var(--ok);
+}
+
+.orbit-shell .voice-reconnect {
+  font-size: 11px;
+}
+
 .orbit-shell .voice-blocos-grid {
   grid-template-columns: repeat(auto-fit, minmax(210px, 300px));
   gap: 10px;

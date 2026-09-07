@@ -9,7 +9,10 @@
  */
 const CHAVE = 'discord-caseiro:entrada-audio';
 
-const PADRAO = { deviceId: '', noiseSuppression: true, ganho: 1 };
+const PADRAO = {
+  deviceId: '', noiseSuppression: true, ganho: 1,
+  transmissionMode: 'voice', pushToTalkKey: 'KeyV',
+};
 
 let ouvintes = [];
 

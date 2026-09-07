@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { VoiceClient } from './voice.js';
+import { getEntradaAudio } from './audioInput.js';
 
 const VAZIO = {
   channelId: null,
@@ -121,6 +122,35 @@ export function useVoice(socket) {
     };
   }, [socket]);
 
+  useEffect(() => {
+    const liberar = () => clientRef.current?.setPushToTalkPressed(false);
+    const campoDeTexto = (target) => target instanceof HTMLElement
+      && (target.matches('input, textarea, select') || target.isContentEditable);
+    const aoApertar = (event) => {
+      const prefs = getEntradaAudio();
+      if (prefs.transmissionMode !== 'ptt' || campoDeTexto(event.target) || event.code !== prefs.pushToTalkKey) return;
+      event.preventDefault();
+      clientRef.current?.setPushToTalkPressed(true);
+    };
+    const aoSoltar = (event) => {
+      const prefs = getEntradaAudio();
+      if (prefs.transmissionMode !== 'ptt' || event.code !== prefs.pushToTalkKey) return;
+      event.preventDefault();
+      clientRef.current?.setPushToTalkPressed(false);
+    };
+    const aoMudarVisibilidade = () => { if (document.visibilityState !== 'visible') liberar(); };
+    window.addEventListener('keydown', aoApertar);
+    window.addEventListener('keyup', aoSoltar);
+    window.addEventListener('blur', liberar);
+    document.addEventListener('visibilitychange', aoMudarVisibilidade);
+    return () => {
+      window.removeEventListener('keydown', aoApertar);
+      window.removeEventListener('keyup', aoSoltar);
+      window.removeEventListener('blur', liberar);
+      document.removeEventListener('visibilitychange', aoMudarVisibilidade);
+    };
+  }, []);
+
   // Sair da call encerra qualquer votação que estivéssemos acompanhando.
   useEffect(() => {
     if (!voice.channelId) { setVotacoes({}); setWatch({ sessions: [], proposals: [] }); }
@@ -130,6 +160,8 @@ export function useVoice(socket) {
     join: (channelId) => clientRef.current?.join(channelId),
     leave: () => clientRef.current?.leave(),
     toggleMute: () => clientRef.current?.toggleMute(),
+    setPushToTalkPressed: (pressed) => clientRef.current?.setPushToTalkPressed(pressed),
+    reconnect: (socketId) => clientRef.current?.reconectar(socketId),
     toggleCamera: () => clientRef.current?.toggleCamera(),
     toggleScreen: () => clientRef.current?.toggleScreen(),
     mudarQualidadeTela: (resolucaoId, fpsId) =>

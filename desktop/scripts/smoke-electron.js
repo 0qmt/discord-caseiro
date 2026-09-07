@@ -167,12 +167,14 @@ async function testarJanelas() {
       desktopNotificar: typeof window.appDesktop?.notificar,
       desktopJogo: typeof window.appDesktop?.aoDetectarJogo,
       desktopEmCall: typeof window.appDesktop?.emCall,
+      desktopTelaCheia: typeof window.appDesktop?.telaCheia,
+      desktopOnTelaCheia: typeof window.appDesktop?.onTelaCheia,
       temMediaDevices: typeof navigator.mediaDevices?.getUserMedia === 'function',
       temDisplayMedia: typeof navigator.mediaDevices?.getDisplayMedia === 'function',
       contextoSeguro: window.isSecureContext,
     })
   `);
-  check('o título é o do app', dentro.titulo === 'Discord Caseiro', dentro.titulo);
+  check('o título é o do app', dentro.titulo === 'discordia', dentro.titulo);
   // A ponte de CONFIGURAÇÃO (trocar de servidor) nunca pode chegar na página
   // vinda da rede; a ponte de APP (notificação e jogo) chega de propósito, e
   // quem confere se pode usá-la é o processo principal (ver main.js).
@@ -183,6 +185,8 @@ async function testarJanelas() {
   check('a ponte do app expoe notificar', dentro.desktopNotificar === 'function');
   check('a ponte do app expoe a deteccao de jogo', dentro.desktopJogo === 'function');
   check('a ponte do app expoe emCall', dentro.desktopEmCall === 'function');
+  check('a ponte do app expoe controle de tela cheia', dentro.desktopTelaCheia === 'function');
+  check('a ponte do app avisa mudancas de tela cheia', dentro.desktopOnTelaCheia === 'function');
   check('getUserMedia disponível na página', dentro.temMediaDevices === true);
   check('getDisplayMedia disponível na página', dentro.temDisplayMedia === true);
   check('localhost já é contexto seguro', dentro.contextoSeguro === true);

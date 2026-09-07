@@ -675,6 +675,31 @@ function SecaoVoz() {
           Voltar pro normal (100%)
         </button>
       )}
+
+      <label className="settings-campo">
+        <span>Modo de transmissão</span>
+        <select value={entrada.transmissionMode} onChange={(e) => mudarEntrada({ transmissionMode: e.target.value })}>
+          <option value="voice">Voz aberta</option>
+          <option value="ptt">Apertar para falar</option>
+        </select>
+        <span className="hint">Voz aberta transmite normalmente. Apertar para falar só transmite enquanto a tecla estiver pressionada.</span>
+      </label>
+
+      {entrada.transmissionMode === 'ptt' && (
+        <label className="settings-campo">
+          <span>Tecla para falar</span>
+          <input
+            value={entrada.pushToTalkKey === 'Space' ? 'Espaço' : entrada.pushToTalkKey.replace(/^Key/, '')}
+            onKeyDown={(e) => {
+              e.preventDefault();
+              if (e.code) mudarEntrada({ pushToTalkKey: e.code });
+            }}
+            readOnly
+            aria-label="Pressione a tecla usada para falar"
+          />
+          <span className="hint">Clique no campo e pressione a tecla desejada. Enquanto escreve uma mensagem, essa tecla não transmite.</span>
+        </label>
+      )}
     </section>
   );
 }
