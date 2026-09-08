@@ -20,6 +20,7 @@ function validManifest(value) {
 }
 
 mobileUpdateRoutes.get('/update', async (_req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
     const raw = await fs.readFile(path.join(config.mobileUpdatesDir, 'latest.json'), 'utf8');
     const manifest = JSON.parse(raw);
@@ -27,7 +28,6 @@ mobileUpdateRoutes.get('/update', async (_req, res, next) => {
       console.error('[mobile-update] latest.json invalido; manifesto nao sera servido');
       return res.status(503).json({ error: 'atualizacao temporariamente indisponivel' });
     }
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     return res.json(manifest);
   } catch (err) {
     if (err?.code === 'ENOENT') return res.status(204).end();

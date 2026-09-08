@@ -9,6 +9,7 @@
     "app": "npm --prefix desktop run dev",
     "build": "npm --prefix client run build",
     "exe": "npm --prefix desktop run dist",
+    "publicar:android": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publicar-android.ps1",
     "smoke": "npm --prefix server run smoke",
     "smoke:app": "npm --prefix desktop run smoke",
     "instalar": "npm --prefix server install && npm --prefix client install && npm --prefix desktop install"
