@@ -1690,6 +1690,26 @@ button.member-name:hover, button.author:hover { text-decoration: underline; }
 
 .voice-tile:fullscreen .voice-tile-acoes .icon-btn { width: 36px; height: 36px; font-size: 17px; }
 
+.voice-screen-context-menu {
+  position: fixed;
+  z-index: 1000;
+  width: 240px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 7px;
+  background: #202228;
+  box-shadow: 0 12px 34px rgba(0,0,0,.45);
+  color: #fff;
+}
+.voice-screen-context-menu strong { font-size: 13px; }
+.voice-screen-context-menu label { display: flex; align-items: center; gap: 8px; }
+.voice-screen-context-menu input { flex: 1; }
+.voice-screen-context-menu span { width: 34px; text-align: right; color: #c9ced8; font-size: 12px; }
+.voice-screen-context-menu button { border: 0; border-radius: 5px; padding: 8px; background: #34373f; color: #fff; cursor: pointer; text-align: left; }
+.voice-screen-context-menu button:hover { background: #454952; }
+
 .voice-tile-acoes .icon-btn:hover { background: rgba(0, 0, 0, .8); }
 
 .voice-tile-acoes .icon-btn.perigo,

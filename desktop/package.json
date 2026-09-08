@@ -1,6 +1,6 @@
 {
   "name": "discord-caseiro-desktop",
-  "version": "0.2.49",
+  "version": "0.2.68",
   "private": true,
   "description": "Cliente de desktop do discordia",
   "main": "src/main.js",
@@ -8,13 +8,18 @@
     "dev": "electron .",
     "dist": "electron-builder --publish=never",
     "publicar": "node scripts/publicar.js",
+    "publicar:build": "node scripts/publicar.js --build",
+    "publicar:oficial": "node scripts/publicar-oficial.js",
     "smoke": "electron scripts/smoke-electron.js",
     "smoke:fullscreen": "electron scripts/smoke-fullscreen-kiosk.js"
   },
   "dependencies": {
+    "@ghostery/adblocker-electron": "^2.18.2",
+    "cross-fetch": "^4.1.0",
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {
+    "asar": "^3.2.0",
     "electron": "^38.4.0",
     "electron-builder": "^26.0.12"
   },
@@ -37,19 +42,15 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
         }
       ]
     },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "shortcutName": "discordia"
+      "shortcutName": "discordia",
+      "runAfterFinish": true,
+      "include": "build/installer-include.nsh"
     },
     "linux": {
       "target": [

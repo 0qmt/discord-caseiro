@@ -1,15 +1,20 @@
 const path = require('node:path');
+const fs = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
 const {
   app, BrowserWindow, Menu, Notification, Tray, nativeImage, ipcMain, session, shell, dialog,
   screen,
 } = require('electron');
+const fetchAdblock = require('cross-fetch');
+const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const config = require('./config.js');
 const jogos = require('./jogos.js');
 const { instalarPermissoes, instalarCapturaDeTela } = require('./sessao.js');
 
 const DEV_URL = process.env.DISCORD_CASEIRO_DEV_URL ?? null;
 const NOME_DO_APP = 'discordia';
+const ehPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE || process.env.PORTABLE_EXECUTABLE_DIR);
+const MARCADOR_AVISO_PORTABLE = 'portable-update-notice-v1';
 
 // Sem isso o Windows não sabe de qual "app" é a notificação e simplesmente
 // não mostra nada, em silêncio - sem erro nenhum no console pra avisar.
@@ -29,6 +34,7 @@ let janelaPlayer = null;
 let splash = null;
 let bandeja = null;
 let saindoDeVerdade = false;
+let encerrandoParaAtualizacao = false;
 let servidorAtual = DEV_URL ?? config.ler().serverUrl;
 
 /*
@@ -165,6 +171,42 @@ const TRECHOS_DE_ANUNCIO = [
   'monetag',
 ];
 
+// Estas regras permanecem mesmo quando a lista externa esta disponivel. Elas
+// cobrem anuncios que o proprio player hospeda no seu dominio, caso que listas
+// genericas nao conseguem identificar sem conhecer o site em questao.
+const FILTROS_LOCAIS_DE_ANUNCIO = [
+  '||doubleclick.net^',
+  '||googlesyndication.com^',
+  '||googleadservices.com^',
+  '||adservice.google^',
+  '||adnxs.com^',
+  '||adsystem.com^',
+  '||exoclick.com^',
+  '||popads.net^',
+  '||popcash.net^',
+  '||propellerads.com^',
+  '||propeller-tracking.com^',
+  '||onclickads.net^',
+  '||hilltopads.net^',
+  '||juicyads.com^',
+  '||adsterra.com^',
+  '||adsterratools.com^',
+  '||monetag.com^',
+  '||trafficjunky.net^',
+  '||superflixapi.beer/ads^',
+  '||superflixapi.beer/adserver^',
+  '||superflixapi.beer/advert^',
+  '||superflixapi.beer/banner^',
+  '||superflixapi.beer/popunder^',
+  '||superflixapi.beer/popup^',
+  '||superflixapi.beer/prebid^',
+  '||superflixapi.beer/vast^',
+  '||superflixapi.beer/vpaid^',
+];
+
+const SETE_DIAS = 7 * 24 * 60 * 60 * 1000;
+const bloqueadoresPorSessao = new WeakMap();
+
 function deveBloquearPedido(url) {
   let parsed;
   try {
@@ -178,15 +220,101 @@ function deveBloquearPedido(url) {
 
   const host = parsed.hostname.toLowerCase();
   const caminho = `${parsed.pathname}${parsed.search}`.toLowerCase();
-  if (HOSTS_PERMITIDOS_NO_PLAYER.has(host)) return false;
+  // O player e permitido, mas isso nao pode liberar cegamente anuncios
+  // hospedados no mesmo dominio, como /ads/... ou /advert/....
   if (PADROES_DE_ANUNCIO.some((padrao) => padrao.test(host))) return true;
   return TRECHOS_DE_ANUNCIO.some((trecho) => caminho.includes(trecho) || host.includes(trecho));
 }
 
-function instalarBloqueadorDeAnuncios(sessao) {
+function instalarFallbackDeAnuncios(sessao) {
   sessao.webRequest.onBeforeRequest((detalhes, callback) => {
     callback({ cancel: deveBloquearPedido(detalhes.url) });
   });
+}
+
+async function lerCacheDoBloqueador(caminho) {
+  try {
+    const [dados, estatisticas] = await Promise.all([fs.readFile(caminho), fs.stat(caminho)]);
+    return { dados, recente: Date.now() - estatisticas.mtimeMs < SETE_DIAS };
+  } catch {
+    return null;
+  }
+}
+
+async function criarMotorDeBloqueio() {
+  const caminhoCache = path.join(app.getPath('userData'), 'adblocker-ads.bin');
+  const cache = await lerCacheDoBloqueador(caminhoCache);
+  let bloqueador;
+
+  if (cache?.recente) {
+    try {
+      bloqueador = ElectronBlocker.deserialize(cache.dados);
+      console.info('[adblock] lista de anuncios carregada do cache local');
+    } catch (erro) {
+      // Nao confiamos num cache que nao passa na verificacao interna do motor.
+      console.warn('[adblock] cache local invalido; baixando lista nova', erro?.message ?? erro);
+    }
+  }
+
+  if (!bloqueador) {
+    try {
+      // Sem passar o cache aqui: a biblioteca prefere qualquer cache existente
+      // e nao faria o refresh semanal. Gravamos a lista somente apos ela estar
+      // completamente montada e validada em memoria.
+      bloqueador = await ElectronBlocker.fromPrebuiltAdsOnly(fetchAdblock);
+      await fs.writeFile(caminhoCache, bloqueador.serialize());
+      console.info('[adblock] lista de anuncios atualizada');
+    } catch (erro) {
+      // Uma lista armazenada anteriormente continua sendo melhor do que ficar
+      // sem protecao quando a rede estiver indisponivel no momento da abertura.
+      if (!cache?.dados) throw erro;
+      try {
+        bloqueador = ElectronBlocker.deserialize(cache.dados);
+        console.warn('[adblock] atualizacao da lista falhou; usando cache local', erro?.message ?? erro);
+      } catch {
+        throw erro;
+      }
+    }
+  }
+
+  bloqueador.updateFromDiff({ added: FILTROS_LOCAIS_DE_ANUNCIO });
+  return bloqueador;
+}
+
+function instalarBloqueadorDeAnuncios(sessao) {
+  const existente = bloqueadoresPorSessao.get(sessao);
+  if (existente) return existente.pronto;
+
+  // A primeira barreira e sincrona: nenhuma requisicao de anuncio fica sem
+  // filtro enquanto as listas maiores sao carregadas ou atualizadas.
+  instalarFallbackDeAnuncios(sessao);
+
+  const estado = { pronto: null, bloqueador: null };
+  estado.pronto = criarMotorDeBloqueio()
+    .then((bloqueador) => {
+      // O Electron so aceita um listener para onBeforeRequest. Trocar o
+      // fallback pelo motor completo e atomico no mesmo ciclo do processo.
+      const bloquearPelaLista = bloqueador.onBeforeRequest.bind(bloqueador);
+      bloqueador.onBeforeRequest = (detalhes, callback) => {
+        if (deveBloquearPedido(detalhes.url)) {
+          callback({ cancel: true });
+          return;
+        }
+        bloquearPelaLista(detalhes, callback);
+      };
+      sessao.webRequest.onBeforeRequest(null);
+      bloqueador.enableBlockingInSession(sessao);
+      estado.bloqueador = bloqueador;
+      console.info('[adblock] motor de filtros amplo ativo');
+      return bloqueador;
+    })
+    .catch((erro) => {
+      // O fallback manual continua registrado e protege o player mesmo offline.
+      console.warn('[adblock] motor de filtros indisponivel; fallback local mantido', erro?.stack ?? erro);
+      return null;
+    });
+  bloqueadoresPorSessao.set(sessao, estado);
+  return estado.pronto;
 }
 
 async function servidorRespondendo(url) {
@@ -205,7 +333,9 @@ async function abrirOndeDer() {
   if (!servidorAtual) return janela.loadFile(paginaLocal('configurar.html'));
 
   if (await servidorRespondendo(servidorAtual)) {
-    return janela.loadURL(servidorAtual);
+    const endereco = new URL(servidorAtual);
+    endereco.searchParams.set('_app_boot', String(Date.now()));
+    return janela.loadURL(endereco.toString());
   }
 
   return janela.loadFile(paginaLocal('configurar.html'), {
@@ -249,6 +379,7 @@ function criarJanela() {
     if (splash && !splash.isDestroyed()) splash.close();
     splash = null;
     janela.show();
+    mostrarAvisoPortableUmaVez();
   });
 
   janela.on('enter-full-screen', () => emitirEstadoDeTelaCheia(true));
@@ -261,7 +392,7 @@ function criarJanela() {
   // Fechar no X so minimiza pra bandeja - continua recebendo chamada e
   // mensagem por trás. So sai de verdade pelo menu/bandeja "Sair".
   janela.on('close', (evento) => {
-    if (saindoDeVerdade) return;
+    if (saindoDeVerdade || encerrandoParaAtualizacao) return;
     evento.preventDefault();
     janela.hide();
   });
@@ -397,6 +528,11 @@ ipcMain.handle('app:versao', (evento) => {
   return app.getVersion();
 });
 
+ipcMain.handle('app:instalacao', (evento) => {
+  if (!veioDaNossaPagina(evento)) return null;
+  return { portable: ehPortable, atualizacaoAutomatica: app.isPackaged && !ehPortable };
+});
+
 ipcMain.handle('app:reiniciar', (evento) => {
   if (!veioDaNossaPagina(evento)) return false;
   saindoDeVerdade = true;
@@ -404,6 +540,39 @@ ipcMain.handle('app:reiniciar', (evento) => {
   app.exit(0);
   return true;
 });
+
+function prepararEncerramentoParaAtualizacao() {
+  encerrandoParaAtualizacao = true;
+  saindoDeVerdade = true;
+  janelaAudio?.close();
+  janelaPlayer?.close();
+  return () => {
+    encerrandoParaAtualizacao = false;
+    saindoDeVerdade = false;
+  };
+}
+
+async function mostrarAvisoPortableUmaVez() {
+  if (!ehPortable) return;
+  const marcador = path.join(app.getPath('userData'), MARCADOR_AVISO_PORTABLE);
+  try {
+    await fs.access(marcador);
+    return;
+  } catch {}
+
+  try {
+    await dialog.showMessageBox(janela, {
+      type: 'info',
+      title: NOME_DO_APP,
+      message: 'Esta e a versao portable',
+      detail: 'Ela nao recebe atualizacoes automaticas. Para receber atualizacoes pelo app, instale a versao discordia-Setup.exe uma unica vez.',
+      buttons: ['Entendi'],
+    });
+    await fs.writeFile(marcador, 'shown\n', 'utf8');
+  } catch (erro) {
+    console.warn('[instalacao] nao foi possivel registrar aviso portable', erro);
+  }
+}
 
 ipcMain.handle('app:abrir-player-tela-cheia', async (evento, bruto) => {
   if (!veioDaNossaPagina(evento)) return false;
@@ -584,11 +753,22 @@ if (!app.requestSingleInstanceLock()) {
     // abertura sem cache nenhum é a forma mais simples de garantir que
     // "fechei e abri" realmente pega a versão nova.
     await session.defaultSession.clearCache();
-    criarJanela();
 
     // Só instalado (via NSIS) o auto-update funciona de verdade - em dev
     // não existe app-update.yml e checkForUpdates só geraria ruído no log.
-    if (app.isPackaged) require('./atualizador.js').iniciar(veioDaNossaPagina);
+    // Portable nao possui instalador NSIS para o ciclo quitAndInstall. Ele
+    // continua utilizavel, mas o updater automatico fica explicitamente
+    // desabilitado nesse target.
+    if (app.isPackaged && !ehPortable) {
+      await require('./atualizador.js').iniciar(
+        veioDaNossaPagina,
+        prepararEncerramentoParaAtualizacao,
+        { antesDeAbrir: true },
+      );
+      // A consulta ocorreu ainda na splash. Se houver atualização, o download
+      // continua em segundo plano e a janela de reinício aparece ao terminar.
+    }
+    criarJanela();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) criarJanela();

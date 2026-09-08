@@ -63,9 +63,9 @@
     <script>
       (async () => {
         const info = await window.atualizacao.info();
-        if (info?.version) {
+        if (info?.availableVersion) {
           document.getElementById('versao-texto').textContent =
-            `Versão ${info.version} já baixada. É só reiniciar pra entrar nela.`;
+            `Versão ${info.availableVersion} já baixada. É só reiniciar pra entrar nela.`;
         }
       })();
 

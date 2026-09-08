@@ -276,6 +276,62 @@ export default function SettingsScreen({
   me, souDono, onClose, onLogout, onEditarPerfil,
 }) {
   const [aba, setAba] = useState('conta');
+  const [versaoDesktop, setVersaoDesktop] = useState(null);
+  const [instalacaoDesktop, setInstalacaoDesktop] = useState(null);
+  const [estadoAtualizacao, setEstadoAtualizacao] = useState(null);
+  const [acaoAtualizacao, setAcaoAtualizacao] = useState(false);
+
+  useEffect(() => {
+    let ativo = true;
+    window.appDesktop?.versao?.()
+      .then((versao) => { if (ativo && versao) setVersaoDesktop(String(versao)); })
+      .catch(() => {});
+    return () => { ativo = false; };
+  }, []);
+
+  useEffect(() => {
+    let ativo = true;
+    window.appDesktop?.instalacao?.()
+      .then((instalacao) => { if (ativo && instalacao) setInstalacaoDesktop(instalacao); })
+      .catch(() => {});
+    return () => { ativo = false; };
+  }, []);
+
+  useEffect(() => {
+    let ativo = true;
+    const lerAtualizacao = async () => {
+      try {
+        const info = await window.appDesktop?.atualizacaoInfo?.();
+        if (ativo && info) setEstadoAtualizacao(info);
+      } catch {
+        // A ponte nao existe em versoes antigas ou no navegador comum.
+      }
+    };
+    lerAtualizacao();
+    const timer = setInterval(lerAtualizacao, 5000);
+    return () => { ativo = false; clearInterval(timer); };
+  }, []);
+
+  async function abrirOuAplicarAtualizacao() {
+    setAcaoAtualizacao(true);
+    try {
+      if (estadoAtualizacao?.status === 'ready') {
+        await window.appDesktop?.reiniciarAtualizacao?.();
+        return;
+      }
+
+      // Compatibilidade de transicao: clientes anteriores a esta ponte ja
+      // possuem a atualizacao em cache. Pedir a exibicao nao instala nada por
+      // si so; apenas reapresenta a escolha que estava escondida.
+      if (window.appDesktop?.mostrarAtualizacao) {
+        await window.appDesktop.mostrarAtualizacao();
+      } else {
+        window.appDesktop?.emCall?.(false);
+      }
+    } finally {
+      setAcaoAtualizacao(false);
+    }
+  }
 
   useEffect(() => {
     const aoTeclar = (e) => { if (e.key === 'Escape') onClose(); };
@@ -387,9 +443,18 @@ export default function SettingsScreen({
               chat e chamadas rodando na sua própria máquina.
             </p>
             <div className="settings-versao">
-              <div><span className="settings-versao-rotulo">Versão</span><span>{VERSAO}</span></div>
-              <div><span className="settings-versao-rotulo">Compilado em</span><span>{formatarBuild(BUILD)}</span></div>
+              <div><span className="settings-versao-rotulo">{versaoDesktop ? 'Versão do desktop' : 'Versão do cliente'}</span><span>{versaoDesktop ?? VERSAO}</span></div>
+              <div><span className="settings-versao-rotulo">Cliente compilado em</span><span>{formatarBuild(BUILD)}</span></div>
+              {instalacaoDesktop && <div><span className="settings-versao-rotulo">Instalação</span><span>{instalacaoDesktop.portable ? 'Portable - atualização manual' : 'Instalador - atualização automática'}</span></div>}
             </div>
+            {instalacaoDesktop?.portable && <p className="hint">Instale o arquivo discordia-Setup.exe uma única vez para receber atualizações automaticamente.</p>}
+            {versaoDesktop && estadoAtualizacao?.status === 'ready' && (
+              <div className="settings-acoes">
+                <button className="primary" onClick={abrirOuAplicarAtualizacao} disabled={acaoAtualizacao}>
+                  {acaoAtualizacao ? 'Reiniciando...' : `Reiniciar e atualizar para ${estadoAtualizacao.availableVersion}`}
+                </button>
+              </div>
+            )}
           </section>
         )}
       </div>

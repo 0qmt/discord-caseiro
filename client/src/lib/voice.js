@@ -22,7 +22,7 @@ import { getEntradaAudio, assinarEntradaAudio } from './audioInput.js';
  */
 
 /** A ordem das linhas de mídia, combinada entre as duas pontas. */
-const SLOTS = ['audio', 'camera', 'screen'];
+const SLOTS = ['audio', 'camera', 'screen', 'screenAudio'];
 
 /**
  * Restrições de mídia do microfone, montadas na hora a partir do que a
@@ -417,9 +417,20 @@ export class VoiceClient {
     pc.ontrack = ({ track, transceiver }) => {
       // Pela posição da linha de mídia: vale para os dois lados, e vale
       // mesmo quando o ontrack dispara antes de adotarmos os transceivers.
-      const slot = SLOTS[pc.getTransceivers().indexOf(transceiver)] ?? 'audio';
+      const slotPorTransceiver = Object.entries(peer.transceivers ?? {})
+        .find(([, candidato]) => candidato === transceiver)?.[0];
+      const slot = slotPorTransceiver ?? SLOTS[pc.getTransceivers().indexOf(transceiver)] ?? 'audio';
       console.log(`[voz] recebendo ${slot} de ${socketId} (track ${track.id}, enabled=${track.enabled})`);
-      peer.media = { ...peer.media, [slot]: new MediaStream([track]) };
+      if (slot === 'screenAudio') console.info('[voz][screen] áudio remoto recebido', track.getSettings?.());
+      if (slot === 'screenAudio' || slot === 'screen') {
+        const tela = peer.media.screen ?? new MediaStream();
+        const tipo = slot === 'screenAudio' ? 'audio' : 'video';
+        if (slot === 'screenAudio') track.enabled = true;
+        if (!tela.getTracks().some((faixa) => faixa.kind === tipo)) tela.addTrack(track);
+        peer.media = { ...peer.media, screen: tela };
+      } else {
+        peer.media = { ...peer.media, [slot]: new MediaStream([track]) };
+      }
       if (slot === 'audio') this.observarFala(socketId, peer.media.audio);
       this.avisar();
     };
@@ -437,6 +448,7 @@ export class VoiceClient {
         audio: pc.addTransceiver('audio', { direction: 'sendrecv' }),
         camera: pc.addTransceiver('video', { direction: 'sendrecv' }),
         screen: pc.addTransceiver('video', { direction: 'sendrecv' }),
+        screenAudio: pc.addTransceiver('audio', { direction: 'sendrecv' }),
       };
       this.enviarNossasFaixas(peer);
       this.oferecer(socketId, peer);
@@ -588,9 +600,9 @@ export class VoiceClient {
     if (peer.transceivers) return;
     const lista = peer.pc.getTransceivers();
     peer.transceivers = {
-      audio: lista[0], camera: lista[1], screen: lista[2],
+      audio: lista[0], camera: lista[1], screen: lista[2], screenAudio: lista[3],
     };
-    for (const t of lista.slice(0, 3)) {
+    for (const t of lista.slice(0, 4)) {
       if (t) t.direction = 'sendrecv';
     }
     this.enviarNossasFaixas(peer);
@@ -638,9 +650,11 @@ export class VoiceClient {
     const mic = this.micStream?.getAudioTracks()[0] ?? null;
     const cam = this.cameraStream?.getVideoTracks()[0] ?? null;
     const tela = this.screenStream?.getVideoTracks()[0] ?? null;
+    const telaAudio = this.screenStream?.getAudioTracks()[0] ?? null;
     peer.transceivers.audio.sender.replaceTrack(mic).catch(() => {});
     peer.transceivers.camera.sender.replaceTrack(cam).catch(() => {});
     peer.transceivers.screen.sender.replaceTrack(tela).catch(() => {});
+    peer.transceivers.screenAudio?.sender.replaceTrack(telaAudio).catch(() => {});
   }
 
   /** Troca uma faixa em todos os pares de uma vez, sem renegociar nada. */
@@ -848,6 +862,7 @@ export class VoiceClient {
     if (this.self.screen) {
       this.pararTela();
       this.substituirEmTodos('screen', null);
+      this.substituirEmTodos('screenAudio', null);
       this.self.screen = false;
       this.self.telaResolucaoId = null;
       this.self.telaFpsId = null;
@@ -855,7 +870,14 @@ export class VoiceClient {
       try {
         this.screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: constraintsDaQualidade(this.resolucaoTela, this.fpsTela),
-          audio: false,
+          // O seletor nativo do Electron permite marcar/desmarcar o áudio do
+          // sistema. A faixa entra em um transceiver separado do microfone.
+          audio: true,
+        });
+        console.info('[voz][screen] captura criada', {
+          videoTracks: this.screenStream.getVideoTracks().length,
+          audioTracks: this.screenStream.getAudioTracks().length,
+          audio: this.screenStream.getAudioTracks().map((track) => track.getSettings()),
         });
       } catch (err) {
         // Cancelar a janela de escolha cai aqui e não é erro de verdade.
@@ -867,6 +889,7 @@ export class VoiceClient {
       // O botão "parar compartilhamento" do navegador encerra a faixa por fora.
       track.onended = () => { if (this.self.screen) this.toggleScreen(); };
       this.substituirEmTodos('screen', track);
+      this.substituirEmTodos('screenAudio', this.screenStream.getAudioTracks()[0] ?? null);
       this.self.screen = true;
       this.self.telaResolucaoId = this.resolucaoTela.id;
       this.self.telaFpsId = this.fpsTela.id;

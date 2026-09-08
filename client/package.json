@@ -1,21 +1,43 @@
 {
   "name": "discord-caseiro-client",
-  "version": "0.2.48",
+  "version": "0.2.56",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:android": "vite build --mode android && cap sync android",
+    "android:sync": "cap sync android",
+    "android:open": "cap open android",
+    "android:apk:debug": "npm run build:android && cd android && gradlew.bat assembleDebug",
+    "android:apk:release": "npm run build:android && cd android && gradlew.bat assembleRelease",
     "preview": "vite preview",
     "teste": "node scripts/teste-notificacoes.mjs"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/camera": "^8.2.4",
+    "@capacitor/clipboard": "^8.0.1",
+    "@capacitor/core": "^8.5.1",
+    "@capacitor/device": "^8.0.3",
+    "@capacitor/filesystem": "^8.1.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/push-notifications": "^8.1.2",
+    "@capacitor/share": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-easy-crop": "^6.2.3",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
     "@vitejs/plugin-react": "^5.0.4",
     "vite": "^7.1.9"
   }

@@ -1,7 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
 import { restaurarTemaAppInicial } from './lib/temaApp.js';
+import { initializeAuthStorage } from './platform/authStorage.js';
+import { finishNativeLaunch, initializePlatform } from './platform/index.js';
 import './styles.css';
 import './componentes.css';
 import './cargos.css';
@@ -14,8 +15,19 @@ import './skins/orbit/orbit.css';
 
 restaurarTemaAppInicial();
 
-createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+async function start() {
+  try {
+    await initializePlatform();
+    await initializeAuthStorage();
+    const { default: App } = await import('./App.jsx');
+    createRoot(document.getElementById('root')).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  } finally {
+    await finishNativeLaunch();
+  }
+}
+
+void start();

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
 import { getSaidaAudio, assinarSaidaAudio } from '../lib/audioOutput.js';
@@ -34,6 +35,22 @@ function Media({ stream, kind, muted, className, style, videoRef, volume }) {
     }
   }, [stream]);
 
+  useEffect(() => {
+    if (kind !== 'audio') return undefined;
+    const el = ref.current;
+    if (!el) return undefined;
+    el.muted = false;
+    el.volume = 1;
+    const tocar = () => tentarTocar(el);
+    el.addEventListener('loadedmetadata', tocar);
+    el.addEventListener('canplay', tocar);
+    if (stream) tocar();
+    return () => {
+      el.removeEventListener('loadedmetadata', tocar);
+      el.removeEventListener('canplay', tocar);
+    };
+  }, [kind, stream]);
+
   // Volume por pessoa e "silenciar só pra mim" (e ensurdecer, que zera tudo).
   // `volume` do HTML vai só até 1; acima disso o navegador ignora, então 200%
   // fica limitado a 100% - é o teto honesto sem passar por Web Audio.
@@ -68,11 +85,41 @@ function Media({ stream, kind, muted, className, style, videoRef, volume }) {
  * não - se dependesse do palco visual, o som cortaria toda vez que a pessoa
  * minimizasse a call pra ler o chat.
  */
-export function VoiceAudioSink({ voice }) {
+function chaveVolumeDaTela(socketId) { return `discordia:screen-volume:${socketId}`; }
+
+function lerVolumeDaTela(socketId) {
+  try {
+    const valor = Number(localStorage.getItem(chaveVolumeDaTela(socketId)));
+    return Number.isFinite(valor) ? Math.max(0, Math.min(1, valor)) : 1;
+  } catch { return 1; }
+}
+
+export function VoiceAudioSink({ voice, telaAssistida = null }) {
+  const [volumesDeTela, setVolumesDeTela] = useState({});
+
+  useEffect(() => {
+    const aoMudar = (evento) => {
+      const { socketId, volume } = evento.detail ?? {};
+      if (!socketId || !Number.isFinite(volume)) return;
+      setVolumesDeTela((atuais) => ({ ...atuais, [socketId]: volume }));
+    };
+    window.addEventListener('discordia:screen-volume', aoMudar);
+    return () => window.removeEventListener('discordia:screen-volume', aoMudar);
+  }, []);
+
   if (!voice.channelId) return null;
-  return voice.peers.map((peer) => (
-    <Media key={`a-${peer.socketId}`} stream={peer.media.audio} kind="audio" volume={peer.volume} />
-  ));
+  return voice.peers.flatMap((peer) => {
+    const faixasDaTela = peer.media.screen?.getAudioTracks?.() ?? [];
+    const volumeDaTela = volumesDeTela[peer.socketId] ?? lerVolumeDaTela(peer.socketId);
+    const audioDaTela = telaAssistida === peer.socketId && faixasDaTela.length
+      ? <Media key={`sa-${peer.socketId}-${faixasDaTela[0].id}`} stream={peer.media.screen} kind="audio" volume={volumeDaTela} />
+      : null;
+
+    return [
+      <Media key={`a-${peer.socketId}`} stream={peer.media.audio} kind="audio" volume={peer.volume} />,
+      audioDaTela,
+    ];
+  });
 }
 
 /** "850 kbps" abaixo de 1 Mbps, "1.2 Mbps" acima — mais fácil de ler de relance. */
@@ -102,7 +149,7 @@ const ZOOM_PASSO = 0.2;
  */
 function Tile({
   stream, label, tipo, espelhado, stats, muted, hasMic, falando,
-  socketId, podeExpulsar, votacao, onExpulsar, onVotarExpulsao,
+  socketId, podeExpulsar, votacao, onExpulsar, onVotarExpulsao, deSiMesmo,
 }) {
   const qualidade = tipo === 'screen' ? textoDeQualidade(stats) : null;
   const containerRef = useRef(null);
@@ -113,7 +160,37 @@ function Tile({
   const [arrastando, setArrastando] = useState(false);
   const [expandido, setExpandido] = useState(false);
   const [telaCheiaNativa, setTelaCheiaNativa] = useState(false);
+  const [menuDaTela, setMenuDaTela] = useState(null);
+  const [volumeDaTela, setVolumeDaTela] = useState(() => lerVolumeDaTela(socketId));
   const ehTela = tipo === 'screen';
+  const podeAjustarVolumeDaTela = ehTela && Boolean(socketId) && !deSiMesmo;
+
+  useEffect(() => { setVolumeDaTela(lerVolumeDaTela(socketId)); }, [socketId]);
+
+  useEffect(() => {
+    if (!menuDaTela) return undefined;
+    const fechar = () => setMenuDaTela(null);
+    window.addEventListener('pointerdown', fechar);
+    window.addEventListener('blur', fechar);
+    return () => {
+      window.removeEventListener('pointerdown', fechar);
+      window.removeEventListener('blur', fechar);
+    };
+  }, [menuDaTela]);
+
+  function definirVolumeDaTela(volume) {
+    const valor = Math.max(0, Math.min(1, Number(volume)));
+    try { localStorage.setItem(chaveVolumeDaTela(socketId), String(valor)); } catch {}
+    setVolumeDaTela(valor);
+    window.dispatchEvent(new CustomEvent('discordia:screen-volume', { detail: { socketId, volume: valor } }));
+  }
+
+  function abrirMenuDaTela(evento) {
+    if (!podeAjustarVolumeDaTela) return;
+    evento.preventDefault();
+    evento.stopPropagation();
+    setMenuDaTela({ x: evento.clientX, y: evento.clientY });
+  }
 
   useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, [stream]);
 
@@ -226,6 +303,7 @@ function Tile({
       onMouseMove={aoMoverArrasto}
       onMouseUp={aoSoltarArrasto}
       onMouseLeave={aoSoltarArrasto}
+      onContextMenu={abrirMenuDaTela}
     >
       <Media
         stream={stream}
@@ -288,6 +366,31 @@ function Tile({
           <Icon name="x" size={18} />
         </button>
       )}
+      {menuDaTela && createPortal((
+        <div
+          className="voice-screen-context-menu"
+          style={{ left: menuDaTela.x, top: menuDaTela.y }}
+          onClick={(evento) => evento.stopPropagation()}
+          onPointerDown={(evento) => evento.stopPropagation()}
+          onContextMenu={(evento) => evento.preventDefault()}
+        >
+          <strong>Volume da transmissão</strong>
+          <label>
+            <input
+              aria-label="Volume da transmissão"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={Math.round(volumeDaTela * 100)}
+              onChange={(evento) => definirVolumeDaTela(Number(evento.target.value) / 100)}
+            />
+            <span>{Math.round(volumeDaTela * 100)}%</span>
+          </label>
+          <button onClick={() => definirVolumeDaTela(volumeDaTela === 0 ? 1 : 0)}>{volumeDaTela === 0 ? 'Ativar som' : 'Silenciar para mim'}</button>
+          <button onClick={() => { definirVolumeDaTela(1); setMenuDaTela(null); }}>Restaurar 100%</button>
+        </div>
+      ), document.body)}
     </div>
   );
 }

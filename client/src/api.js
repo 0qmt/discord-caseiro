@@ -1,8 +1,9 @@
-const TOKEN_KEY = 'discord-caseiro:token';
+import { readToken, removeToken, writeToken } from './platform/authStorage.js';
+import { normalizeServerData, serverPath } from './platform/server.js';
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY);
-export const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+export const getToken = readToken;
+export const setToken = writeToken;
+export const clearToken = removeToken;
 
 /** Erro com a mensagem que o backend mandou, pra mostrar direto na tela. */
 export class ApiError extends Error {
@@ -14,7 +15,7 @@ export class ApiError extends Error {
 
 async function request(method, path, body) {
   const token = getToken();
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(serverPath(`/api${path}`), {
     method,
     headers: {
       ...(body ? { 'content-type': 'application/json' } : {}),
@@ -30,13 +31,13 @@ async function request(method, path, body) {
     if (res.status === 401) clearToken();
     throw new ApiError(data?.error ?? `erro ${res.status}`, res.status);
   }
-  return data;
+  return normalizeServerData(data);
 }
 
 /** Upload usa FormData: o navegador precisa montar o content-type sozinho. */
 async function upload(path, formData) {
   const token = getToken();
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(serverPath(`/api${path}`), {
     method: 'POST',
     headers: token ? { authorization: `Bearer ${token}` } : {},
     body: formData,
@@ -47,7 +48,7 @@ async function upload(path, formData) {
     if (res.status === 401) clearToken();
     throw new ApiError(data?.error ?? `erro ${res.status}`, res.status);
   }
-  return data;
+  return normalizeServerData(data);
 }
 
 export const api = {

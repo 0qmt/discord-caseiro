@@ -34,7 +34,11 @@ contextBridge.exposeInMainWorld('appDesktop', {
   },
   abrirPlayerTelaCheia: (url) => ipcRenderer.invoke('app:abrir-player-tela-cheia', String(url ?? '')),
   versao: () => ipcRenderer.invoke('app:versao'),
+  instalacao: () => ipcRenderer.invoke('app:instalacao'),
   reiniciarApp: () => ipcRenderer.invoke('app:reiniciar'),
+  atualizacaoInfo: () => ipcRenderer.invoke('atualizacao:info'),
+  mostrarAtualizacao: () => ipcRenderer.invoke('atualizacao:mostrar'),
+  reiniciarAtualizacao: () => ipcRenderer.invoke('atualizacao:reiniciar'),
   aoMudarTelaCheia: (callback) => {
     const handler = (_evento, ativa) => callback(Boolean(ativa));
     ipcRenderer.on('app:tela-cheia', handler);

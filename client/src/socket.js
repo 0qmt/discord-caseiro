@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { getServerUrl, normalizeServerData } from './platform/server.js';
 
 /**
  * Abre a conexao de tempo real.
@@ -8,10 +9,10 @@ import { io } from 'socket.io-client';
  * eventos pra listeners que aparecem depois.
  */
 export function createSocket(token, handlers = {}) {
-  const socket = io({ auth: { token }, autoConnect: false });
+  const socket = io(getServerUrl() || undefined, { auth: { token }, autoConnect: false });
 
   for (const [event, handler] of Object.entries(handlers)) {
-    socket.on(event, handler);
+    socket.on(event, (...args) => handler(...args.map(normalizeServerData)));
   }
 
   socket.connect();

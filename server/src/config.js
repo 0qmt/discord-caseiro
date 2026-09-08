@@ -34,10 +34,17 @@ function resolveJwtSecret() {
 
 export const config = {
   port: Number(process.env.PORT ?? 3001),
-  clientOrigins: (process.env.CLIENT_ORIGIN ?? 'http://localhost:5173')
+  clientOrigins: [
+    ...(process.env.CLIENT_ORIGIN ?? 'http://localhost:5173')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+    // Origens do WebView empacotado pelo Capacitor. Continuam explicitas para
+    // nao transformar o CORS do servidor em `*`.
+    'https://localhost',
+    'http://localhost',
+    'capacitor://localhost',
+  ].filter((value, index, all) => all.indexOf(value) === index),
   jwtSecret: resolveJwtSecret(),
   tokenTtl: '30d',
   dbPath: path.resolve(SERVER_ROOT, process.env.DB_PATH ?? '../data/app.db'),

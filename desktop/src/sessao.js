@@ -49,12 +49,12 @@ function abrirSeletor(fontes, janelaPai) {
     });
 
     let respondido = false;
-    const responder = (fonte) => {
+    const responder = (fonte, audioSistema = false) => {
       if (respondido) return;
       respondido = true;
       ipcMain.removeHandler('seletor:escolher');
       ipcMain.removeHandler('seletor:listar');
-      resolve(fonte);
+      resolve(fonte ? { fonte, audioSistema } : null);
       if (!seletor.isDestroyed()) seletor.close();
     };
 
@@ -65,8 +65,8 @@ function abrirSeletor(fontes, janelaPai) {
       tipo: f.id.startsWith('screen:') ? 'tela' : 'janela',
     })));
 
-    ipcMain.handle('seletor:escolher', (_evento, id) =>
-      responder(fontes.find((f) => f.id === id) ?? null));
+    ipcMain.handle('seletor:escolher', (_evento, id, audioSistema) =>
+      responder(fontes.find((f) => f.id === id) ?? null, Boolean(audioSistema)));
 
     // Fechar no X conta como cancelar.
     seletor.on('closed', () => responder(null));
@@ -96,8 +96,16 @@ function instalarCapturaDeTela(sessao, obterJanela) {
     const escolhido = await abrirSeletor(fontes, obterJanela?.());
     // Sem argumento = a pessoa cancelou.
     if (!escolhido) callback();
-    else callback({ video: escolhido });
-  }, { useSystemPicker: false });
+    else {
+      console.log('[captura] fonte selecionada', { id: escolhido.fonte.id, audioSistema: escolhido.audioSistema });
+      // `loopbackWithMute` captura, mas silencia o Windows de quem está
+      // transmitindo. `loopback` mantém a reprodução local e envia a mesma
+      // faixa para a chamada.
+      callback({ video: escolhido.fonte, ...(escolhido.audioSistema ? { audio: 'loopback' } : {}) });
+    }
+  // O seletor nativo é necessário para o Windows disponibilizar a captura
+  // real do áudio do sistema. O handler customizado permanece como fallback.
+  }, { useSystemPicker: true });
 }
 
 module.exports = { instalarPermissoes, instalarCapturaDeTela, PERMISSOES_LIBERADAS };

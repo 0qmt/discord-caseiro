@@ -26,6 +26,8 @@
  */
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const pkg = require('../package.json');
 
 const DIST = path.join(__dirname, '..', 'dist');
@@ -40,6 +42,17 @@ const geradoBlockmap = `${geradoExe}.blockmap`;
 const publicadoExe = geradoExe.replace(/\s+/g, '-');
 const publicadoBlockmap = `${publicadoExe}.blockmap`;
 const latestYml = 'latest.yml';
+
+if (process.argv.includes('--build')) {
+  const destinoDist = path.resolve(DIST);
+  const raizDesktop = path.resolve(path.join(__dirname, '..'));
+  if (!destinoDist.startsWith(`${raizDesktop}${path.sep}`)) throw new Error('caminho de dist invalido');
+  fs.rmSync(destinoDist, { recursive: true, force: true });
+  const resultado = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['electron-builder', '--publish=never'], {
+    cwd: raizDesktop, stdio: 'inherit', shell: false,
+  });
+  if (resultado.status !== 0) process.exit(resultado.status ?? 1);
+}
 
 for (const nome of [geradoExe, geradoBlockmap, latestYml]) {
   if (!fs.existsSync(path.join(DIST, nome))) {
@@ -70,6 +83,13 @@ for (const nomeEstavel of nomesEstaticos) {
  */
 const yml = fs.readFileSync(path.join(DESTINO, latestYml), 'utf8');
 const pedido = yml.match(/^path:\s*(.+)$/m)?.[1]?.trim();
+const versaoYml = yml.match(/^version:\s*(.+)$/m)?.[1]?.trim();
+const shaYml = yml.match(/^sha512:\s*(.+)$/m)?.[1]?.trim();
+
+if (versaoYml !== versao) {
+  console.error(`[publicar] ERRO: latest.yml e package.json divergem (${versaoYml} != ${versao}).`);
+  process.exit(1);
+}
 
 if (pedido !== publicadoExe) {
   console.error('[publicar] ERRO: o latest.yml pede um arquivo com outro nome.');
@@ -87,6 +107,27 @@ console.log(`  - ${publicadoBlockmap}`);
 console.log(`  - ${latestYml}  (confere: pede "${pedido}")`);
 for (const nomeEstavel of nomesEstaticos) {
   console.log(`  - ${nomeEstavel} (~${tamanhoMb} MB, cópia pra pagina de download)`);
+}
+
+const exeLocal = path.join(DIST, geradoExe);
+const sha512Local = crypto.createHash('sha512').update(fs.readFileSync(exeLocal)).digest('base64');
+if (sha512Local !== shaYml) {
+  console.error('[publicar] ERRO: SHA-512 do exe nao corresponde ao latest.yml.');
+  console.error(`  latest.yml: ${shaYml}`);
+  console.error(`  calculado:  ${sha512Local}`);
+  process.exit(1);
+}
+
+const payloadPackage = path.join(DIST, 'win-unpacked', 'resources', 'app.asar');
+if (!fs.existsSync(payloadPackage)) {
+  console.error('[publicar] ERRO: payload win-unpacked/app.asar ausente; build incompleto.');
+  process.exit(1);
+}
+const asar = require('asar');
+const payloadVersion = JSON.parse(asar.extractFile(payloadPackage, 'package.json').toString()).version;
+if (payloadVersion !== versao) {
+  console.error(`[publicar] ERRO: versao interna do app e package.json divergem (${payloadVersion} != ${versao}).`);
+  process.exit(1);
 }
 console.log('[publicar] falta so publicar:');
 console.log(`  gh release create v${versao} --title "v${versao}" --notes "..." \\`);

@@ -127,7 +127,7 @@ export default function OrbitApp({
       ].filter(Boolean).join(' ')}
       data-theme="discord-dark"
     >
-      <VoiceAudioSink voice={voice} />
+      <VoiceAudioSink voice={voice} telaAssistida={telaAssistida} />
 
       <GuildBar
         guilds={guilds}

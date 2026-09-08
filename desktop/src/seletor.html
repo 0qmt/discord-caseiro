@@ -64,6 +64,9 @@
         text-overflow: ellipsis;
       }
       .vazio { padding: 40px 20px; color: #969ba5; text-align: center; }
+      .opcoes { padding: 0 20px 14px; }
+      .opcoes label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+      .opcoes input { width: 16px; height: 16px; accent-color: #5b7cfa; }
     </style>
   </head>
   <body>
@@ -72,6 +75,10 @@
     <div class="abas">
       <button data-tipo="tela" class="ativa">Telas</button>
       <button data-tipo="janela">Janelas</button>
+    </div>
+
+    <div class="opcoes">
+      <label><input id="audioSistema" type="checkbox" /> Compartilhar áudio do sistema</label>
     </div>
 
     <div class="lista" id="lista"></div>
@@ -94,7 +101,9 @@
           botao.className = 'fonte';
           botao.innerHTML = `<img src="${fonte.thumbnail}" alt="" /><span></span>`;
           botao.querySelector('span').textContent = fonte.name;
-          botao.addEventListener('click', () => window.seletorDeTela.escolher(fonte.id));
+          botao.addEventListener('click', () => window.seletorDeTela.escolher(
+            fonte.id, document.getElementById('audioSistema').checked,
+          ));
           lista.appendChild(botao);
         }
       }

@@ -377,20 +377,18 @@ export default function App() {
   }, [voice.channelId]);
 
   /*
-   * Versões antigas do desktop já baixavam o update, mas às vezes deixavam o
-   * instalador preso em "pending" esperando um aviso/reinício que a pessoa não
-   * via. A ponte `emCall(true)` existe nelas e força o atualizador a instalar
-   * assim que houver pacote baixado, sem pedir reinstalação manual.
+   * Clientes desktop anteriores a 0.2.59 escondiam o aviso de update quando
+   * achavam que havia uma call. Eles nao tinham a ponte `mostrarAtualizacao`,
+   * portanto este lembrete so existe enquanto aquele desktop legado estiver
+   * em uso. Ele apenas pede para reapresentar um update que ja foi baixado;
+   * jamais instala ou encerra a chamada sem um clique da pessoa.
    */
   useEffect(() => {
-    if (!window.appDesktop?.emCall) return;
-    window.appDesktop.emCall(true);
-    const intervalo = setInterval(() => window.appDesktop?.emCall?.(true), 30_000);
-    const parar = setTimeout(() => clearInterval(intervalo), 10 * 60 * 1000);
-    return () => {
-      clearInterval(intervalo);
-      clearTimeout(parar);
-    };
+    if (!window.appDesktop?.emCall || window.appDesktop?.mostrarAtualizacao) return undefined;
+    const reapresentarUpdateLegado = () => window.appDesktop.emCall(false);
+    reapresentarUpdateLegado();
+    const timer = setInterval(reapresentarUpdateLegado, 10_000);
+    return () => clearInterval(timer);
   }, []);
 
   /*

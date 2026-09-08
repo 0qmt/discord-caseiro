@@ -11,7 +11,7 @@ const {
   app, BrowserWindow, desktopCapturer, screen,
 } = require('electron');
 
-const BASE = process.env.SMOKE_BASE ?? 'http://192.168.0.63:3001';
+const BASE = process.env.SMOKE_BASE ?? 'http://192.168.0.56:3001';
 const PLAYER = process.env.SMOKE_PLAYER ?? 'https://superflixapi.beer/filme/120';
 const SAIDA = path.join(__dirname, '..', 'dist');
 

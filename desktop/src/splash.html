@@ -15,8 +15,11 @@
       body {
         display: grid;
         place-items: center;
+        align-content: center;
+        gap: 18px;
         -webkit-app-region: drag;
       }
+      .status { color: #aeb4c0; font: 13px "Segoe UI", system-ui, sans-serif; }
       .logo {
         width: 96px;
         height: 96px;
@@ -32,5 +35,6 @@
   </head>
   <body>
     <img class="logo" src="logo.png" alt="" />
+    <span class="status">Verificando atualizações...</span>
   </body>
 </html>
