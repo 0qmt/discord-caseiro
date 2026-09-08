@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Avatar from '../../components/Avatar.jsx';
 import ChannelSidebar from '../../components/ChannelSidebar.jsx';
 import ChatView from '../../components/ChatView.jsx';
@@ -113,6 +113,17 @@ export default function OrbitApp({
   const [painelCanaisAberto, setPainelCanaisAberto] = useState(false);
   const semServidor = !dmMode && guilds.length === 0;
   const chamadaAberta = callMaximizada && Boolean(voice.channelId);
+
+  useEffect(() => {
+    const aoVoltarNoAndroid = (event) => {
+      if (event.defaultPrevented || !painelCanaisAberto) return;
+      if (document.querySelector('.modal-backdrop, .settings-screen, .lightbox-fundo, .ctx-menu')) return;
+      setPainelCanaisAberto(false);
+      event.preventDefault();
+    };
+    window.addEventListener('discordia:native-back', aoVoltarNoAndroid);
+    return () => window.removeEventListener('discordia:native-back', aoVoltarNoAndroid);
+  }, [painelCanaisAberto]);
 
   return (
     <div

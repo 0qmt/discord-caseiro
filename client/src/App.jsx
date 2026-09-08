@@ -301,6 +301,23 @@ export default function App() {
   const { voice, voiceRooms, voiceVotacoes, voiceConvite, voiceResultadoConvite, voiceWatch, voiceActions } = useVoice(socket);
 
   useEffect(() => {
+    const aoVoltarNoAndroid = (event) => {
+      if (event.defaultPrevented) return;
+      if (menuContexto.estado) menuContexto.fechar();
+      else if (modal) setModal(null);
+      else if (configuracoesAbertas) setConfiguracoesAbertas(false);
+      else if (configServidor) setConfigServidor(null);
+      else if (cinemaAberto) setCinemaAberto(false);
+      else if (callMaximizada) setCallMaximizada(false);
+      else if (membrosVisiveis && window.innerWidth <= 1100) setMembrosVisiveis(false);
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener('discordia:native-back', aoVoltarNoAndroid);
+    return () => window.removeEventListener('discordia:native-back', aoVoltarNoAndroid);
+  }, [menuContexto.estado, modal, configuracoesAbertas, configServidor, cinemaAberto, callMaximizada, membrosVisiveis]);
+
+  useEffect(() => {
     if (!voiceConvite) return undefined;
     window.appDesktop?.iniciarSomDeChamada?.();
     return () => window.appDesktop?.pararSomDeChamada?.();

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Network } from '@capacitor/network';
+import { App as NativeApp } from '@capacitor/app';
 import App from '../App.jsx';
 import { getServerUrl, platform, saveServerUrl } from '../platform/index.js';
 import { serverPath } from '../platform/server.js';
@@ -106,6 +107,36 @@ export default function MobileRoot() {
       window.removeEventListener('discordia:configure-server', configure);
     };
   }, [check, connected]);
+
+  useEffect(() => {
+    if (!platform.android) return undefined;
+    let backListener;
+    let disposed = false;
+    void NativeApp.addListener('backButton', async ({ canGoBack }) => {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen().catch(() => {});
+        return;
+      }
+
+      // Lightboxes vivem dentro das telas de chat e ja entendem Escape.
+      if (document.querySelector('.lightbox-fundo')) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        return;
+      }
+
+      const event = new CustomEvent('discordia:native-back', { cancelable: true });
+      if (!window.dispatchEvent(event)) return;
+      if (canGoBack && window.history.length > 1) window.history.back();
+      else await NativeApp.minimizeApp();
+    }).then((listener) => {
+      if (disposed) listener.remove();
+      else backListener = listener;
+    });
+    return () => {
+      disposed = true;
+      backListener?.remove();
+    };
+  }, []);
 
   if (connected) return <><App /><MobileUpdater /></>;
   return (

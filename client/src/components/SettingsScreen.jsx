@@ -5,6 +5,7 @@ import ColorPicker from './ColorPicker.jsx';
 import { getSaidaAudio, setSaidaAudio } from '../lib/audioOutput.js';
 import { getEntradaAudio, setEntradaAudio } from '../lib/audioInput.js';
 import { ehDesktop, estadoDaPermissao, notificar, pedirPermissaoDeNotificacao } from '../lib/notificar.js';
+import { getNativeVersion, platform } from '../platform/index.js';
 import {
   aplicarGradienteApp, aplicarTemaApp, reaplicarTemaSalvo, removerTemaApp,
   salvarTemaAppCor, salvarTemaAppGradiente, temaAppSalvo,
@@ -277,6 +278,7 @@ export default function SettingsScreen({
 }) {
   const [aba, setAba] = useState('conta');
   const [versaoDesktop, setVersaoDesktop] = useState(null);
+  const [infoNativa, setInfoNativa] = useState(null);
   const [instalacaoDesktop, setInstalacaoDesktop] = useState(null);
   const [estadoAtualizacao, setEstadoAtualizacao] = useState(null);
   const [acaoAtualizacao, setAcaoAtualizacao] = useState(false);
@@ -285,6 +287,15 @@ export default function SettingsScreen({
     let ativo = true;
     window.appDesktop?.versao?.()
       .then((versao) => { if (ativo && versao) setVersaoDesktop(String(versao)); })
+      .catch(() => {});
+    return () => { ativo = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!platform.native) return undefined;
+    let ativo = true;
+    getNativeVersion()
+      .then((info) => { if (ativo && info) setInfoNativa(info); })
       .catch(() => {});
     return () => { ativo = false; };
   }, []);
@@ -443,8 +454,14 @@ export default function SettingsScreen({
               chat e chamadas rodando na sua própria máquina.
             </p>
             <div className="settings-versao">
-              <div><span className="settings-versao-rotulo">{versaoDesktop ? 'Versão do desktop' : 'Versão do cliente'}</span><span>{versaoDesktop ?? VERSAO}</span></div>
+              <div>
+                <span className="settings-versao-rotulo">
+                  {versaoDesktop ? 'Versão do desktop' : infoNativa ? 'Versão do Android' : 'Versão do cliente'}
+                </span>
+                <span>{versaoDesktop ?? infoNativa?.version ?? VERSAO}</span>
+              </div>
               <div><span className="settings-versao-rotulo">Cliente compilado em</span><span>{formatarBuild(BUILD)}</span></div>
+              {infoNativa && <div><span className="settings-versao-rotulo">Código da versão</span><span>{infoNativa.build}</span></div>}
               {instalacaoDesktop && <div><span className="settings-versao-rotulo">Instalação</span><span>{instalacaoDesktop.portable ? 'Portable - atualização manual' : 'Instalador - atualização automática'}</span></div>}
             </div>
             {instalacaoDesktop?.portable && <p className="hint">Instale o arquivo discordia-Setup.exe uma única vez para receber atualizações automaticamente.</p>}
