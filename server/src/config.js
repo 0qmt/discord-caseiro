@@ -10,11 +10,13 @@ export const DATA_DIR = path.resolve(SERVER_ROOT, process.env.DB_PATH ?? '../dat
 
 export const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 export const UPDATES_DIR = path.join(DATA_DIR, 'updates');
+export const MOBILE_UPDATES_DIR = path.join(DATA_DIR, 'mobile-updates');
 export const REPORTS_DIR = path.join(DATA_DIR, 'reports');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 fs.mkdirSync(UPDATES_DIR, { recursive: true });
+fs.mkdirSync(MOBILE_UPDATES_DIR, { recursive: true });
 fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
 /**
@@ -51,6 +53,7 @@ export const config = {
   allowRegistration: (process.env.ALLOW_REGISTRATION ?? 'true') !== 'false',
   uploadsDir: UPLOADS_DIR,
   updatesDir: UPDATES_DIR,
+  mobileUpdatesDir: MOBILE_UPDATES_DIR,
   reportsDir: REPORTS_DIR,
   maxAvatarBytes: Number(process.env.MAX_AVATAR_MB ?? 20) * 1024 * 1024,
   maxAttachmentBytes: Number(process.env.MAX_ATTACHMENT_MB ?? 25) * 1024 * 1024,

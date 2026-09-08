@@ -19,6 +19,7 @@ import { gifRoutes } from './routes/gifs.js';
 import { guildRoutes } from './routes/guilds.js';
 import { inviteRoutes } from './routes/invites.js';
 import { mentionRoutes } from './routes/mentions.js';
+import { mobileUpdateRoutes } from './routes/mobile-updates.js';
 import { prefRoutes } from './routes/prefs.js';
 import { userRoutes } from './routes/users.js';
 import { watchRoutes } from './routes/watch.js';
@@ -50,6 +51,7 @@ app.use('/api/channels', channelRoutes);
 app.use('/api/dms', dmRoutes);
 app.use('/api/invites', inviteRoutes);
 app.use('/api/mentions', mentionRoutes);
+app.use('/api/mobile', mobileUpdateRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/attachments', attachmentRoutes);
 app.use('/api/admin', adminRoutes);
@@ -61,6 +63,14 @@ app.use('/api/watch', watchRoutes);
 
 // Avatares. O nome do arquivo ja e unico por upload, entao pode cachear forte.
 app.use('/uploads', express.static(config.uploadsDir, { maxAge: '365d', immutable: true }));
+app.use('/mobile-updates', express.static(config.mobileUpdatesDir, {
+  index: false,
+  maxAge: '365d',
+  immutable: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.apk')) res.type('application/vnd.android.package-archive');
+  },
+}));
 
 // A pagina "baixe o app" mora em /baixar, separada do cliente (que mora na
 // raiz). Mesmo padrao de cache do cliente: assets com hash cacheiam pra
@@ -90,7 +100,7 @@ if (fs.existsSync(clientDist)) {
     maxAge: '365d', immutable: true,
   }));
   app.use(express.static(clientDist, { index: false }));
-  app.get(/^(?!\/(api|uploads)\/).*/, (_req, res) => {
+  app.get(/^(?!\/(api|uploads|mobile-updates)\/).*/, (_req, res) => {
     res.set('Cache-Control', 'no-cache');
     res.sendFile(path.join(clientDist, 'index.html'));
   });

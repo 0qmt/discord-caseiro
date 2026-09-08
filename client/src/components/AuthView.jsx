@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, setToken } from '../api.js';
+import { platform } from '../platform/index.js';
 
 export default function AuthView({ onAuthenticated }) {
   const [mode, setMode] = useState('login');
@@ -85,6 +86,16 @@ export default function AuthView({ onAuthenticated }) {
         >
           {isRegister ? 'Ja tenho conta' : 'Nao tenho conta ainda'}
         </button>
+
+        {platform.native && (
+          <button
+            type="button"
+            className="link"
+            onClick={() => window.dispatchEvent(new Event('discordia:configure-server'))}
+          >
+            Trocar servidor
+          </button>
+        )}
       </form>
     </div>
   );

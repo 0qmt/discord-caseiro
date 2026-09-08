@@ -19,10 +19,10 @@ async function start() {
   try {
     await initializePlatform();
     await initializeAuthStorage();
-    const { default: App } = await import('./App.jsx');
+    const { default: MobileRoot } = await import('./mobile/MobileRoot.jsx');
     createRoot(document.getElementById('root')).render(
       <React.StrictMode>
-        <App />
+        <MobileRoot />
       </React.StrictMode>,
     );
   } finally {

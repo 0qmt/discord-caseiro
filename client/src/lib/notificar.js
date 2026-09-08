@@ -25,6 +25,11 @@ export const ehDesktop = () => Boolean(pontE()?.notificar);
 export function pedirPermissaoDeNotificacao() {
   // No desktop quem notifica é o processo principal: não há o que pedir.
   if (ehDesktop()) return Promise.resolve('granted');
+  if (platform.android) {
+    return LocalNotifications.requestPermissions()
+      .then(({ display }) => display)
+      .catch(() => 'denied');
+  }
   if (typeof Notification === 'undefined') return Promise.resolve('denied');
   if (Notification.permission !== 'default') return Promise.resolve(Notification.permission);
   return Notification.requestPermission().catch(() => 'denied');
@@ -33,6 +38,9 @@ export function pedirPermissaoDeNotificacao() {
 /** Como está a permissão agora - alimenta o aviso na tela de configurações. */
 export function estadoDaPermissao() {
   if (ehDesktop()) return 'granted';
+  // A consulta Android e assincrona. Ate a tela de configuracoes ganhar um
+  // estado proprio, "default" evita afirmar que a permissao foi recusada.
+  if (platform.android) return 'default';
   if (typeof Notification === 'undefined') return 'indisponivel';
   return Notification.permission;
 }
@@ -46,6 +54,18 @@ export function notificar(titulo, corpo, { icone } = {}) {
     const ponte = pontE();
     if (ponte?.notificar) {
       ponte.notificar({ titulo, corpo, icone });
+      return;
+    }
+    if (platform.android) {
+      void LocalNotifications.schedule({
+        notifications: [{
+          id: Math.floor(Date.now() % 2147483647),
+          title: String(titulo ?? 'discordia'),
+          body: String(corpo ?? ''),
+          smallIcon: 'ic_launcher_foreground',
+          extra: { icone: icone ?? null },
+        }],
+      }).catch(() => {});
       return;
     }
     if (typeof Notification === 'undefined') return;
@@ -62,3 +82,5 @@ export function notificar(titulo, corpo, { icone } = {}) {
     // nada disso é crítico o bastante pra virar erro na tela.
   }
 }
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { platform } from '../platform/index.js';
