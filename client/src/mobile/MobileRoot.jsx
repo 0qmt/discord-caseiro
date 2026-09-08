@@ -1,18 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Network } from '@capacitor/network';
 import { App as NativeApp } from '@capacitor/app';
 import App from '../App.jsx';
-import { getServerUrl, platform, saveServerUrl } from '../platform/index.js';
-import { serverPath } from '../platform/server.js';
+import { platform, saveServerUrl } from '../platform/index.js';
 import MobileUpdater from './MobileUpdater.jsx';
 
 const HEALTH_TIMEOUT_MS = 7000;
+const MOBILE_SERVER_CANDIDATES = [
+  'http://192.168.0.56:3001',
+  'http://discord-caseiro.duckdns.org:3001',
+];
 
-async function serverHealth() {
+async function serverHealth(baseUrl) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
   try {
-    const response = await fetch(serverPath('/api/health'), {
+    const response = await fetch(new URL('/api/health', `${baseUrl}/`), {
       signal: controller.signal,
       cache: 'no-store',
     });
@@ -23,53 +26,15 @@ async function serverHealth() {
   }
 }
 
-function ServerSetup({ initialUrl, initialError, onConnected }) {
-  const [url, setUrl] = useState(initialUrl);
-  const [error, setError] = useState(initialError);
-  const [checking, setChecking] = useState(false);
-
-  async function connect(event) {
-    event.preventDefault();
-    setChecking(true);
-    setError('');
-    try {
-      await saveServerUrl(url);
-      await serverHealth();
-      onConnected();
-    } catch (err) {
-      setError(err.name === 'AbortError'
-        ? 'O servidor demorou demais para responder.'
-        : (err.message || 'Nao foi possivel conectar.'));
-    } finally {
-      setChecking(false);
-    }
-  }
-
+function MobileConnecting({ error, onRetry }) {
   return (
     <main className="mobile-server-screen">
-      <form className="mobile-server-panel" onSubmit={connect}>
+      <section className="mobile-server-panel" aria-live="polite">
         <div className="mobile-server-logo">d</div>
         <h1>discordia</h1>
-        <p>Conecte ao servidor dos seus amigos.</p>
-        <label>
-          Endereco do servidor
-          <input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="discord-caseiro.duckdns.org:3001"
-            inputMode="url"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck="false"
-            required
-          />
-        </label>
-        {error && <div className="auth-error">{error}</div>}
-        <button className="primary" type="submit" disabled={checking}>
-          {checking ? 'Conectando...' : 'Conectar'}
-        </button>
-        <small>Na mesma rede do Umbrel, voce tambem pode usar o IP local.</small>
-      </form>
+        <p>{error || 'Conectando...'}</p>
+        {error && <button className="primary" type="button" onClick={onRetry}>Tentar novamente</button>}
+      </section>
     </main>
   );
 }
@@ -77,18 +42,30 @@ function ServerSetup({ initialUrl, initialError, onConnected }) {
 export default function MobileRoot() {
   const [connected, setConnected] = useState(!platform.native);
   const [error, setError] = useState('');
+  const [connecting, setConnecting] = useState(platform.native);
+  const checkingRef = useRef(false);
 
   const check = useCallback(async () => {
-    try {
-      await serverHealth();
-      setError('');
-      setConnected(true);
-    } catch (err) {
-      setError(err.name === 'AbortError'
-        ? 'O servidor demorou demais para responder.'
-        : 'Nao encontrei o servidor nesse endereco.');
-      setConnected(false);
+    if (!platform.native || checkingRef.current) return;
+    checkingRef.current = true;
+    setConnecting(true);
+    setError('');
+    for (const candidate of MOBILE_SERVER_CANDIDATES) {
+      try {
+        await serverHealth(candidate);
+        await saveServerUrl(candidate);
+        setConnected(true);
+        setConnecting(false);
+        checkingRef.current = false;
+        return;
+      } catch {
+        // A rota local pode falhar fora de casa; tenta o endereco externo.
+      }
     }
+    setConnected(false);
+    setError('Nao foi possivel conectar ao servidor.');
+    setConnecting(false);
+    checkingRef.current = false;
   }, []);
 
   useEffect(() => {
@@ -97,16 +74,18 @@ export default function MobileRoot() {
 
     let networkListener;
     void Network.addListener('networkStatusChange', ({ connected: online }) => {
-      if (online && !connected) void check();
+      if (online && !checkingRef.current) void check();
     }).then((listener) => { networkListener = listener; });
-
-    const configure = () => setConnected(false);
-    window.addEventListener('discordia:configure-server', configure);
+    const reconnect = () => {
+      setConnected(false);
+      void check();
+    };
+    window.addEventListener('discordia:configure-server', reconnect);
     return () => {
       networkListener?.remove();
-      window.removeEventListener('discordia:configure-server', configure);
+      window.removeEventListener('discordia:configure-server', reconnect);
     };
-  }, [check, connected]);
+  }, [check]);
 
   useEffect(() => {
     if (!platform.android) return undefined;
@@ -139,11 +118,5 @@ export default function MobileRoot() {
   }, []);
 
   if (connected) return <><App /><MobileUpdater /></>;
-  return (
-    <ServerSetup
-      initialUrl={getServerUrl()}
-      initialError={error}
-      onConnected={() => setConnected(true)}
-    />
-  );
+  return <MobileConnecting error={connecting ? 'Conectando...' : error} onRetry={check} />;
 }

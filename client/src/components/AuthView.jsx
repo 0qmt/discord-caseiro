@@ -93,7 +93,7 @@ export default function AuthView({ onAuthenticated }) {
             className="link"
             onClick={() => window.dispatchEvent(new Event('discordia:configure-server'))}
           >
-            Trocar servidor
+            Reconectar ao servidor
           </button>
         )}
       </form>
