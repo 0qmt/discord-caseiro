@@ -6,6 +6,8 @@ on:
     branches: [master]
     paths:
       - "client/**"
+      - "scripts/publicar-android.ps1"
+      - "package.json"
       - ".github/workflows/android-apk.yml"
 
 permissions:

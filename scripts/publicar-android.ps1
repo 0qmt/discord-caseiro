@@ -60,22 +60,23 @@ try {
     $signingDir = Join-Path $env:USERPROFILE '.discordia-signing'
     $keyStore = Join-Path $signingDir 'discordia-android-release.p12'
     $passwordFile = Join-Path $signingDir 'android-signing-password.clixml'
-    if ((Test-Path $keyStore) -and (Test-Path $passwordFile)) {
-        $secure = Import-Clixml $passwordFile
-        $credential = [pscredential]::new('discordia', $secure)
-        $password = $credential.GetNetworkCredential().Password
-        $certificate = Join-Path $temp 'signer.cer'
-        & keytool -exportcert -alias discordia -keystore $keyStore -storetype PKCS12 `
-            -storepass $password -file $certificate | Out-Null
-        if ($LASTEXITCODE) { throw 'Nao foi possivel ler o certificado release local.' }
-        $expectedSigner = (Get-FileHash $certificate -Algorithm SHA256).Hash.ToLowerInvariant()
-        $signerOutput = (& $apksigner verify --print-certs $sourceApk | Out-String)
-        if ($signerOutput -notmatch '(?:Signer #1 certificate|V2 Signer: certificate) SHA-256 digest: ([a-fA-F0-9]+)') {
-            throw 'Fingerprint da assinatura do APK nao encontrado.'
-        }
-        if ($Matches[1].ToLowerInvariant() -ne $expectedSigner) {
-            throw 'APK foi assinado por uma chave diferente da chave release oficial.'
-        }
+    if (-not (Test-Path $keyStore) -or -not (Test-Path $passwordFile)) {
+        throw 'Chave release local nao encontrada; publicacao recusada.'
+    }
+    $secure = Import-Clixml $passwordFile
+    $credential = [pscredential]::new('discordia', $secure)
+    $password = $credential.GetNetworkCredential().Password
+    $certificate = Join-Path $temp 'signer.cer'
+    & keytool -exportcert -alias discordia -keystore $keyStore -storetype PKCS12 `
+        -storepass $password -file $certificate | Out-Null
+    if ($LASTEXITCODE) { throw 'Nao foi possivel ler o certificado release local.' }
+    $expectedSigner = (Get-FileHash $certificate -Algorithm SHA256).Hash.ToLowerInvariant()
+    $signerOutput = (& $apksigner verify --print-certs $sourceApk | Out-String)
+    if ($signerOutput -notmatch '(?:Signer #1 certificate|V2 Signer: certificate) SHA-256 digest: ([a-fA-F0-9]+)') {
+        throw 'Fingerprint da assinatura do APK nao encontrado.'
+    }
+    if ($Matches[1].ToLowerInvariant() -ne $expectedSigner) {
+        throw 'APK foi assinado por uma chave diferente da chave release oficial.'
     }
 
     $apkName = "discordia-$version.apk"
@@ -101,6 +102,13 @@ try {
     $remoteManifestTemp = "$DiretorioRemoto/.latest.json.uploading"
     ssh $Servidor "mkdir -p '$DiretorioRemoto' && rm -f '$remoteApkTemp' '$remoteManifestTemp'"
     if ($LASTEXITCODE) { throw 'Falha ao preparar diretorio no Umbrel.' }
+    $currentRaw = (ssh $Servidor "cat '$DiretorioRemoto/latest.json' 2>/dev/null || true" | Out-String).Trim()
+    if ($currentRaw) {
+        $current = $currentRaw | ConvertFrom-Json
+        if ([long]$current.versionCode -ge $versionCode) {
+            throw "Publicacao recusada: servidor ja possui versionCode $($current.versionCode)."
+        }
+    }
     scp $apk "${Servidor}:$remoteApkTemp"
     if ($LASTEXITCODE) { throw 'Falha no upload do APK.' }
     scp $manifestPath "${Servidor}:$remoteManifestTemp"
