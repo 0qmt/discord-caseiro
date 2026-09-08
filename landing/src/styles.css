@@ -120,6 +120,16 @@ a {
   filter: brightness(1.1);
 }
 
+.botao-secundario {
+  background: #2b2d33;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .14);
+}
+
+.botao-secundario:hover {
+  background: #353840;
+}
+
 .botao-pequeno {
   padding: 0.5rem 1.1rem;
   font-size: 0.85rem;
@@ -230,10 +240,47 @@ a {
   }
 }
 
+@media (max-width: 480px) {
+  .hero-conteudo {
+    padding: 3rem 1rem 4rem;
+  }
+
+  .hero-conteudo h1 {
+    font-size: 2.05rem;
+  }
+
+  .hero-sub {
+    font-size: .98rem;
+  }
+
+  .hero-botoes {
+    width: 100%;
+  }
+
+  .botao-grande {
+    width: min(100%, 20rem);
+    min-height: 52px;
+    padding: .85rem 1rem;
+    white-space: normal;
+  }
+
+  .cta-botoes {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
 .hero-versao {
   margin-top: 1.25rem;
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.cta-botoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
 }
 
 /* Seções genéricas */
