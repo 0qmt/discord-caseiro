@@ -132,7 +132,6 @@ export const api = {
   banMember: (guildId, userId, reason) =>
     request('POST', `/guilds/${guildId}/bans/${userId}`, { reason }),
   unbanMember: (guildId, userId) => request('DELETE', `/guilds/${guildId}/bans/${userId}`),
-  listBans: (guildId) => request('GET', `/guilds/${guildId}/bans`),
 
   listRoles: (guildId) => request('GET', `/guilds/${guildId}/roles`),
   createRole: (guildId, payload) => request('POST', `/guilds/${guildId}/roles`, payload),

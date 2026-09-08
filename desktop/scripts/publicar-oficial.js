@@ -14,7 +14,12 @@ const tag = `v${versao}`;
 const exeGerado = `${produto} Setup ${versao}.exe`;
 const exe = exeGerado.replace(/\s+/g, '-');
 const blockmap = `${exe}.blockmap`;
-const arquivos = [exe, blockmap, 'latest.yml'];
+const aliasesInstalador = [
+  'discordia-setup-latest.exe',
+  'discord-caseiro-setup-latest.exe',
+];
+const arquivosUpdate = [exe, blockmap, 'latest.yml'];
+const arquivos = [...arquivosUpdate, ...aliasesInstalador];
 const repo = `${pkg.build.publish.owner}/${pkg.build.publish.repo}`;
 
 function falhar(mensagem) { console.error(`[publicar:oficial] ERRO: ${mensagem}`); process.exit(1); }
@@ -33,6 +38,7 @@ executar(process.execPath, [builderCli, '--publish=never']);
 const paths = Object.fromEntries(arquivos.map((nome) => [nome, path.join(DIST, nome)]));
 fs.copyFileSync(path.join(DIST, exeGerado), paths[exe]);
 fs.copyFileSync(path.join(DIST, `${exeGerado}.blockmap`), paths[blockmap]);
+for (const alias of aliasesInstalador) fs.copyFileSync(path.join(DIST, exeGerado), paths[alias]);
 for (const nome of arquivos) if (!fs.existsSync(paths[nome])) falhar(`artefato ausente: ${nome}`);
 
 const latest = fs.readFileSync(paths['latest.yml'], 'utf8');
@@ -53,6 +59,9 @@ const existe = spawnSync('gh', ['release', 'view', tag, '--repo', repo], { cwd: 
 if (existe) falhar(`release ${tag} ja existe; nao reutilizando artefatos ou tag`);
 
 gh(['release', 'create', tag, '--repo', repo, '--draft', '--title', tag, '--notes', `Publicacao oficial ${tag}.`, paths[exe], paths[blockmap], paths['latest.yml']]);
+for (const alias of aliasesInstalador) {
+  gh(['release', 'upload', tag, '--repo', repo, paths[alias]]);
+}
 
 const remoto = JSON.parse(spawnSync('gh', ['release', 'view', tag, '--repo', repo, '--json', 'isDraft,assets,tagName'], { cwd: ROOT, encoding: 'utf8', shell: false }).stdout);
 if (!remoto.isDraft) falhar('release nao esta draft durante a validacao');
@@ -74,6 +83,11 @@ try {
   gh(['release', 'download', tag, '--repo', repo, '--pattern', exe, '--dir', temp]);
   const shaRemoto = crypto.createHash('sha512').update(fs.readFileSync(path.join(temp, exe))).digest('base64');
   if (shaRemoto !== shaLocal || shaRemoto !== shaYml) falhar('SHA-512 do instalador remoto diverge do build local');
+  for (const alias of aliasesInstalador) {
+    gh(['release', 'download', tag, '--repo', repo, '--pattern', alias, '--dir', temp]);
+    const shaAlias = crypto.createHash('sha512').update(fs.readFileSync(path.join(temp, alias))).digest('base64');
+    if (shaAlias !== shaLocal) falhar(`SHA-512 do alias remoto diverge do build local: ${alias}`);
+  }
 } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 
 if (process.env.PUBLICAR_OFICIAL_SIMULAR_FALHA === '1') {

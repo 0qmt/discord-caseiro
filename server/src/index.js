@@ -81,7 +81,7 @@ if (fs.existsSync(landingDist)) {
     maxAge: '365d', immutable: true,
   }));
   app.use('/baixar', express.static(landingDist, { index: false }));
-  app.get('/baixar', (_req, res) => {
+  app.get(['/baixar', '/baixar/'], (_req, res) => {
     res.set('Cache-Control', 'no-cache');
     res.sendFile(path.join(landingDist, 'index.html'));
   });

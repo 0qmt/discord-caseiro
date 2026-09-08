@@ -1,4 +1,5 @@
 import { emitAck } from '../socket.js';
+import { serverPath } from '../platform/server.js';
 import { getEntradaAudio, assinarEntradaAudio } from './audioInput.js';
 
 /**
@@ -271,7 +272,7 @@ export class VoiceClient {
     }
 
     try {
-      const resposta = await fetch('/api/ice');
+      const resposta = await fetch(serverPath('/api/ice'));
       const { iceServers } = await resposta.json();
       if (Array.isArray(iceServers) && iceServers.length) this.iceServers = iceServers;
     } catch {
