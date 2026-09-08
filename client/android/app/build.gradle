@@ -3,6 +3,7 @@ import groovy.json.JsonSlurper
 apply plugin: 'com.android.application'
 
 def webPackage = new JsonSlurper().parse(rootProject.file('../package.json'))
+def buildingRelease = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
 def versionParts = webPackage.version.tokenize('.').collect { part ->
     (part =~ /^\d+/)[0] as int
 }
@@ -37,7 +38,7 @@ android {
     }
     buildTypes {
         release {
-            if (!System.getenv('ANDROID_KEYSTORE_PATH')) {
+            if (buildingRelease && !System.getenv('ANDROID_KEYSTORE_PATH')) {
                 throw new GradleException('ANDROID_KEYSTORE_PATH nao configurado para build release.')
             }
             signingConfig signingConfigs.release

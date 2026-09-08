@@ -10,6 +10,7 @@
     "android:sync": "cap sync android",
     "android:open": "cap open android",
     "android:apk:debug": "npm run build:android && cd android && gradlew.bat assembleDebug",
+    "android:apk:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gerar-apk-local.ps1",
     "android:apk:release": "npm run build:android && cd android && gradlew.bat assembleRelease",
     "preview": "vite preview",
     "teste": "node scripts/teste-notificacoes.mjs"
