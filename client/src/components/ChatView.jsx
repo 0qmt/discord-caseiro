@@ -793,7 +793,7 @@ export default function ChatView({
             aria-label="Abrir canais"
             onClick={onAlternarCanais}
           >
-            <Icon name="menu" size={18} />
+            <Icon name="arrow-right" size={20} style={{ transform: 'rotate(180deg)' }} />
           </button>
         )}
         {icon}

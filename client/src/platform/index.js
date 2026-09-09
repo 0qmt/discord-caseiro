@@ -20,6 +20,10 @@ export async function initializePlatform() {
   if (saved.value) configureServerUrl(saved.value);
 
   if (platform.android) {
+    // A interface do app precisa comecar abaixo da barra de status. `env()`
+    // nao recebe inset confiavel no WebView do Android quando ele sobrepoe a
+    // janela, e os cabecalhos acabam sob relogio/notificacoes.
+    await StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
     await StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
     await StatusBar.setBackgroundColor({ color: '#111214' }).catch(() => {});
   }

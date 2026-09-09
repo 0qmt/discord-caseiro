@@ -1300,16 +1300,33 @@
     display: none;
   }
 
+  /* A conversa usa a tela inteira. O trilho de servidores so aparece ao
+     abrir a navegacao, lado a lado com os canais, como no Discord mobile. */
+  .orbit-shell.painel-canais-aberto .guild-bar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 46;
+    display: flex;
+    width: var(--orbit-rail);
+    min-height: 0;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .orbit-shell.painel-canais-aberto .guild-bar::-webkit-scrollbar { display: none; }
+
   .orbit-shell .chat-column { grid-column: 1; min-width: 0; }
 
   .orbit-shell .channel-sidebar {
     position: fixed;
     top: 0;
     bottom: 0;
-    left: 0;
+    left: var(--orbit-rail);
     z-index: 45;
     display: flex;
-    width: min(360px, 88vw);
+    width: min(360px, calc(100vw - var(--orbit-rail)));
     visibility: hidden;
     pointer-events: none;
     transform: translateX(-105%);
@@ -1333,67 +1350,6 @@
   }
 
   .orbit-shell.painel-canais-aberto .orbit-sidebar-scrim { display: block; }
-
-  /* Trocar de servidor e uma tela propria. Ela nao fica colada no chat nem
-     rouba largura da conversa, e volta para a guia de canais ao selecionar. */
-  .orbit-shell.seletor-servidores-aberto .guild-bar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 47;
-    display: flex;
-    width: min(360px, 100vw);
-    align-items: stretch;
-    gap: 4px;
-    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
-    overflow-y: auto;
-    background: var(--bg-0);
-  }
-
-  .orbit-shell.seletor-servidores-aberto .channel-sidebar { visibility: hidden; }
-  .orbit-shell.seletor-servidores-aberto .orbit-sidebar-scrim { display: block; }
-
-  .orbit-shell .guild-mobile-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 44px;
-    padding: 0 4px 8px;
-    color: var(--text);
-    font-size: 18px;
-    font-weight: 700;
-  }
-
-  .orbit-shell .guild-mobile-heading .icon-btn { width: 40px; height: 40px; }
-  .orbit-shell .guild-bar.mobile-expanded .guild-bar-divisor { width: 100%; margin: 8px 0; }
-  .orbit-shell .guild-bar.mobile-expanded .guild-pill {
-    width: 100%;
-    min-height: 48px;
-    height: 48px;
-    justify-content: flex-start;
-    gap: 12px;
-    padding: 0 12px;
-    border-radius: 6px;
-  }
-
-  .orbit-shell .guild-bar.mobile-expanded .guild-pill::before { display: none; }
-  .orbit-shell .guild-bar.mobile-expanded .guild-pill-icone {
-    position: relative;
-    inset: auto;
-    width: 32px;
-    height: 32px;
-    flex: none;
-    border-radius: 10px;
-  }
-
-  .orbit-shell .guild-pill-name {
-    overflow: hidden;
-    color: inherit;
-    font-size: 15px;
-    font-weight: 600;
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .orbit-shell:not(.sem-membros):not(.modo-chamada):not(.modo-cinema) .orbit-members-scrim {
     inset: var(--orbit-header) var(--orbit-members) 0 0;
