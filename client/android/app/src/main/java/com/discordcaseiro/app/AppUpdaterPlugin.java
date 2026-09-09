@@ -51,7 +51,7 @@ public class AppUpdaterPlugin extends Plugin {
     public void downloadAndInstall(PluginCall call) {
         String url = call.getString("url");
         String expectedSha256 = call.getString("sha256");
-        Long expectedSize = call.getLong("size");
+        Long expectedSize = readPositiveLong(call, "size");
         String fileName = call.getString("fileName", "discordia-update.apk");
 
         if (url == null || expectedSha256 == null || expectedSize == null
@@ -114,6 +114,24 @@ public class AppUpdaterPlugin extends Plugin {
     private boolean canInstallPackages() {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.O
             || getContext().getPackageManager().canRequestPackageInstalls();
+    }
+
+    private Long readPositiveLong(PluginCall call, String name) {
+        Object value = call.getData().opt(name);
+        if (value instanceof Number) {
+            long parsed = ((Number) value).longValue();
+            double original = ((Number) value).doubleValue();
+            return parsed > 0 && original == parsed ? parsed : null;
+        }
+        if (value instanceof String) {
+            try {
+                long parsed = Long.parseLong((String) value);
+                return parsed > 0 ? parsed : null;
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private void download(String address, File target, long expectedSize) throws Exception {
