@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Network } from '@capacitor/network';
 import { App as NativeApp } from '@capacitor/app';
+import { Preferences } from '@capacitor/preferences';
 import App from '../App.jsx';
 import { platform, saveServerUrl } from '../platform/index.js';
 import MobileUpdater from './MobileUpdater.jsx';
@@ -50,7 +51,13 @@ export default function MobileRoot() {
     checkingRef.current = true;
     setConnecting(true);
     setError('');
-    for (const candidate of MOBILE_SERVER_CANDIDATES) {
+    const candidates = [...MOBILE_SERVER_CANDIDATES];
+    const saved = platform.native
+      ? await Preferences.get({ key: 'discordia:server-url' }).then((r) => r.value).catch(() => '')
+      : '';
+    if (saved && !candidates.includes(saved)) candidates.push(saved);
+
+    for (const candidate of candidates) {
       try {
         await serverHealth(candidate);
         await saveServerUrl(candidate);
@@ -58,8 +65,8 @@ export default function MobileRoot() {
         setConnecting(false);
         checkingRef.current = false;
         return;
-      } catch {
-        // A rota local pode falhar fora de casa; tenta o endereco externo.
+      } catch (err) {
+        console.warn('[mobile] servidor indisponivel', candidate, err?.message || err);
       }
     }
     setConnected(false);

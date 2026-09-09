@@ -1293,23 +1293,42 @@
   .orbit-shell,
   .orbit-shell.sem-membros,
   .orbit-shell.modo-chamada {
-    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .orbit-shell .guild-bar { grid-column: 1; }
-  .orbit-shell .chat-column { grid-column: 2; }
+  .orbit-shell .guild-bar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 45;
+    width: 68px;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-100%);
+    transition: transform 160ms ease, visibility 0s linear 160ms;
+  }
+
+  .orbit-shell.painel-canais-aberto .guild-bar {
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(0);
+    transition-delay: 0s;
+  }
+
+  .orbit-shell .chat-column { grid-column: 1; min-width: 0; }
 
   .orbit-shell .channel-sidebar {
     position: fixed;
     top: 0;
     bottom: 0;
-    left: 52px;
-    z-index: 42;
+    left: 68px;
+    z-index: 45;
     display: flex;
-    width: min(250px, calc(100vw - 52px));
+    width: min(260px, calc(100vw - 68px));
     visibility: hidden;
     pointer-events: none;
-    transform: translateX(calc(-100% - 52px));
+    transform: translateX(-120%);
     transition: transform 160ms ease, visibility 0s linear 160ms;
   }
 
@@ -1322,7 +1341,7 @@
 
   .orbit-shell .orbit-sidebar-scrim {
     position: fixed;
-    inset: 0 0 0 52px;
+    inset: 0;
     z-index: 41;
     display: none;
     background: rgba(0, 0, 0, .56);
@@ -1331,7 +1350,7 @@
   .orbit-shell.painel-canais-aberto .orbit-sidebar-scrim { display: block; }
 
   .orbit-shell:not(.sem-membros):not(.modo-chamada):not(.modo-cinema) .orbit-members-scrim {
-    inset: var(--orbit-header) var(--orbit-members) 0 52px;
+    inset: var(--orbit-header) var(--orbit-members) 0 0;
   }
 
   .orbit-shell .orbit-mobile-nav-toggle {
@@ -1353,7 +1372,7 @@
   .orbit-shell .composer { margin-right: 10px; margin-left: 10px; }
   .orbit-shell .composer-contexto { margin-right: 10px; margin-left: 10px; }
 
-  .orbit-shell.modo-cinema { grid-template-columns: 52px minmax(0, 1fr); }
+  .orbit-shell.modo-cinema { grid-template-columns: minmax(0, 1fr); }
   .orbit-shell .cinema-streaming-nav { grid-template-columns: 1fr auto; padding: 0 10px; }
   .orbit-shell .cinema-top-search { display: none; }
   .orbit-shell .cinema-mobile-search { display: block; padding: 12px 14px 0; }

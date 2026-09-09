@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cropStyle } from '../lib/cropStyle.js';
 import { serverAsset } from '../platform/server.js';
 import Icon from './Icon.jsx';
@@ -14,6 +15,7 @@ export default function GuildBar({
   guilds, activeGuildId, dmMode, unreadDmTotal, onSelect, onOpenDms, onCreate, onJoin, unreadByGuild,
   mentionByGuild = {}, onReportarBug, onOpenCinema,
 }) {
+  const [iconesFalhos, setIconesFalhos] = useState({});
   return (
     <nav className="guild-bar">
       <button
@@ -27,7 +29,7 @@ export default function GuildBar({
       <div className="guild-bar-divisor" />
 
       {guilds.map((guild) => {
-        const iconSrc = serverAsset(guild.iconUrl);
+        const iconSrc = iconesFalhos[guild.id] ? '' : serverAsset(guild.iconUrl);
         return (
         <button
           key={guild.id}
@@ -37,7 +39,13 @@ export default function GuildBar({
         >
           {iconSrc ? (
             <span className="guild-pill-icone">
-              <img key={iconSrc} src={iconSrc} alt="" style={cropStyle(guild.iconCrop)} />
+              <img
+                key={iconSrc}
+                src={iconSrc}
+                alt=""
+                style={cropStyle(guild.iconCrop)}
+                onError={() => setIconesFalhos((prev) => ({ ...prev, [guild.id]: true }))}
+              />
             </span>
           ) : initials(guild.name)}
           {mentionByGuild[guild.id] > 0 ? (

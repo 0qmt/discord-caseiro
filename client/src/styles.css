@@ -2039,10 +2039,54 @@ button.member-name:hover, button.author:hover { text-decoration: underline; }
 .stat-barra-preenchida.critico { background: var(--danger); }
 
 @media (max-width: 700px) {
-  .settings-nav { width: 76px; padding-top: 50px; }
-  .settings-grupo-titulo, .settings-user-info, .settings-sair span { display: none; }
-  .settings-item { text-align: center; font-size: 11px; }
-  .settings-conteudo { padding: 50px 20px; }
+  .settings-screen {
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .settings-nav {
+    width: 100%;
+    max-height: 42vh;
+    padding: calc(env(safe-area-inset-top, 0px) + 48px) 12px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .settings-user { margin-bottom: 10px; padding: 6px 4px 12px; }
+  .settings-grupo { display: flex; gap: 8px; margin: 0 0 10px; overflow-x: auto; padding-bottom: 2px; }
+  .settings-grupo-titulo { display: none; }
+  .settings-item {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 38px;
+    padding: 9px 12px;
+    text-align: center;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .settings-sair {
+    flex: 0 0 auto;
+    width: max-content;
+    margin: 0;
+    border-top: 0;
+  }
+
+  .settings-conteudo {
+    flex: 1;
+    min-height: 0;
+    padding: 20px 16px calc(env(safe-area-inset-bottom, 0px) + 28px);
+  }
+
+  .settings-fechar {
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    right: 14px;
+    z-index: 2;
+  }
+
+  .settings-versao div {
+    align-items: flex-start;
+    gap: 8px;
+  }
 }
 
 /* ----------------------------- assistir junto ---------------------------- */

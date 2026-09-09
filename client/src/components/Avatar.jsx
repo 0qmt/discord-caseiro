@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { cropStyle } from '../lib/cropStyle.js';
 import { serverAsset } from '../platform/server.js';
 
@@ -15,7 +16,12 @@ import { serverAsset } from '../platform/server.js';
 export default function Avatar({ user, size = 38, className = '', children, onClick, title }) {
   const { avatarUrl, avatarCrop, username = '?' } = user ?? {};
   const src = serverAsset(avatarUrl);
+  const [falhou, setFalhou] = useState(false);
   const Tag = onClick ? 'button' : 'div';
+
+  useEffect(() => {
+    setFalhou(false);
+  }, [src]);
 
   return (
     <Tag
@@ -29,8 +35,8 @@ export default function Avatar({ user, size = 38, className = '', children, onCl
         {/* `key` na URL: sem ela o React reaproveita o mesmo <img> ao trocar
             de foto, e a animação de entrada (animacoes.css) rodaria só na
             primeira vez - justamente na troca, que é quando ela serve. */}
-        {src
-          ? <img key={src} src={src} alt="" style={cropStyle(avatarCrop)} />
+        {src && !falhou
+          ? <img key={src} src={src} alt="" style={cropStyle(avatarCrop)} onError={() => setFalhou(true)} />
           : username[0]?.toUpperCase()}
       </span>
       {children}

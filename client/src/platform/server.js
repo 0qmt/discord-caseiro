@@ -28,8 +28,19 @@ export function serverPath(path) {
 }
 
 export function serverAsset(value) {
-  if (typeof value !== 'string' || !value.startsWith('/')) return value;
-  return serverPath(value);
+  if (typeof value !== 'string' || !value) return value;
+  if (value.startsWith('/')) return serverPath(value);
+  const base = getServerUrl();
+  if (!base) return value;
+  try {
+    const parsed = new URL(value);
+    if (parsed.pathname.startsWith('/uploads/')) {
+      return new URL(`${parsed.pathname}${parsed.search}${parsed.hash}`, `${base}/`).toString();
+    }
+  } catch {
+    return value;
+  }
+  return value;
 }
 
 export function serverRelativeAsset(value) {
@@ -63,7 +74,7 @@ export function attachmentForServer(attachment) {
 export function normalizeServerData(value) {
   if (Array.isArray(value)) return value.map(normalizeServerData);
   if (!value || typeof value !== 'object') {
-    return typeof value === 'string' && value.startsWith('/uploads/')
+    return typeof value === 'string' && (value.startsWith('/uploads/') || value.includes('/uploads/'))
       ? serverAsset(value)
       : value;
   }

@@ -1024,6 +1024,7 @@ export default function ChatView({
         <input
           ref={arquivoRef}
           type="file"
+          accept="image/*,video/*,audio/*,.pdf,.zip,.txt,.doc,.docx,.xls,.xlsx"
           hidden
           onChange={escolherArquivo}
         />
