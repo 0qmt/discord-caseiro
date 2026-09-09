@@ -2,7 +2,7 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
 const {
-  app, BrowserWindow, Menu, Notification, Tray, nativeImage, ipcMain, session, shell, dialog,
+  app, BrowserWindow, Menu, Notification, Tray, nativeImage, clipboard, ipcMain, session, shell, dialog,
   screen,
 } = require('electron');
 const fetchAdblock = require('cross-fetch');
@@ -515,6 +515,22 @@ ipcMain.on('app:iniciar-som-chamada', (evento) => {
 ipcMain.on('app:parar-som-chamada', (evento) => {
   if (!veioDaNossaPagina(evento)) return;
   janelaAudio?.webContents.executeJavaScript("window.__discordiaSomDeMencao?.pause(); window.__discordiaSomDeMencao.currentTime = 0;").catch(() => {});
+});
+
+ipcMain.handle('app:copiar-imagem', (evento, dados) => {
+  if (!veioDaNossaPagina(evento)) return false;
+  try {
+    const bytes = Buffer.from(dados);
+    // Evita que uma pagina comprometida use a ponte para esgotar memoria do
+    // processo principal; fotos comuns ficam muito abaixo deste limite.
+    if (!bytes.length || bytes.length > 30 * 1024 * 1024) return false;
+    const imagem = nativeImage.createFromBuffer(bytes);
+    if (imagem.isEmpty()) return false;
+    clipboard.writeImage(imagem);
+    return true;
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle('app:tela-cheia', (evento, ativa) => {

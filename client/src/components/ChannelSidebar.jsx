@@ -101,6 +101,7 @@ export default function ChannelSidebar({
   onMenuDaCategoria,
   onMenuDoParticipanteDeVoz,
   onAbrirMenuDeStatus,
+  onOpenServerPicker,
   meuStatus,
   minhaAtividade,
   // arrastar: reordenar canal e puxar gente pra uma call
@@ -128,6 +129,14 @@ export default function ChannelSidebar({
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+
+  const abrirOpcoesDoServidor = (event) => {
+    if (window.matchMedia?.('(max-width: 620px)').matches && onOpenServerPicker) {
+      onOpenServerPicker();
+      return;
+    }
+    onMenuDaGuild?.(event);
+  };
 
   /*
    * Soltar um canal em cima de outro troca os dois de lugar na lista e manda
@@ -290,7 +299,7 @@ export default function ChannelSidebar({
   return (
     <aside className="channel-sidebar">
       <header className="sidebar-head" onContextMenu={onMenuDaGuild}>
-        <button className="guild-name-botao" title="Opções do servidor" onClick={onMenuDaGuild}>
+        <button className="guild-name-botao" title="Opções ou troca de servidor" onClick={abrirOpcoesDoServidor}>
           <span className="guild-name">{guild?.name ?? 'Nenhum servidor'}</span>
           <Icon name="chevron-down" size={15} />
         </button>

@@ -111,19 +111,25 @@ export default function OrbitApp({
   aoArrastarMembro,
 }) {
   const [painelCanaisAberto, setPainelCanaisAberto] = useState(false);
+  const [seletorServidoresAberto, setSeletorServidoresAberto] = useState(false);
   const semServidor = !dmMode && guilds.length === 0;
   const chamadaAberta = callMaximizada && Boolean(voice.channelId);
 
   useEffect(() => {
     const aoVoltarNoAndroid = (event) => {
-      if (event.defaultPrevented || !painelCanaisAberto) return;
+      if (event.defaultPrevented || (!painelCanaisAberto && !seletorServidoresAberto)) return;
       if (document.querySelector('.modal-backdrop, .settings-screen, .lightbox-fundo, .ctx-menu')) return;
+      if (seletorServidoresAberto) {
+        setSeletorServidoresAberto(false);
+        event.preventDefault();
+        return;
+      }
       setPainelCanaisAberto(false);
       event.preventDefault();
     };
     window.addEventListener('discordia:native-back', aoVoltarNoAndroid);
     return () => window.removeEventListener('discordia:native-back', aoVoltarNoAndroid);
-  }, [painelCanaisAberto]);
+  }, [painelCanaisAberto, seletorServidoresAberto]);
 
   return (
     <div
@@ -135,6 +141,7 @@ export default function OrbitApp({
         chamadaAberta ? 'modo-chamada' : '',
         cinemaAberto ? 'modo-cinema' : '',
         painelCanaisAberto ? 'painel-canais-aberto' : '',
+        seletorServidoresAberto ? 'seletor-servidores-aberto' : '',
       ].filter(Boolean).join(' ')}
       data-theme="discord-dark"
     >
@@ -147,12 +154,22 @@ export default function OrbitApp({
         unreadDmTotal={unreadDmTotal}
         unreadByGuild={unreadByGuild}
         mentionByGuild={mentionByGuild}
-        onSelect={(guildId) => { onSelectGuild(guildId); setPainelCanaisAberto(true); }}
-        onOpenDms={() => { onOpenDms(); setPainelCanaisAberto(true); }}
+        onSelect={(guildId) => {
+          onSelectGuild(guildId);
+          setSeletorServidoresAberto(false);
+          setPainelCanaisAberto(true);
+        }}
+        onOpenDms={() => {
+          onOpenDms();
+          setSeletorServidoresAberto(false);
+          setPainelCanaisAberto(true);
+        }}
         onCreate={onCreateGuild}
         onJoin={onJoinGuild}
-        onOpenCinema={onOpenCinema}
+        onOpenCinema={() => { setSeletorServidoresAberto(false); onOpenCinema(); }}
         onReportarBug={onReportarBug}
+        mobileExpanded={seletorServidoresAberto}
+        onCloseMobile={() => setSeletorServidoresAberto(false)}
       />
 
       {!cinemaAberto && (dmMode ? (
@@ -192,6 +209,7 @@ export default function OrbitApp({
           onMenuDaCategoria={onMenuDaCategoria}
           onMenuDoParticipanteDeVoz={onMenuDoParticipanteDeVoz}
           onAbrirMenuDeStatus={onAbrirMenuDeStatus}
+          onOpenServerPicker={() => setSeletorServidoresAberto(true)}
           meuStatus={meuStatus}
           minhaAtividade={minhaAtividade}
           podeOrdenarCanais={podeOrdenarCanais}
@@ -208,7 +226,10 @@ export default function OrbitApp({
           type="button"
           className="orbit-sidebar-scrim"
           aria-label="Fechar lista de canais"
-          onClick={() => setPainelCanaisAberto(false)}
+          onClick={() => {
+            setPainelCanaisAberto(false);
+            setSeletorServidoresAberto(false);
+          }}
         />
       )}
 

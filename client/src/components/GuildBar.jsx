@@ -13,17 +13,26 @@ const initials = (name) =>
 
 export default function GuildBar({
   guilds, activeGuildId, dmMode, unreadDmTotal, onSelect, onOpenDms, onCreate, onJoin, unreadByGuild,
-  mentionByGuild = {}, onReportarBug, onOpenCinema,
+  mentionByGuild = {}, onReportarBug, onOpenCinema, mobileExpanded = false, onCloseMobile,
 }) {
   const [iconesFalhos, setIconesFalhos] = useState({});
   return (
-    <nav className="guild-bar">
+    <nav className={`guild-bar ${mobileExpanded ? 'mobile-expanded' : ''}`}>
+      {mobileExpanded && (
+        <header className="guild-mobile-heading">
+          <span>Servidores</span>
+          <button type="button" className="icon-btn" title="Voltar para os canais" onClick={onCloseMobile}>
+            <Icon name="x" size={18} />
+          </button>
+        </header>
+      )}
       <button
         className={`guild-pill dm-home ${dmMode ? 'active' : ''}`}
         title="Mensagens diretas"
         onClick={onOpenDms}
       >
         <Icon name="message-circle" size={22} />
+        {mobileExpanded && <span className="guild-pill-name">Mensagens diretas</span>}
         {unreadDmTotal > 0 && !dmMode && <span className="badge">{unreadDmTotal}</span>}
       </button>
       <div className="guild-bar-divisor" />
@@ -48,6 +57,7 @@ export default function GuildBar({
               />
             </span>
           ) : initials(guild.name)}
+          {mobileExpanded && <span className="guild-pill-name">{guild.name}</span>}
           {mentionByGuild[guild.id] > 0 ? (
             <span className="badge mention-badge" aria-label={`${mentionByGuild[guild.id]} menções`}>
               {mentionByGuild[guild.id]}
@@ -59,15 +69,23 @@ export default function GuildBar({
         );
       })}
 
-      <button className="guild-pill ghost" title="Criar servidor" onClick={onCreate}><Icon name="plus" size={20} /></button>
-      <button className="guild-pill ghost" title="Entrar com convite" onClick={onJoin}><Icon name="arrow-right" size={19} /></button>
+      <button className="guild-pill ghost" title="Criar servidor" onClick={onCreate}>
+        <Icon name="plus" size={20} />
+        {mobileExpanded && <span className="guild-pill-name">Criar servidor</span>}
+      </button>
+      <button className="guild-pill ghost" title="Entrar com convite" onClick={onJoin}>
+        <Icon name="arrow-right" size={19} />
+        {mobileExpanded && <span className="guild-pill-name">Entrar com convite</span>}
+      </button>
 
       <div className="guild-bar-divisor" />
       <button className="guild-pill ghost cinema" title="Cinema" onClick={onOpenCinema}>
         <Icon name="film" size={19} />
+        {mobileExpanded && <span className="guild-pill-name">Cinema</span>}
       </button>
       <button className="guild-pill ghost reportar" title="Reportar um problema" onClick={onReportarBug}>
         <Icon name="alert-triangle" size={19} />
+        {mobileExpanded && <span className="guild-pill-name">Reportar um problema</span>}
       </button>
     </nav>
   );

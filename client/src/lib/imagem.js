@@ -33,6 +33,17 @@ export async function copiarImagem(src) {
   try {
     const blob = await (await fetch(src)).blob();
     const png = blob.type === 'image/png' ? blob : await converterParaPng(blob);
+
+    // O clipboard do Chromium falha silenciosamente em algumas janelas do
+    // Electron. No desktop, entregar os bytes ao processo principal usa a
+    // area de transferencia real do Windows e nao depende dessa permissao.
+    const copiarNativamente = globalThis.window?.appDesktop?.copiarImagem;
+    if (copiarNativamente) {
+      const bytes = new Uint8Array(await png.arrayBuffer());
+      if (await copiarNativamente(bytes)) return true;
+    }
+
+    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return false;
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
     return true;
   } catch {

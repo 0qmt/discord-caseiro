@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('appDesktop', {
   tocarSomDeMencao: () => ipcRenderer.send('app:tocar-som-mencao'),
   iniciarSomDeChamada: () => ipcRenderer.send('app:iniciar-som-chamada'),
   pararSomDeChamada: () => ipcRenderer.send('app:parar-som-chamada'),
+  copiarImagem: (bytes) => ipcRenderer.invoke('app:copiar-imagem', bytes),
   /** Alterna o modo de tela cheia nativo da janela do Electron. */
   telaCheia: (ativa) => ipcRenderer.invoke('app:tela-cheia', Boolean(ativa)),
   onTelaCheia: (callback) => {
