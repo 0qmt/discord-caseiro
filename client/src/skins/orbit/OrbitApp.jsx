@@ -280,6 +280,7 @@ export default function OrbitApp({
               onRodarComando={onRodarComando}
               inserirNoCampo={inserirNoCampo}
               onAlternarCanais={() => setPainelCanaisAberto((aberto) => !aberto)}
+              onlineCount={onlineIds?.has(activeDm.otherUser.id) ? 1 : 0}
               icon={<Avatar user={activeDm.otherUser} size={22} className="small" />}
               emptyMessage="Escolhe uma conversa na barra ao lado."
               placeholder={`Mensagem para ${activeDm.otherUser.username}`}
@@ -322,6 +323,7 @@ export default function OrbitApp({
             onRodarComando={onRodarComando}
             onAlternarMembros={onAlternarMembros}
             membrosVisiveis={membrosVisiveis}
+            onlineCount={guild?.members?.filter((member) => presencas?.[member.id]?.online).length ?? 0}
             inserirNoCampo={inserirNoCampo}
             onAlternarCanais={() => setPainelCanaisAberto((aberto) => !aberto)}
             naoLidasAoAbrir={naoLidasAoAbrir}

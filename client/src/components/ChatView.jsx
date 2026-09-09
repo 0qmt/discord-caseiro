@@ -376,6 +376,7 @@ export default function ChatView({
   onAlternarCanais,
   onAlternarMembros,
   membrosVisiveis = true,
+  onlineCount,
   inserirNoCampo,
   naoLidasAoAbrir = 0,
 }) {
@@ -391,6 +392,7 @@ export default function ChatView({
   const [respondendo, setRespondendo] = useState(null); // mensagem sendo respondida
   const [editando, setEditando] = useState(null);       // { id, texto }
   const [emojiPara, setEmojiPara] = useState(null);     // id da msg com seletor aberto
+  const [emojiComposerAberto, setEmojiComposerAberto] = useState(false);
   const [acoesAbertas, setAcoesAbertas] = useState(null);
   const [pinsAbertos, setPinsAbertos] = useState(false);
   const [buscaAberta, setBuscaAberta] = useState(false);
@@ -744,6 +746,12 @@ export default function ChatView({
     setGifAberto(false);
   }
 
+  function inserirEmojiNoComposer(emoji) {
+    setDraft((atual) => `${atual}${emoji}`);
+    setEmojiComposerAberto(false);
+    requestAnimationFrame(() => campoRef.current?.focus());
+  }
+
   /** Itens do menu de contexto de uma mensagem (seção 6 da spec). */
   function itensDaMensagem(message) {
     return itensDeMensagem({
@@ -796,8 +804,19 @@ export default function ChatView({
             <Icon name="arrow-right" size={20} style={{ transform: 'rotate(180deg)' }} />
           </button>
         )}
-        {icon}
-        <span className="chat-title">{channel.name}</span>
+        <div className="chat-identidade">
+          <div className="chat-title-row">
+            {icon}
+            <span className="chat-title">{channel.name}</span>
+            <Icon name="chevron-right" size={16} className="chat-title-chevron" />
+          </div>
+          {Number.isFinite(onlineCount) && (
+            <span className="chat-presenca">
+              <span className={`chat-presenca-dot ${onlineCount > 0 ? '' : 'offline'}`} />
+              {onlineCount} online
+            </span>
+          )}
+        </div>
         {channel.topic && (
           <>
             <span className="chat-head-divisor" />
@@ -807,7 +826,7 @@ export default function ChatView({
         <div className="chat-head-acoes">
           {members && (
             <button
-              className={`icon-btn ${buscaAberta ? 'ativo' : ''}`}
+              className={`icon-btn chat-head-search ${buscaAberta ? 'ativo' : ''}`}
               title="Buscar no canal"
               aria-label="Buscar no canal"
               onClick={() => { setBuscaAberta((aberta) => !aberta); setPinsAbertos(false); }}
@@ -815,10 +834,10 @@ export default function ChatView({
               <Icon name="search" />
             </button>
           )}
-          <button className="icon-btn" title="Mensagens fixadas" onClick={abrirPins}><Icon name="pin" /></button>
+          <button className="icon-btn chat-head-pin" title="Mensagens fixadas" onClick={abrirPins}><Icon name="pin" /></button>
           {onAlternarMembros && (
             <button
-              className={`icon-btn ${membrosVisiveis ? 'ativo' : ''}`}
+              className={`icon-btn chat-head-members ${membrosVisiveis ? 'ativo' : ''}`}
               title={membrosVisiveis ? 'Esconder membros' : 'Mostrar membros'}
               onClick={onAlternarMembros}
             >
@@ -1054,7 +1073,7 @@ export default function ChatView({
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={editando ? 'Edite a mensagem e aperte Enter' : (placeholder ?? `Mensagem em #${channel.name}`)}
+            placeholder={editando ? 'Edite a mensagem e aperte Enter' : (placeholder ?? `Conversar em #${channel.name}`)}
             rows={1}
             maxLength={4000}
           />
@@ -1073,6 +1092,33 @@ export default function ChatView({
             {gifAberto && <GifPicker onEscolher={escolherGif} onFechar={() => setGifAberto(false)} />}
           </div>
         </div>
+
+        <button
+          type="button"
+          className={`icon-btn composer-emoji ${emojiComposerAberto ? 'ativo' : ''}`}
+          title="Adicionar emoji"
+          aria-label="Adicionar emoji"
+          onClick={() => setEmojiComposerAberto((aberto) => !aberto)}
+        >
+          <Icon name="smile" size={20} />
+        </button>
+        {emojiComposerAberto && (
+          <>
+            <button
+              type="button"
+              className="click-fora"
+              aria-label="Fechar emojis"
+              onClick={() => setEmojiComposerAberto(false)}
+            />
+            <div className="composer-emoji-picker" role="group" aria-label="Escolher emoji">
+              {EMOJIS_RAPIDOS.map((emoji) => (
+                <button key={emoji} type="button" onClick={() => inserirEmojiNoComposer(emoji)}>
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <button
           className="primary composer-enviar"
