@@ -40,14 +40,17 @@ try {
     $sourceApk = Join-Path $temp 'app-release.apk'
     if (-not (Test-Path $sourceApk)) { throw 'APK release nao encontrado no artefato.' }
 
-    $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
+    $sdkCandidates = @($env:ANDROID_HOME, 'D:\android\sdk', (Join-Path $env:LOCALAPPDATA 'Android\Sdk')) |
+        Where-Object { $_ -and (Test-Path (Join-Path $_ 'build-tools')) }
+    $sdk = $sdkCandidates | Select-Object -First 1
+    if (-not $sdk) { throw 'Android SDK nao encontrado.' }
     $buildTools = Get-ChildItem (Join-Path $sdk 'build-tools') -Directory |
         Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
     if (-not $buildTools) { throw 'Android build-tools nao encontrado.' }
     $aapt = Join-Path $buildTools.FullName 'aapt.exe'
     $apksigner = Join-Path $buildTools.FullName 'apksigner.bat'
 
-    $badging = (& $aapt dump badging $sourceApk | Select-Object -First 1)
+    $badging = (& $aapt dump badging $sourceApk | Select-Object -First 1 | Out-String).Trim()
     if ($LASTEXITCODE -or $badging -notmatch "name='com\.discordcaseiro\.app'") {
         throw 'Package name inesperado no APK.'
     }
@@ -96,7 +99,8 @@ try {
         publishedAt = [DateTime]::UtcNow.ToString('o')
     }
     $manifestPath = Join-Path $temp 'latest.json'
-    $manifest | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
+    $utf8SemBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json), $utf8SemBom)
 
     $remoteApkTemp = "$DiretorioRemoto/.$apkName.uploading"
     $remoteManifestTemp = "$DiretorioRemoto/.latest.json.uploading"
