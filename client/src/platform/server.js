@@ -32,6 +32,29 @@ export function serverAsset(value) {
   return serverPath(value);
 }
 
+export function serverRelativeAsset(value) {
+  if (typeof value !== 'string') return value;
+  if (value.startsWith('/uploads/')) return value;
+  const base = getServerUrl();
+  if (!base) return value;
+  try {
+    const parsed = new URL(value);
+    return parsed.origin === base && parsed.pathname.startsWith('/uploads/')
+      ? `${parsed.pathname}${parsed.search}${parsed.hash}`
+      : value;
+  } catch {
+    return value;
+  }
+}
+
+export function attachmentForServer(attachment) {
+  if (!attachment || typeof attachment !== 'object') return attachment;
+  return {
+    ...attachment,
+    url: serverRelativeAsset(attachment.url),
+  };
+}
+
 /**
  * URLs de upload chegam relativas porque no navegador o cliente e o servidor
  * compartilham a origem. No APK, convertemos somente recursos do servidor;

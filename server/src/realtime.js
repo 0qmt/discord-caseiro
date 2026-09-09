@@ -21,13 +21,27 @@ const RATE_LIMIT = { messages: 10, windowMs: 5000 };
  */
 function anexoValido(bruto) {
   if (!bruto || typeof bruto !== 'object') return null;
-  const url = String(bruto.url ?? '');
+  const urlBruta = String(bruto.url ?? '');
   const type = String(bruto.type ?? '');
   const name = String(bruto.name ?? '').slice(0, 200) || null;
   if (!['image', 'video', 'audio', 'file', 'gif'].includes(type)) return null;
   if (type === 'gif') {
-    if (!url.startsWith('https://')) return null;
-  } else if (!url.startsWith('/uploads/')) {
+    if (!urlBruta.startsWith('https://')) return null;
+    return { url: urlBruta, type, name };
+  }
+
+  let url = urlBruta;
+  if (!url.startsWith('/uploads/')) {
+    try {
+      const parsed = new URL(url);
+      url = parsed.pathname.startsWith('/uploads/')
+        ? `${parsed.pathname}${parsed.search}${parsed.hash}`
+        : '';
+    } catch {
+      url = '';
+    }
+  }
+  if (!url.startsWith('/uploads/')) {
     return null;
   }
   return { url, type, name };

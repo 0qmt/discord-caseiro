@@ -27,6 +27,7 @@ import OrbitApp from './skins/orbit/OrbitApp.jsx';
 import Modal from './components/Modal.jsx';
 import ProfileCard from './components/ProfileCard.jsx';
 import ProfileEditor from './components/ProfileEditor.jsx';
+import { attachmentForServer } from './platform/server.js';
 import ReportBugModal from './components/ReportBugModal.jsx';
 import SettingsScreen from './components/SettingsScreen.jsx';
 import { itensDeStatus } from './components/UserPanel.jsx';
@@ -1111,6 +1112,7 @@ export default function App() {
   async function sendDmMessage(content, attachment = null, replyToId = null) {
     const dmChannelId = activeDmId;
     const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const attachmentPayload = attachmentForServer(attachment);
 
     setDmMessages((prev) => ({
       ...prev,
@@ -1121,7 +1123,7 @@ export default function App() {
     }));
 
     const response = await emitAck(socketRef.current, 'dm:send', {
-      dmChannelId, content, attachment, replyToId, nonce,
+      dmChannelId, content, attachment: attachmentPayload, replyToId, nonce,
     });
     if (response?.error) {
       setSendError(response.error);
@@ -1711,6 +1713,7 @@ export default function App() {
   async function sendMessage(content, attachment = null, replyToId = null) {
     const channelId = activeChannelId;
     const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const attachmentPayload = attachmentForServer(attachment);
 
     setMessages((prev) => ({
       ...prev,
@@ -1721,7 +1724,7 @@ export default function App() {
     }));
 
     const response = await emitAck(socketRef.current, 'message:send', {
-      channelId, content, attachment, replyToId, nonce,
+      channelId, content, attachment: attachmentPayload, replyToId, nonce,
     });
     if (response?.error) {
       setSendError(response.error);

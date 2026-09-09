@@ -1,4 +1,5 @@
 import { cropStyle } from '../lib/cropStyle.js';
+import { serverAsset } from '../platform/server.js';
 import Icon from './Icon.jsx';
 
 const initials = (name) =>
@@ -25,16 +26,18 @@ export default function GuildBar({
       </button>
       <div className="guild-bar-divisor" />
 
-      {guilds.map((guild) => (
+      {guilds.map((guild) => {
+        const iconSrc = serverAsset(guild.iconUrl);
+        return (
         <button
           key={guild.id}
           className={`guild-pill ${guild.id === activeGuildId && !dmMode ? 'active' : ''}`}
           title={guild.name}
           onClick={() => onSelect(guild.id)}
         >
-          {guild.iconUrl ? (
+          {iconSrc ? (
             <span className="guild-pill-icone">
-              <img key={guild.iconUrl} src={guild.iconUrl} alt="" style={cropStyle(guild.iconCrop)} />
+              <img key={iconSrc} src={iconSrc} alt="" style={cropStyle(guild.iconCrop)} />
             </span>
           ) : initials(guild.name)}
           {mentionByGuild[guild.id] > 0 ? (
@@ -45,7 +48,8 @@ export default function GuildBar({
             <span className="badge">{unreadByGuild[guild.id]}</span>
           )}
         </button>
-      ))}
+        );
+      })}
 
       <button className="guild-pill ghost" title="Criar servidor" onClick={onCreate}><Icon name="plus" size={20} /></button>
       <button className="guild-pill ghost" title="Entrar com convite" onClick={onJoin}><Icon name="arrow-right" size={19} /></button>

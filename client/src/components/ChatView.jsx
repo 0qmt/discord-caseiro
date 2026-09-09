@@ -21,6 +21,7 @@ import GifPicker from './GifPicker.jsx';
 import Icon from './Icon.jsx';
 import ImageLightbox from './ImageLightbox.jsx';
 import LinkPreview from './LinkPreview.jsx';
+import { serverAsset } from '../platform/server.js';
 
 const timeOf = (ts) =>
   new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -77,10 +78,11 @@ export function Anexo({ anexo }) {
   const menu = useContextMenu();
 
   if (!anexo) return null;
+  const src = serverAsset(anexo.url);
 
   if (anexo.type === 'image' || anexo.type === 'gif') {
     const itens = itensDeImagem({
-      src: anexo.url,
+      src,
       nome: anexo.name,
       onVer: () => setAberta(true),
     });
@@ -89,27 +91,27 @@ export function Anexo({ anexo }) {
       <>
         <img
           className="anexo-imagem clicavel"
-          src={anexo.url}
+          src={src}
           alt={anexo.name ?? 'imagem'}
           loading="lazy"
           onClick={() => setAberta(true)}
           onContextMenu={menu.abrirCom(itens)}
         />
         {aberta && (
-          <ImageLightbox src={anexo.url} nome={anexo.name} onClose={() => setAberta(false)} />
+          <ImageLightbox src={src} nome={anexo.name} onClose={() => setAberta(false)} />
         )}
         <ContextMenu estado={menu.estado} onFechar={menu.fechar} />
       </>
     );
   }
   if (anexo.type === 'video') {
-    return <video className="anexo-video" src={anexo.url} controls />;
+    return <video className="anexo-video" src={src} controls />;
   }
   if (anexo.type === 'audio') {
-    return <audio className="anexo-audio" src={anexo.url} controls />;
+    return <audio className="anexo-audio" src={src} controls />;
   }
   return (
-    <a className="anexo-arquivo" href={anexo.url} download={anexo.name ?? undefined}>
+    <a className="anexo-arquivo" href={src} download={anexo.name ?? undefined}>
       <span className="anexo-arquivo-icone"><Icon name="file" size={15} /></span>
       <span className="anexo-arquivo-nome">{anexo.name ?? 'arquivo'}</span>
     </a>
@@ -223,7 +225,7 @@ export function ItemFixado({ pin, onIr }) {
           trata a miniatura como fora da tela e adia o carregamento pra
           sempre - o resultado era um quadrado cinza que nunca virava foto.
           São no máximo 50 imagens de 44px, carregar direto não pesa. */}
-      {imagem && <img className="pin-miniatura" src={imagem.url} alt="" />}
+      {imagem && <img className="pin-miniatura" src={serverAsset(imagem.url)} alt="" />}
     </button>
   );
 }

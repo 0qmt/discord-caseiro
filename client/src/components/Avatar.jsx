@@ -1,4 +1,5 @@
 import { cropStyle } from '../lib/cropStyle.js';
+import { serverAsset } from '../platform/server.js';
 
 /**
  * Avatar de qualquer usuario.
@@ -13,6 +14,7 @@ import { cropStyle } from '../lib/cropStyle.js';
 
 export default function Avatar({ user, size = 38, className = '', children, onClick, title }) {
   const { avatarUrl, avatarCrop, username = '?' } = user ?? {};
+  const src = serverAsset(avatarUrl);
   const Tag = onClick ? 'button' : 'div';
 
   return (
@@ -27,8 +29,8 @@ export default function Avatar({ user, size = 38, className = '', children, onCl
         {/* `key` na URL: sem ela o React reaproveita o mesmo <img> ao trocar
             de foto, e a animação de entrada (animacoes.css) rodaria só na
             primeira vez - justamente na troca, que é quando ela serve. */}
-        {avatarUrl
-          ? <img key={avatarUrl} src={avatarUrl} alt="" style={cropStyle(avatarCrop)} />
+        {src
+          ? <img key={src} src={src} alt="" style={cropStyle(avatarCrop)} />
           : username[0]?.toUpperCase()}
       </span>
       {children}
