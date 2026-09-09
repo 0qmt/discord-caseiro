@@ -131,6 +131,13 @@ try {
     ssh $Servidor "mv -f '$remoteApkTemp' '$DiretorioRemoto/$apkName' && mv -f '$remoteManifestTemp' '$DiretorioRemoto/latest.json'"
     if ($LASTEXITCODE) { throw 'Falha ao ativar a atualizacao no Umbrel.' }
 
+    $latestTag = (gh release view --repo 0qmt/discord-caseiro --json tagName --jq '.tagName').Trim()
+    if (-not $latestTag) { throw 'Nao foi possivel descobrir a release mais recente no GitHub.' }
+    $latestAlias = Join-Path $temp 'discordia-android-latest.apk'
+    Copy-Item -LiteralPath $apk -Destination $latestAlias -Force
+    gh release upload $latestTag $apk $latestAlias --repo 0qmt/discord-caseiro --clobber
+    if ($LASTEXITCODE) { throw "Falha ao enviar APK para o GitHub Release $latestTag." }
+
     Write-Host "Android $version publicado: $apkName ($size bytes, SHA-256 $sha256)"
 } finally {
     if (Test-Path $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }

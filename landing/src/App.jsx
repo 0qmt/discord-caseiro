@@ -3,10 +3,9 @@ import Logo from './Logo.jsx';
 
 const NOME = 'Discord Caseiro';
 const REPO = '0qmt/discord-caseiro';
-// O instalador (~90 MB) vem direto do GitHub Releases, não do nosso servidor -
-// senão cada download passaria pelo túnel caseiro e comeria a banda dele à toa.
+// Downloads publicos ficam no GitHub Releases para nao depender de porta residencial.
 const INSTALADOR_URL = `https://github.com/${REPO}/releases/latest/download/discord-caseiro-setup-latest.exe`;
-const ANDROID_URL = '/api/mobile/download';
+const ANDROID_URL = `https://github.com/${REPO}/releases/latest/download/discordia-android-latest.apk`;
 
 /** Busca a versão publicada de verdade; se o GitHub não responder, some sem quebrar a página. */
 function useVersaoPublicada() {
@@ -30,13 +29,16 @@ function useVersaoPublicada() {
 function useVersaoAndroid() {
   const [info, setInfo] = useState(null);
   useEffect(() => {
-    fetch('/api/mobile/update', { cache: 'no-store' })
+    fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((r) => {
         if (!r) return;
+        const apk = r.assets?.find((a) => a.name === 'discordia-android-latest.apk')
+          ?? r.assets?.find((a) => a.name.endsWith('.apk'));
+        const versao = apk?.name?.match(/(\d+\.\d+\.\d+)\.apk$/)?.[1];
         setInfo({
-          version: r.versionName,
-          size: r.size ? `${(r.size / 1024 / 1024).toFixed(1)} MB` : null,
+          version: versao ?? 'mais recente',
+          size: apk?.size ? `${(apk.size / 1024 / 1024).toFixed(1)} MB` : null,
         });
       })
       .catch(() => {});
