@@ -1293,43 +1293,41 @@
   .orbit-shell,
   .orbit-shell.sem-membros,
   .orbit-shell.modo-chamada {
-    grid-template-columns: minmax(0, 1fr);
+    /* No telefone o trilho de servidores continua permanente. Somente a
+       lista de canais e uma gaveta temporaria sobre o chat. */
+    --orbit-rail: 64px;
+    grid-template-columns: var(--orbit-rail) minmax(0, 1fr);
   }
 
   .orbit-shell .guild-bar {
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 45;
-    width: 68px;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translateX(-100%);
-    transition: transform 160ms ease, visibility 0s linear 160ms;
+    position: relative;
+    z-index: 46;
+    grid-column: 1;
+    width: var(--orbit-rail);
+    min-height: 0;
+    padding-top: max(10px, env(safe-area-inset-top));
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+    scrollbar-width: none;
   }
 
-  .orbit-shell.painel-canais-aberto .guild-bar {
-    visibility: visible;
-    pointer-events: auto;
-    transform: translateX(0);
-    transition-delay: 0s;
-  }
+  .orbit-shell .guild-bar::-webkit-scrollbar { display: none; }
 
-  .orbit-shell .chat-column { grid-column: 1; min-width: 0; }
+  .orbit-shell .chat-column { grid-column: 2; min-width: 0; }
 
   .orbit-shell .channel-sidebar {
     position: fixed;
     top: 0;
     bottom: 0;
-    left: 68px;
+    left: var(--orbit-rail);
     z-index: 45;
     display: flex;
-    width: min(260px, calc(100vw - 68px));
+    width: min(288px, calc(100vw - var(--orbit-rail)));
     visibility: hidden;
     pointer-events: none;
-    transform: translateX(-120%);
+    transform: translateX(-105%);
     transition: transform 160ms ease, visibility 0s linear 160ms;
+    box-shadow: 10px 0 28px rgba(0, 0, 0, .36);
   }
 
   .orbit-shell.painel-canais-aberto .channel-sidebar {
@@ -1341,7 +1339,7 @@
 
   .orbit-shell .orbit-sidebar-scrim {
     position: fixed;
-    inset: 0;
+    inset: 0 0 0 var(--orbit-rail);
     z-index: 41;
     display: none;
     background: rgba(0, 0, 0, .56);
@@ -1356,8 +1354,8 @@
   .orbit-shell .orbit-mobile-nav-toggle {
     display: grid;
     place-items: center;
-    width: 30px;
-    height: 30px;
+    width: 36px;
+    height: 36px;
     flex: none;
     border-radius: 4px;
     color: var(--text-dim);
@@ -1372,7 +1370,8 @@
   .orbit-shell .composer { margin-right: 10px; margin-left: 10px; }
   .orbit-shell .composer-contexto { margin-right: 10px; margin-left: 10px; }
 
-  .orbit-shell.modo-cinema { grid-template-columns: minmax(0, 1fr); }
+  .orbit-shell.modo-cinema { grid-template-columns: var(--orbit-rail) minmax(0, 1fr); }
+  .orbit-shell.modo-cinema .chat-column { grid-column: 2; }
   .orbit-shell .cinema-streaming-nav { grid-template-columns: 1fr auto; padding: 0 10px; }
   .orbit-shell .cinema-top-search { display: none; }
   .orbit-shell .cinema-mobile-search { display: block; padding: 12px 14px 0; }
