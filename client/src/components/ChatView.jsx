@@ -881,6 +881,8 @@ export default function ChatView({
           lastDay = day;
 
           const membro = members?.find((m) => m.id === message.author.id);
+          const nomeAutor = membro?.nickname || membro?.username || message.author?.nickname
+            || message.author?.username || message.author?.handle || 'alguém';
           const cor = corDoMembro(membro, roles);
           const meuTexto = message.author.id === meId;
 
@@ -912,8 +914,11 @@ export default function ChatView({
                   <div className="reply-linha" onClick={() => irPara(message.replyTo.id)}>
                     <span className="reply-gancho" />
                     <span className="reply-autor">
-                      {nomeExibido(members?.find((m) => m.id === message.replyTo.authorId))
-                        || message.replyTo.username}
+                      {(() => {
+                        const autorResposta = members?.find((m) => m.id === message.replyTo.authorId);
+                        return autorResposta?.nickname || autorResposta?.username
+                          || message.replyTo.username || 'alguém';
+                      })()}
                     </span>
                     <span className="reply-texto">{message.replyTo.content || 'anexo'}</span>
                   </div>
@@ -938,7 +943,7 @@ export default function ChatView({
                         style={cor ? { color: cor } : undefined}
                         onClick={() => onOpenProfile(message.author)}
                       >
-                        {nomeExibido(membro) || message.author.username}
+                        {nomeAutor}
                       </button>
                       <span className="time">{timeOf(message.createdAt)}</span>
                       {message.pinnedAt && <Icon name="pin" size={11} className="msg-fixada-selo" title="fixada" />}
