@@ -31,7 +31,7 @@ function converterParaPng(blob) {
 /** Copia a imagem pro clipboard. Devolve se deu certo, sem estourar erro. */
 export async function copiarImagem(src) {
   try {
-    const blob = await (await fetch(src)).blob();
+    const blob = await (await fetch(urlAbsoluta(src))).blob();
     const png = blob.type === 'image/png' ? blob : await converterParaPng(blob);
 
     // O clipboard do Chromium falha silenciosamente em algumas janelas do
@@ -39,7 +39,7 @@ export async function copiarImagem(src) {
     // area de transferencia real do Windows e nao depende dessa permissao.
     const copiarNativamente = globalThis.window?.appDesktop?.copiarImagem;
     if (copiarNativamente) {
-      const bytes = new Uint8Array(await png.arrayBuffer());
+      const bytes = await png.arrayBuffer();
       if (await copiarNativamente(bytes)) return true;
     }
 

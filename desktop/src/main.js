@@ -487,6 +487,23 @@ function veioDaNossaPagina(evento) {
   return url.startsWith('file://') || ehNossoServidor(url);
 }
 
+function bufferDeImagem(dados) {
+  if (Buffer.isBuffer(dados)) return dados;
+  if (dados instanceof ArrayBuffer) return Buffer.from(dados);
+  if (ArrayBuffer.isView(dados)) {
+    return Buffer.from(dados.buffer, dados.byteOffset, dados.byteLength);
+  }
+  if (Array.isArray(dados)) return Buffer.from(dados);
+  if (dados && typeof dados === 'object') {
+    const valores = Object.keys(dados)
+      .filter((chave) => /^\d+$/.test(chave))
+      .sort((a, b) => Number(a) - Number(b))
+      .map((chave) => dados[chave]);
+    if (valores.length) return Buffer.from(valores);
+  }
+  return Buffer.alloc(0);
+}
+
 ipcMain.on('app:notificar', (evento, payload = {}) => {
   if (!veioDaNossaPagina(evento)) return;
   if (payload.tocarSom) tocarSomDeMencao();
@@ -520,7 +537,7 @@ ipcMain.on('app:parar-som-chamada', (evento) => {
 ipcMain.handle('app:copiar-imagem', (evento, dados) => {
   if (!veioDaNossaPagina(evento)) return false;
   try {
-    const bytes = Buffer.from(dados);
+    const bytes = bufferDeImagem(dados);
     // Evita que uma pagina comprometida use a ponte para esgotar memoria do
     // processo principal; fotos comuns ficam muito abaixo deste limite.
     if (!bytes.length || bytes.length > 30 * 1024 * 1024) return false;
