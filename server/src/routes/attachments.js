@@ -14,11 +14,20 @@ const upload = multer({
   limits: { fileSize: config.maxAttachmentBytes, files: 1 },
 });
 
+const EXT_IMAGEM = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif']);
+const EXT_VIDEO = new Set(['.mp4', '.webm', '.mov', '.m4v', '.mkv']);
+const EXT_AUDIO = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac']);
+
 /** Categoria grosseira pra decidir como o cliente mostra o anexo. */
-function categoriaDe(mimetype) {
-  if (mimetype.startsWith('image/')) return 'image';
-  if (mimetype.startsWith('video/')) return 'video';
-  if (mimetype.startsWith('audio/')) return 'audio';
+function categoriaDe(mimetype, originalname) {
+  const tipo = String(mimetype ?? '').toLowerCase();
+  if (tipo.startsWith('image/')) return 'image';
+  if (tipo.startsWith('video/')) return 'video';
+  if (tipo.startsWith('audio/')) return 'audio';
+  const ext = path.extname(originalname ?? '').toLowerCase();
+  if (EXT_IMAGEM.has(ext)) return 'image';
+  if (EXT_VIDEO.has(ext)) return 'video';
+  if (EXT_AUDIO.has(ext)) return 'audio';
   return 'file';
 }
 
@@ -38,7 +47,7 @@ attachmentRoutes.post('/', upload.single('file'), (req, res) => {
   res.json({
     attachment: {
       url: `/uploads/${filename}`,
-      type: categoriaDe(req.file.mimetype),
+      type: categoriaDe(req.file.mimetype, req.file.originalname),
       name: req.file.originalname,
       size: req.file.size,
     },

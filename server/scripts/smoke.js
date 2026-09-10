@@ -92,9 +92,9 @@ async function uploadImage(token, alvo, kind, crop) {
 
 const uploadAvatar = (token, kind, crop) => uploadImage(token, 'avatar', kind, crop);
 
-async function uploadAttachment(token, conteudo, nome) {
+async function uploadAttachment(token, conteudo, nome, type = '') {
   const form = new FormData();
-  form.append('file', new Blob([conteudo]), nome);
+  form.append('file', new Blob([conteudo], type ? { type } : undefined), nome);
   const res = await fetch(`${BASE}/api/attachments`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
@@ -654,6 +654,10 @@ async function main() {
   check('anexo aponta pra /uploads', anexo.data?.attachment?.url?.startsWith('/uploads/'));
   check('anexo generico vem categorizado como file', anexo.data?.attachment?.type === 'file');
   check('anexo guarda o nome original', anexo.data?.attachment?.name === 'nota.txt');
+
+  const fotoAndroid = await uploadAttachment(alice.token, 'nao precisa ser imagem real aqui', 'foto-do-android.jpg', 'application/octet-stream');
+  check('foto do Android com MIME generico vira image',
+    fotoAndroid.data?.attachment?.type === 'image', JSON.stringify(fotoAndroid.data));
 
   const semTextoNemAnexo = await new Promise((resolve) =>
     aliceSocket.emit('message:send', { channelId: textChannel.id, content: '' }, resolve));

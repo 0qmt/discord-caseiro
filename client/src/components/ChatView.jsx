@@ -29,6 +29,14 @@ const timeOf = (ts) =>
 const dayOf = (ts) =>
   new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
+function tipoLocalDeArquivo(file) {
+  const type = String(file?.type ?? '').toLowerCase();
+  if (type.startsWith('image/')) return 'image';
+  if (type.startsWith('video/')) return 'video';
+  if (type.startsWith('audio/')) return 'audio';
+  return 'file';
+}
+
 /** Mensagens seguidas da mesma pessoa em ate 5 min viram um bloco so. */
 export function shouldGroup(previous, message) {
   if (!previous) return false;
@@ -382,6 +390,7 @@ export default function ChatView({
 }) {
   const [draft, setDraft] = useState('');
   const [anexoPendente, setAnexoPendente] = useState(null);
+  const [arquivoPendente, setArquivoPendente] = useState(null);
   const [enviandoAnexo, setEnviandoAnexo] = useState(false);
   const [erroAnexo, setErroAnexo] = useState(null);
   const [gifAberto, setGifAberto] = useState(false);
@@ -407,6 +416,8 @@ export default function ChatView({
   const arquivoRef = useRef(null);
   const campoRef = useRef(null);
   const cursorDepoisDaMencao = useRef(null);
+  const uploadAnexoRef = useRef(null);
+  const uploadAnexoIdRef = useRef(0);
   const hasMoreRef = useRef(hasMore);
   const onLoadMoreRef = useRef(onLoadMore);
   const menu = useContextMenu();
@@ -471,6 +482,12 @@ export default function ChatView({
     setDraft('');
     setMencoesEscolhidas([]);
     setAnexoPendente(null);
+    setArquivoPendente((atual) => {
+      if (atual?.previewUrl) URL.revokeObjectURL(atual.previewUrl);
+      return null;
+    });
+    uploadAnexoRef.current = null;
+    uploadAnexoIdRef.current += 1;
     setErroAnexo(null);
     setRespondendo(null);
     setEditando(null);
@@ -568,8 +585,7 @@ export default function ChatView({
       return;
     }
 
-    if (!bruto && !anexoPendente) return;
-    if (enviandoAnexo) return;
+    if (!bruto && !anexoPendente && !arquivoPendente) return;
 
     // Comando tem prioridade sobre envio normal.
     const lido = onRodarComando ? lerComando(bruto) : null;
@@ -585,12 +601,24 @@ export default function ChatView({
       return;
     }
 
+    let anexoParaEnviar = anexoPendente;
+    if (!anexoParaEnviar && arquivoPendente?.file) {
+      anexoParaEnviar = await enviarArquivoParaAnexo(arquivoPendente.file);
+      if (!anexoParaEnviar) return;
+    }
+
     stickToBottom.current = true;
     setDraft('');
     setMencoesEscolhidas([]);
     setMencaoTermo(null);
-    onSend(conteudo, anexoPendente, respondendo?.id ?? null);
+    onSend(conteudo, anexoParaEnviar, respondendo?.id ?? null);
     setAnexoPendente(null);
+    setArquivoPendente((atual) => {
+      if (atual?.previewUrl) URL.revokeObjectURL(atual.previewUrl);
+      return null;
+    });
+    uploadAnexoRef.current = null;
+    uploadAnexoIdRef.current += 1;
     setRespondendo(null);
   }
 
@@ -712,13 +740,21 @@ export default function ChatView({
   }
 
   async function enviarArquivoParaAnexo(arquivo) {
+    if (uploadAnexoRef.current) return uploadAnexoRef.current;
+    const uploadId = uploadAnexoIdRef.current;
     setErroAnexo(null);
     setEnviandoAnexo(true);
-    try {
+    uploadAnexoRef.current = (async () => {
       const { attachment } = await api.uploadAttachment(arquivo);
-      setAnexoPendente(attachment);
+      if (uploadAnexoIdRef.current === uploadId) setAnexoPendente(attachment);
+      return attachment;
+    })();
+    try {
+      return await uploadAnexoRef.current;
     } catch (err) {
-      setErroAnexo(err.message);
+      uploadAnexoRef.current = null;
+      setErroAnexo(err.message || 'não foi possível anexar o arquivo');
+      return null;
     } finally {
       setEnviandoAnexo(false);
     }
@@ -727,7 +763,25 @@ export default function ChatView({
   function escolherArquivo(e) {
     const arquivo = e.target.files?.[0];
     e.target.value = '';
-    if (arquivo) enviarArquivoParaAnexo(arquivo);
+    if (!arquivo) return;
+    uploadAnexoRef.current = null;
+    uploadAnexoIdRef.current += 1;
+    setAnexoPendente(null);
+    setArquivoPendente((atual) => {
+      if (atual?.previewUrl) URL.revokeObjectURL(atual.previewUrl);
+      const previewUrl = URL.createObjectURL(arquivo);
+      return {
+        file: arquivo,
+        previewUrl,
+        attachment: {
+          url: previewUrl,
+          type: tipoLocalDeArquivo(arquivo),
+          name: arquivo.name || 'arquivo',
+          size: arquivo.size,
+        },
+      };
+    });
+    enviarArquivoParaAnexo(arquivo);
   }
 
   /** Colar print (Ctrl+V) vira anexo igual escolher um arquivo - só não deixa
@@ -738,10 +792,33 @@ export default function ChatView({
       ?.getAsFile();
     if (!arquivo) return;
     e.preventDefault();
+    uploadAnexoRef.current = null;
+    uploadAnexoIdRef.current += 1;
+    setAnexoPendente(null);
+    setArquivoPendente((atual) => {
+      if (atual?.previewUrl) URL.revokeObjectURL(atual.previewUrl);
+      const previewUrl = URL.createObjectURL(arquivo);
+      return {
+        file: arquivo,
+        previewUrl,
+        attachment: {
+          url: previewUrl,
+          type: tipoLocalDeArquivo(arquivo),
+          name: arquivo.name || 'print.png',
+          size: arquivo.size,
+        },
+      };
+    });
     enviarArquivoParaAnexo(arquivo);
   }
 
   function escolherGif(gif) {
+    uploadAnexoRef.current = null;
+    uploadAnexoIdRef.current += 1;
+    setArquivoPendente((atual) => {
+      if (atual?.previewUrl) URL.revokeObjectURL(atual.previewUrl);
+      return null;
+    });
     setAnexoPendente({ url: gif.url, type: 'gif', name: null });
     setGifAberto(false);
   }
@@ -1016,22 +1093,51 @@ export default function ChatView({
       {error && <div className="chat-error">{error}</div>}
       {erroAnexo && <div className="chat-error">{erroAnexo}</div>}
 
-      {(anexoPendente || enviandoAnexo) && (
+      {(anexoPendente || arquivoPendente || enviandoAnexo) && (
         <div className="anexo-pendente">
-          {enviandoAnexo ? (
-            <span className="hint">enviando arquivo...</span>
-          ) : (
+          {arquivoPendente && !anexoPendente ? (
+            <>
+              <Anexo anexo={arquivoPendente.attachment} />
+              <span className="hint">{enviandoAnexo ? 'anexando...' : 'pronto para anexar'}</span>
+              <button
+                type="button"
+                className="icon-btn faint"
+                title="Remover anexo"
+                onClick={() => {
+                  setAnexoPendente(null);
+                  uploadAnexoRef.current = null;
+                  uploadAnexoIdRef.current += 1;
+                  setArquivoPendente((atual) => {
+                    if (atual?.previewUrl) URL.revokeObjectURL(atual.previewUrl);
+                    return null;
+                  });
+                }}
+              >
+                <Icon name="x" size={13} />
+              </button>
+            </>
+          ) : anexoPendente ? (
             <>
               <Anexo anexo={anexoPendente} />
               <button
                 type="button"
                 className="icon-btn faint"
                 title="Remover anexo"
-                onClick={() => setAnexoPendente(null)}
+                onClick={() => {
+                  setAnexoPendente(null);
+                  uploadAnexoRef.current = null;
+                  uploadAnexoIdRef.current += 1;
+                  setArquivoPendente((atual) => {
+                    if (atual?.previewUrl) URL.revokeObjectURL(atual.previewUrl);
+                    return null;
+                  });
+                }}
               >
                 <Icon name="x" size={13} />
               </button>
             </>
+          ) : (
+            <span className="hint">enviando arquivo...</span>
           )}
         </div>
       )}
@@ -1130,7 +1236,7 @@ export default function ChatView({
           type="submit"
           title={editando ? 'Salvar edição' : 'Enviar mensagem'}
           aria-label={editando ? 'Salvar edição' : 'Enviar mensagem'}
-          disabled={(!draft.trim() && !anexoPendente) || enviandoAnexo}
+          disabled={!draft.trim() && !anexoPendente && !arquivoPendente}
         >
           <Icon name={editando ? 'check' : 'send'} size={17} />
         </button>
