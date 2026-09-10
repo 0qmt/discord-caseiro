@@ -250,7 +250,7 @@ export default function App() {
   const [profileToken, setProfileToken] = useState(0);
   // Tela cheia, separada do resto dos modais - fica aberta por baixo mesmo
   // se a pessoa abrir o editor de perfil de dentro dela.
-  const [configuracoesAbertas, setConfiguracoesAbertas] = useState(false);
+  const [configuracoesAbertas, setConfiguracoesAbertas] = useState(null);
   /*
    * As configurações do SERVIDOR moram fora do `modal` de propósito: elas
    * abrem diálogos de confirmação (expulsar, banir), e se dividissem o mesmo
@@ -306,7 +306,7 @@ export default function App() {
       if (event.defaultPrevented) return;
       if (menuContexto.estado) menuContexto.fechar();
       else if (modal) setModal(null);
-      else if (configuracoesAbertas) setConfiguracoesAbertas(false);
+      else if (configuracoesAbertas) setConfiguracoesAbertas(null);
       else if (configServidor) setConfigServidor(null);
       else if (cinemaAberto) setCinemaAberto(false);
       else if (callMaximizada) setCallMaximizada(false);
@@ -1687,8 +1687,8 @@ export default function App() {
     me,
     statusAtual: meuStatus,
     onTrocarStatus: (s) => presenceActions.definir({ status: s }),
-    onAbrirPerfil: () => setModal({ type: 'profile', userId: me.id }),
-    onAbrirConfiguracoes: () => setConfiguracoesAbertas(true),
+    onAbrirPerfil: () => setConfiguracoesAbertas('profile'),
+    onAbrirConfiguracoes: () => setConfiguracoesAbertas('settings'),
   }));
 
   /** Aceitar um convite pra call: troca pro servidor certo e entra direto. */
@@ -1892,7 +1892,8 @@ export default function App() {
           cinemaAberto={cinemaAberto}
           onCloseCinema={() => setCinemaAberto(false)}
           onErroCinema={setAviso}
-          onOpenSettings={() => setConfiguracoesAbertas(true)}
+          onOpenSettings={() => setConfiguracoesAbertas('settings')}
+          onOpenOwnProfile={() => setConfiguracoesAbertas('profile')}
           onOpenProfile={(userId) => setModal({ type: 'profile', userId })}
           onMinimizarCall={() => setCallMaximizada(false)}
           onExpulsarDaCall={voiceActions.expulsar}
@@ -2120,9 +2121,11 @@ export default function App() {
         <SettingsScreen
           me={me}
           souDono={guilds.some((g) => g.role === 'owner')}
-          onClose={() => setConfiguracoesAbertas(false)}
-          onLogout={() => { setConfiguracoesAbertas(false); pedirLogout(); }}
-          onEditarPerfil={() => setModal({ type: 'edit-profile' })}
+          status={meuStatus}
+          initialPage={configuracoesAbertas}
+          onClose={() => setConfiguracoesAbertas(null)}
+          onLogout={() => { setConfiguracoesAbertas(null); pedirLogout(); }}
+          onEditarPerfil={() => { setConfiguracoesAbertas(null); setModal({ type: 'edit-profile' }); }}
         />
       )}
     </>

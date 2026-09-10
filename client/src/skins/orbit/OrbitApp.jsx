@@ -62,6 +62,7 @@ export default function OrbitApp({
   onCreateChannel,
   onOpenInvite,
   onOpenSettings,
+  onOpenOwnProfile,
   onOpenProfile,
   onMinimizarCall,
   onExpulsarDaCall,
@@ -172,7 +173,7 @@ export default function OrbitApp({
           me={me}
           connected={connected}
           onOpenSettings={onOpenSettings}
-          onOpenProfile={() => onOpenProfile(me.id)}
+          onOpenProfile={onOpenOwnProfile}
         />
       ) : (
         <ChannelSidebar
@@ -186,7 +187,7 @@ export default function OrbitApp({
           me={me}
           connected={connected}
           onOpenSettings={onOpenSettings}
-          onOpenProfile={() => onOpenProfile(me.id)}
+          onOpenProfile={onOpenOwnProfile}
           voice={voice}
           voiceRooms={voiceRooms}
           voiceActions={voiceActions}

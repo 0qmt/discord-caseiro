@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import Avatar from './Avatar.jsx';
 import ColorPicker from './ColorPicker.jsx';
+import Icon from './Icon.jsx';
+import StatusDot from './StatusDot.jsx';
 import { getSaidaAudio, setSaidaAudio } from '../lib/audioOutput.js';
 import { getEntradaAudio, setEntradaAudio } from '../lib/audioInput.js';
 import { ehDesktop, estadoDaPermissao, notificar, pedirPermissaoDeNotificacao } from '../lib/notificar.js';
@@ -267,6 +269,304 @@ function formatarBuild(iso) {
   }
 }
 
+const ROTULOS_STATUS = {
+  online: 'Online',
+  idle: 'Ausente',
+  dnd: 'Não perturbe',
+  invisible: 'Invisível',
+};
+
+const PAGINAS_MOBILE = [
+  { id: 'conta', label: 'Conta', description: 'E-mail, perfil e senha', icon: 'user', terms: 'email senha usuario perfil' },
+  { id: 'voz', label: 'Voz e vídeo', description: 'Microfone, saída e sensibilidade', icon: 'volume', terms: 'audio microfone som ruido video' },
+  { id: 'notificacoes', label: 'Notificações', description: 'Permissão e teste de avisos', icon: 'bell', terms: 'alerta aviso mensagem mencao' },
+  { id: 'temas', label: 'Aparência', description: 'Cor e tema do aplicativo', icon: 'palette', terms: 'tema cor gradiente visual' },
+  { id: 'sobre', label: 'Sobre', description: 'Versão e informações do aplicativo', icon: 'info', terms: 'versao build android desktop app' },
+];
+
+function useTelaMobile() {
+  const consulta = '(max-width: 700px)';
+  const [mobile, setMobile] = useState(() => platform.native || window.matchMedia(consulta).matches);
+
+  useEffect(() => {
+    if (platform.native) return undefined;
+    const media = window.matchMedia(consulta);
+    const atualizar = () => setMobile(media.matches);
+    media.addEventListener?.('change', atualizar);
+    return () => media.removeEventListener?.('change', atualizar);
+  }, []);
+
+  return mobile;
+}
+
+function MobileHeader({ title, onBack, close = false }) {
+  return (
+    <header className="mobile-user-header">
+      <button type="button" className="mobile-user-back" onClick={onBack} aria-label={close ? 'Fechar' : 'Voltar'}>
+        <Icon name={close ? 'x' : 'arrow-right'} size={24} style={close ? undefined : { transform: 'rotate(180deg)' }} />
+      </button>
+      <h1>{title}</h1>
+    </header>
+  );
+}
+
+function MobileSettingsRow({ icon, label, description, value, danger = false, onClick }) {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag
+      type={onClick ? 'button' : undefined}
+      className={`mobile-settings-row${danger ? ' danger' : ''}${onClick ? ' acionavel' : ''}`}
+      onClick={onClick}
+    >
+      {icon && <span className="mobile-settings-row-icon"><Icon name={icon} size={23} /></span>}
+      <span className="mobile-settings-row-copy">
+        <strong>{label}</strong>
+        {description && <small>{description}</small>}
+      </span>
+      {value && <span className="mobile-settings-row-value">{value}</span>}
+      {onClick && !danger && <Icon name="chevron-right" size={19} className="mobile-settings-chevron" />}
+    </Tag>
+  );
+}
+
+function MobileSettingsGroup({ title, children }) {
+  return (
+    <section className="mobile-settings-group">
+      {title && <h2>{title}</h2>}
+      <div className="mobile-settings-card">{children}</div>
+    </section>
+  );
+}
+
+function formatarDataDaConta(valor) {
+  if (!valor) return 'Data indisponível';
+  try {
+    return new Date(valor).toLocaleDateString('pt-BR', {
+      day: '2-digit', month: 'long', year: 'numeric',
+    });
+  } catch {
+    return 'Data indisponível';
+  }
+}
+
+function MobileProfileHome({ me, status, onClose, onNavigate, onEditarPerfil }) {
+  const handle = me.handle ? `@${me.handle}` : `@${me.username}`;
+  return (
+    <div className="mobile-user-page mobile-profile-home">
+      <MobileHeader title="Perfil" onBack={onClose} close />
+      <div className="mobile-user-scroll">
+        <section className="mobile-profile-hero">
+          <div className="mobile-profile-avatar">
+            <Avatar user={me} size={88}>
+              <StatusDot status={status} online className="mobile-profile-status-dot" />
+            </Avatar>
+          </div>
+          <div className="mobile-profile-status">{ROTULOS_STATUS[status] ?? 'Online'}</div>
+          <h2>{me.username}</h2>
+          <p className="mobile-profile-handle">{handle}</p>
+          {me.bio && <p className="mobile-profile-bio">{me.bio}</p>}
+          <button type="button" className="primary mobile-profile-edit" onClick={onEditarPerfil}>
+            <Icon name="pencil" size={20} />
+            Editar perfil
+          </button>
+        </section>
+
+        <MobileSettingsGroup title="Conta">
+          <MobileSettingsRow
+            icon="user"
+            label="Membro desde"
+            description={formatarDataDaConta(me.createdAt)}
+          />
+          <MobileSettingsRow
+            icon="settings"
+            label="Configurações"
+            description="Conta, voz, notificações e aparência"
+            onClick={() => onNavigate('settings')}
+          />
+        </MobileSettingsGroup>
+      </div>
+
+      <nav className="mobile-user-bottom-nav" aria-label="Área do usuário">
+        <button type="button" className="active" aria-current="page">
+          <Icon name="user" size={22} />
+          <span>Perfil</span>
+        </button>
+        <button type="button" onClick={() => onNavigate('settings')}>
+          <Icon name="settings" size={22} />
+          <span>Configurações</span>
+        </button>
+      </nav>
+    </div>
+  );
+}
+
+function MobileSettingsHome({ souDono, onBack, onNavigate, onLogout }) {
+  const [busca, setBusca] = useState('');
+  const paginas = useMemo(() => {
+    const base = souDono
+      ? [...PAGINAS_MOBILE.slice(0, 4), {
+        id: 'servidor', label: 'Servidor', description: 'Saúde e administração', icon: 'monitor', terms: 'admin cpu memoria reiniciar',
+      }, PAGINAS_MOBILE[4]]
+      : PAGINAS_MOBILE;
+    const termo = busca.trim().toLocaleLowerCase('pt-BR');
+    if (!termo) return base;
+    return base.filter((pagina) => `${pagina.label} ${pagina.description} ${pagina.terms}`.toLocaleLowerCase('pt-BR').includes(termo));
+  }, [busca, souDono]);
+
+  const conta = paginas.filter((pagina) => pagina.id === 'conta');
+  const app = paginas.filter((pagina) => ['voz', 'notificacoes', 'temas'].includes(pagina.id));
+  const sistema = paginas.filter((pagina) => ['servidor', 'sobre'].includes(pagina.id));
+  const buscando = Boolean(busca.trim());
+
+  const grupo = (title, itens) => itens.length > 0 && (
+    <MobileSettingsGroup title={title}>
+      {itens.map((pagina) => (
+        <MobileSettingsRow key={pagina.id} {...pagina} onClick={() => onNavigate(pagina.id)} />
+      ))}
+    </MobileSettingsGroup>
+  );
+
+  return (
+    <div className="mobile-user-page mobile-settings-home">
+      <MobileHeader title="Configurações" onBack={onBack} />
+      <div className="mobile-user-scroll">
+        <label className="mobile-settings-search">
+          <Icon name="search" size={22} />
+          <input
+            value={busca}
+            onChange={(event) => setBusca(event.target.value)}
+            placeholder="Buscar nas configurações"
+            aria-label="Buscar nas configurações"
+          />
+          {busca && (
+            <button type="button" onClick={() => setBusca('')} aria-label="Limpar busca"><Icon name="x" size={18} /></button>
+          )}
+        </label>
+
+        {buscando ? grupo('Resultados', paginas) : (
+          <>
+            {grupo('Configurações da conta', conta)}
+            {grupo('Configurações do aplicativo', app)}
+            {grupo('Discordia', sistema)}
+          </>
+        )}
+
+        {buscando && paginas.length === 0 && (
+          <div className="mobile-settings-empty">
+            <Icon name="search" size={28} />
+            <strong>Nenhuma configuração encontrada</strong>
+            <span>Tente buscar por conta, voz, notificações ou aparência.</span>
+          </div>
+        )}
+
+        {!buscando && (
+          <MobileSettingsGroup title="Sessão">
+            <MobileSettingsRow icon="door-exit" label="Sair da conta" danger onClick={onLogout} />
+          </MobileSettingsGroup>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MobileAccountPage({ me, onBack, onEditarPerfil }) {
+  return (
+    <div className="mobile-user-page mobile-settings-page">
+      <MobileHeader title="Conta" onBack={onBack} />
+      <div className="mobile-user-scroll">
+        <MobileSettingsGroup title="Perfil">
+          <MobileSettingsRow
+            icon="user"
+            label={me.username}
+            description={me.handle ? `@${me.handle}` : 'Nome de exibição'}
+            onClick={onEditarPerfil}
+          />
+          <MobileSettingsRow icon="mail" label="E-mail" description={me.email} />
+        </MobileSettingsGroup>
+        <MobileSettingsGroup title="Segurança">
+          <SecaoMudarSenha mobile />
+        </MobileSettingsGroup>
+      </div>
+    </div>
+  );
+}
+
+function MobileSectionPage({ title, onBack, children }) {
+  return (
+    <div className="mobile-user-page mobile-settings-page">
+      <MobileHeader title={title} onBack={onBack} />
+      <div className="mobile-user-scroll mobile-settings-section-content">{children}</div>
+    </div>
+  );
+}
+
+function MobileUserArea({
+  me, souDono, status, initialPage, onClose, onLogout, onEditarPerfil,
+  versaoDesktop, infoNativa, instalacaoDesktop, estadoAtualizacao,
+  acaoAtualizacao, onAtualizar,
+}) {
+  const inicial = initialPage === 'profile' ? 'profile' : 'settings';
+  const [pilha, setPilha] = useState([inicial]);
+  const pagina = pilha[pilha.length - 1];
+
+  const navegar = useCallback((destino) => setPilha((atual) => [...atual, destino]), []);
+  const voltar = useCallback(() => {
+    if (pilha.length === 1) onClose();
+    else setPilha((atual) => atual.slice(0, -1));
+  }, [onClose, pilha.length]);
+
+  useEffect(() => {
+    const aoVoltar = (event) => {
+      if (event.defaultPrevented) return;
+      voltar();
+      event.preventDefault();
+    };
+    window.addEventListener('discordia:native-back', aoVoltar, true);
+    return () => window.removeEventListener('discordia:native-back', aoVoltar, true);
+  }, [voltar]);
+
+  let conteudo;
+  if (pagina === 'profile') {
+    conteudo = <MobileProfileHome me={me} status={status} onClose={voltar} onNavigate={navegar} onEditarPerfil={onEditarPerfil} />;
+  } else if (pagina === 'settings') {
+    conteudo = <MobileSettingsHome souDono={souDono} onBack={voltar} onNavigate={navegar} onLogout={onLogout} />;
+  } else if (pagina === 'conta') {
+    conteudo = <MobileAccountPage me={me} onBack={voltar} onEditarPerfil={onEditarPerfil} />;
+  } else if (pagina === 'voz') {
+    conteudo = <MobileSectionPage title="Voz e vídeo" onBack={voltar}><SecaoVoz /></MobileSectionPage>;
+  } else if (pagina === 'notificacoes') {
+    conteudo = <MobileSectionPage title="Notificações" onBack={voltar}><SecaoNotificacoes /></MobileSectionPage>;
+  } else if (pagina === 'temas') {
+    conteudo = <MobileSectionPage title="Aparência" onBack={voltar}><SecaoTemas /></MobileSectionPage>;
+  } else if (pagina === 'servidor' && souDono) {
+    conteudo = <MobileSectionPage title="Servidor" onBack={voltar}><SecaoServidor /></MobileSectionPage>;
+  } else {
+    conteudo = (
+      <MobileSectionPage title="Sobre" onBack={voltar}>
+        <section className="settings-secao mobile-about-section">
+          <p className="hint">Comunicação self-hosted com servidores, canais, chat e chamadas na sua própria máquina.</p>
+          <div className="settings-versao">
+            <div>
+              <span className="settings-versao-rotulo">{versaoDesktop ? 'Versão do desktop' : infoNativa ? 'Versão do Android' : 'Versão do cliente'}</span>
+              <span>{versaoDesktop ?? infoNativa?.version ?? VERSAO}</span>
+            </div>
+            <div><span className="settings-versao-rotulo">Compilado em</span><span>{formatarBuild(BUILD)}</span></div>
+            {infoNativa && <div><span className="settings-versao-rotulo">Código da versão</span><span>{infoNativa.build}</span></div>}
+            {instalacaoDesktop && <div><span className="settings-versao-rotulo">Instalação</span><span>{instalacaoDesktop.portable ? 'Portable' : 'Atualização automática'}</span></div>}
+          </div>
+          {versaoDesktop && estadoAtualizacao?.status === 'ready' && (
+            <button className="primary" onClick={onAtualizar} disabled={acaoAtualizacao}>
+              {acaoAtualizacao ? 'Reiniciando...' : `Reiniciar e atualizar para ${estadoAtualizacao.availableVersion}`}
+            </button>
+          )}
+        </section>
+      </MobileSectionPage>
+    );
+  }
+
+  return <div className="mobile-user-area" key={pagina}>{conteudo}</div>;
+}
+
 /**
  * Tela de configurações cheia, no molde do Discord: navegação à esquerda,
  * conteúdo à direita, X pra fechar no canto. Só entram seções que
@@ -274,9 +574,10 @@ function formatarBuild(iso) {
  * ter o que mostrar nela.
  */
 export default function SettingsScreen({
-  me, souDono, onClose, onLogout, onEditarPerfil,
+  me, souDono, status = 'online', initialPage = 'settings', onClose, onLogout, onEditarPerfil,
 }) {
   const [aba, setAba] = useState('conta');
+  const telaMobile = useTelaMobile();
   const [versaoDesktop, setVersaoDesktop] = useState(null);
   const [infoNativa, setInfoNativa] = useState(null);
   const [instalacaoDesktop, setInstalacaoDesktop] = useState(null);
@@ -349,6 +650,26 @@ export default function SettingsScreen({
     window.addEventListener('keydown', aoTeclar);
     return () => window.removeEventListener('keydown', aoTeclar);
   }, [onClose]);
+
+  if (telaMobile) {
+    return (
+      <MobileUserArea
+        me={me}
+        souDono={souDono}
+        status={status}
+        initialPage={initialPage}
+        onClose={onClose}
+        onLogout={onLogout}
+        onEditarPerfil={onEditarPerfil}
+        versaoDesktop={versaoDesktop}
+        infoNativa={infoNativa}
+        instalacaoDesktop={instalacaoDesktop}
+        estadoAtualizacao={estadoAtualizacao}
+        acaoAtualizacao={acaoAtualizacao}
+        onAtualizar={abrirOuAplicarAtualizacao}
+      />
+    );
+  }
 
   return (
     <div className="settings-screen">
@@ -582,7 +903,7 @@ function SecaoServidor() {
 }
 
 /** Trocar a senha exige a atual de propósito - ver o porquê na rota do servidor. */
-function SecaoMudarSenha() {
+function SecaoMudarSenha({ mobile = false }) {
   const [aberto, setAberto] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState('');
   const [senhaNova, setSenhaNova] = useState('');
@@ -621,6 +942,16 @@ function SecaoMudarSenha() {
   }
 
   if (!aberto) {
+    if (mobile) {
+      return (
+        <MobileSettingsRow
+          icon="lock"
+          label="Senha"
+          description="Alterar sua senha de acesso"
+          onClick={() => setAberto(true)}
+        />
+      );
+    }
     return (
       <button type="button" className="link" onClick={() => setAberto(true)}>
         Mudar senha

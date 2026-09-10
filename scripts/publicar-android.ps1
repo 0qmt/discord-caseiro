@@ -1,5 +1,6 @@
 param(
     [long]$RunId = 0,
+    [string]$ApkPath = '',
     [string]$Servidor = 'umbrel@192.168.0.56',
     [string]$DiretorioRemoto = '/home/umbrel/discord-caseiro/data/mobile-updates'
 )
@@ -14,7 +15,7 @@ if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
 $versionCode = ([int]$Matches[1] * 1000000) + ([int]$Matches[2] * 1000) + [int]$Matches[3]
 $head = (git -C $repo rev-parse HEAD).Trim()
 
-if (-not $RunId) {
+if (-not $ApkPath -and -not $RunId) {
     $runs = gh run list --repo 0qmt/discord-caseiro --workflow 'Android APK' --commit $head `
         --status success --limit 1 --json databaseId,headSha | ConvertFrom-Json
     if (-not $runs -or $runs[0].headSha -ne $head) {
@@ -23,21 +24,29 @@ if (-not $RunId) {
     $RunId = $runs[0].databaseId
 }
 
-$run = gh run view $RunId --repo 0qmt/discord-caseiro --json conclusion,headSha | ConvertFrom-Json
-if ($run.conclusion -ne 'success' -or $run.headSha -ne $head) {
-    throw 'O workflow precisa estar concluido com sucesso e pertencer ao HEAD atual.'
+if (-not $ApkPath) {
+    $run = gh run view $RunId --repo 0qmt/discord-caseiro --json conclusion,headSha | ConvertFrom-Json
+    if ($run.conclusion -ne 'success' -or $run.headSha -ne $head) {
+        throw 'O workflow precisa estar concluido com sucesso e pertencer ao HEAD atual.'
+    }
 }
 
 $tempRoot = Join-Path $env:SystemDrive 'Temp'
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
-$temp = Join-Path $tempRoot "discordia-android-$RunId"
+$origem = if ($ApkPath) { 'local' } else { [string]$RunId }
+$temp = Join-Path $tempRoot "discordia-android-$origem"
 if (Test-Path $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
 New-Item -ItemType Directory -Path $temp | Out-Null
 
 try {
-    gh run download $RunId --repo 0qmt/discord-caseiro --name discordia-android-release --dir $temp
-    if ($LASTEXITCODE) { throw 'Falha ao baixar o artefato do GitHub Actions.' }
     $sourceApk = Join-Path $temp 'app-release.apk'
+    if ($ApkPath) {
+        $resolvido = (Resolve-Path -LiteralPath $ApkPath -ErrorAction Stop).Path
+        Copy-Item -LiteralPath $resolvido -Destination $sourceApk
+    } else {
+        gh run download $RunId --repo 0qmt/discord-caseiro --name discordia-android-release --dir $temp
+        if ($LASTEXITCODE) { throw 'Falha ao baixar o artefato do GitHub Actions.' }
+    }
     if (-not (Test-Path $sourceApk)) { throw 'APK release nao encontrado no artefato.' }
 
     $sdkCandidates = @($env:ANDROID_HOME, 'D:\android\sdk', (Join-Path $env:LOCALAPPDATA 'Android\Sdk')) |

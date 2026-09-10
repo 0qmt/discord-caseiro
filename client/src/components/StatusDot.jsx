@@ -13,7 +13,9 @@ const TITULOS = {
  * aparecer cinza pros outros.
  */
 export default function StatusDot({ status, online = true, className = '' }) {
-  const efetivo = !online || !status || status === 'offline' ? 'offline' : status;
+  const efetivo = !online || !status || status === 'offline' || status === 'invisible'
+    ? 'offline'
+    : status;
   return (
     <span
       className={`status-dot ${efetivo} ${className}`}
