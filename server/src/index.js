@@ -6,6 +6,7 @@ import express from 'express';
 import { config, SERVER_ROOT } from './config.js';
 import './db.js';
 import { turnServers } from './lib/turn.js';
+import { shortcutDownloadProxy } from './lib/shortcut-proxy.js';
 import { attachRealtime } from './realtime.js';
 import { adminRoutes } from './routes/admin.js';
 import { attachmentRoutes } from './routes/attachments.js';
@@ -27,6 +28,10 @@ import { watchRoutes } from './routes/watch.js';
 const app = express();
 app.disable('x-powered-by');
 app.use(cors({ origin: config.clientOrigins, credentials: true }));
+// Precisa vir antes do parser JSON: o corpo e a resposta de midia atravessam
+// este servidor em streaming, sem serem mantidos na memoria.
+app.use('/api/shortcut/files', shortcutDownloadProxy);
+app.all(['/api/shortcut/download', '/api/shortcut/inspect', '/api/shortcut/auto'], shortcutDownloadProxy);
 app.use(express.json({ limit: '256kb' }));
 
 app.get('/api/health', (_req, res) => {
