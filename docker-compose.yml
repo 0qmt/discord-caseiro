@@ -7,11 +7,31 @@ services:
       dockerfile: server/Dockerfile
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3002:3001"
     volumes:
       - ./data:/app/data
     env_file:
       - ./.env.producao
+    environment:
+      SHORTCUT_UPSTREAM_HOST: pepo-telegram-downloads_server_1
+      SHORTCUT_UPSTREAM_PORT: '8080'
+    networks:
+      - default
+      - umbrel_main_network
+
+  caddy:
+    build:
+      context: ./deploy/caddy
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - servidor
+    env_file:
+      - ./deploy/duckdns/duckdns.env
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./data/caddy-config:/config
 
   turn:
     build:
@@ -32,6 +52,12 @@ services:
     entrypoint: ["sh", "/vigia.sh"]
     volumes:
       - ./deploy/duckdns/vigia.sh:/vigia.sh:ro
+    env_file:
+      - ./deploy/duckdns/duckdns.env
     environment:
-      DUCKDNS_DOMINIO: "discord-caseiro"
-      DUCKDNS_TOKEN: "f2bdfd7c-9340-4b26-b816-caa93adf0c48"
+      DUCKDNS_DOMINIOS: "discord-caseiro"
+      DUCKDNS_INTERVALO_SEGUNDOS: "300"
+
+networks:
+  umbrel_main_network:
+    external: true

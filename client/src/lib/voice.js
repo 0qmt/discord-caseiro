@@ -102,6 +102,20 @@ async function statsDoReceptor(transceiver) {
   return null;
 }
 
+/** RTT do caminho WebRTC atualmente selecionado, em milissegundos. */
+async function latenciaDoPar(pc) {
+  if (!pc || pc.connectionState !== 'connected') return null;
+  const relatorio = await pc.getStats();
+  let escolhido = null;
+  for (const item of relatorio.values()) {
+    if (item.type !== 'candidate-pair' || item.state !== 'succeeded') continue;
+    if (item.nominated || item.selected) { escolhido = item; break; }
+    if (!escolhido) escolhido = item;
+  }
+  const rtt = escolhido?.currentRoundTripTime;
+  return Number.isFinite(rtt) && rtt >= 0 ? Math.round(rtt * 1000) : null;
+}
+
 const statsIguais = (a, b) => {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -155,6 +169,7 @@ export class VoiceClient {
     // bytes/tempo anteriores por chave, pra calcular kbps entre duas leituras.
     this.statsAnteriores = new Map();
     this.timerStats = null;
+    this.latencia = { averageMs: null, maxMs: null, samples: 0 };
 
     this.aoSinal = this.aoSinal.bind(this);
     this.aoEntrarAlguem = this.aoEntrarAlguem.bind(this);
@@ -186,6 +201,7 @@ export class VoiceClient {
         pushToTalkPressed: this.pttPressionado,
         transmitting: this.podeTransmitir(),
       },
+      latency: { ...this.latencia },
       local: { camera: this.cameraStream, screen: this.screenStream },
       peers: [...this.peers.entries()].map(([socketId, peer]) => ({
         socketId,
@@ -198,6 +214,7 @@ export class VoiceClient {
         diagnostic: peer.diagnostic ?? null,
         reconnecting: Boolean(peer.reconnecting),
         retryCount: peer.retryCount ?? 0,
+        latencyMs: peer.latencyMs ?? null,
         // Já resolvido aqui pra o <audio> só ter que obedecer.
         volume: this.volumeParaTocar(socketId),
         silenciadoLocal: this.silenciadosLocal.has(socketId),
@@ -358,6 +375,7 @@ export class VoiceClient {
       muted: false, hasMic: false, camera: false, screen: false, speaking: false,
       screenStats: null, telaResolucaoId: null, telaFpsId: null,
     };
+    this.latencia = { averageMs: null, maxMs: null, samples: 0 };
     this.avisar();
   }
 
@@ -392,6 +410,7 @@ export class VoiceClient {
       retryCount,
       reconnecting: false,
       diagnostic: null,
+      latencyMs: null,
     };
     this.peers.set(socketId, peer);
 
@@ -1088,6 +1107,28 @@ export class VoiceClient {
 
   async atualizarEstatisticas() {
     let mudou = false;
+
+    const latencias = [];
+    await Promise.all([...this.peers.entries()].map(async ([socketId, peer]) => {
+      let valor = null;
+      try { valor = await latenciaDoPar(peer.pc); } catch { /* par fechando */ }
+      if (peer.latencyMs !== valor) { peer.latencyMs = valor; mudou = true; }
+      if (valor !== null) latencias.push(valor);
+      return socketId;
+    }));
+    const resumo = {
+      averageMs: latencias.length
+        ? Math.round(latencias.reduce((total, valor) => total + valor, 0) / latencias.length)
+        : null,
+      maxMs: latencias.length ? Math.max(...latencias) : null,
+      samples: latencias.length,
+    };
+    if (resumo.averageMs !== this.latencia.averageMs
+      || resumo.maxMs !== this.latencia.maxMs
+      || resumo.samples !== this.latencia.samples) {
+      this.latencia = resumo;
+      mudou = true;
+    }
 
     if (this.self.screen && this.screenStream) {
       // fps e resolução: o que a captura está entregando de verdade.

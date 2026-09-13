@@ -44,7 +44,7 @@ jobs:
         run: npm run build:android
         working-directory: client
         env:
-          VITE_SERVER_URL: http://discord-caseiro.duckdns.org:3001
+          VITE_SERVER_URL: https://discord-caseiro.duckdns.org:3001
 
       - name: Restore release signing key
         shell: bash

@@ -15,6 +15,7 @@ const DEV_URL = process.env.DISCORD_CASEIRO_DEV_URL ?? null;
 const NOME_DO_APP = 'discordia';
 const ehPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE || process.env.PORTABLE_EXECUTABLE_DIR);
 const MARCADOR_AVISO_PORTABLE = 'portable-update-notice-v1';
+const RETENTAR_SERVIDOR_MS = 3000;
 
 // Sem isso o Windows não sabe de qual "app" é a notificação e simplesmente
 // não mostra nada, em silêncio - sem erro nenhum no console pra avisar.
@@ -35,7 +36,7 @@ let splash = null;
 let bandeja = null;
 let saindoDeVerdade = false;
 let encerrandoParaAtualizacao = false;
-let servidorAtual = DEV_URL ?? config.ler().serverUrl;
+const servidorAtual = DEV_URL ?? config.SERVIDOR_PRODUCAO;
 
 /*
  * Isto precisa acontecer ANTES do app ficar pronto: flags de linha de comando
@@ -330,17 +331,15 @@ async function servidorRespondendo(url) {
 }
 
 async function abrirOndeDer() {
-  if (!servidorAtual) return janela.loadFile(paginaLocal('configurar.html'));
-
-  if (await servidorRespondendo(servidorAtual)) {
-    const endereco = new URL(servidorAtual);
-    endereco.searchParams.set('_app_boot', String(Date.now()));
-    return janela.loadURL(endereco.toString());
+  while (janela && !janela.isDestroyed()) {
+    if (await servidorRespondendo(servidorAtual)) {
+      const endereco = new URL(servidorAtual);
+      endereco.searchParams.set('_app_boot', String(Date.now()));
+      return janela.loadURL(endereco.toString());
+    }
+    await new Promise((resolve) => setTimeout(resolve, RETENTAR_SERVIDOR_MS));
   }
-
-  return janela.loadFile(paginaLocal('configurar.html'), {
-    query: { erro: 'fora-do-ar', endereco: servidorAtual },
-  });
+  return undefined;
 }
 
 function mostrarSplash() {
@@ -443,13 +442,6 @@ function montarMenu() {
     {
       label: 'Arquivo',
       submenu: [
-        {
-          label: 'Trocar de servidor...',
-          click: () => janela?.loadFile(paginaLocal('configurar.html'), {
-            query: { endereco: servidorAtual ?? '' },
-          }),
-        },
-        { type: 'separator' },
         {
           label: 'Sair',
           click: () => {
@@ -735,34 +727,6 @@ ipcMain.on('app:vigiar-jogo', (evento) => {
 ipcMain.on('app:parar-vigia-jogo', () => {
   pararVigiaDeJogo?.();
   pararVigiaDeJogo = null;
-});
-
-ipcMain.handle('config:ler', () => ({
-  serverUrl: servidorAtual ?? '',
-  travadoPeloDev: Boolean(DEV_URL),
-}));
-
-ipcMain.handle('config:definir', async (_evento, bruto) => {
-  const endereco = config.normalizarEndereco(bruto);
-  if (!endereco) return { erro: 'endereço inválido' };
-
-  if (!(await servidorRespondendo(endereco))) {
-    return { erro: `não achei um servidor em ${endereco}` };
-  }
-
-  config.salvar({ serverUrl: endereco });
-
-  // O reinício é de propósito: a flag que libera microfone e tela numa origem
-  // http só entra em vigor na inicialização do Chromium.
-  if (config.precisaLiberarOrigemInsegura(endereco) && endereco !== servidorAtual) {
-    app.relaunch();
-    app.exit(0);
-    return { ok: true, reiniciando: true };
-  }
-
-  servidorAtual = endereco;
-  janela?.loadURL(endereco);
-  return { ok: true };
 });
 
 if (!app.requestSingleInstanceLock()) {

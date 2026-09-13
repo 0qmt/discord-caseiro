@@ -1,15 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Este preload vale para a janela inteira, inclusive quando ela carrega a
-// interface vinda do servidor. A ponte de configuração só é exposta nas
-// nossas paginas locais.
-if (location.protocol === 'file:') {
-  contextBridge.exposeInMainWorld('appConfig', {
-    ler: () => ipcRenderer.invoke('config:ler'),
-    definir: (endereco) => ipcRenderer.invoke('config:definir', endereco),
-  });
-}
-
 /*
  * Ponte do app de desktop, exposta em qualquer pagina - o processo principal e
  * quem confere se quem chamou e mesmo o nosso servidor (ver main.js). Fazer a

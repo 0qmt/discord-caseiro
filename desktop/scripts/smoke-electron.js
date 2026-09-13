@@ -138,31 +138,13 @@ async function testarJanelas() {
     },
   });
 
-  // 1) A tela de configuração é local e tem a ponte de IPC.
-  await janela.loadFile(path.join(RAIZ, 'configurar.html'), {
-    query: { erro: 'fora-do-ar', endereco: 'http://192.168.0.99:3001' },
-  });
-  const configuracao = await janela.webContents.executeJavaScript(`
-    ({
-      temPonte: typeof window.appConfig?.definir === 'function',
-      aviso: document.querySelector('.aviso')?.textContent ?? null,
-      campo: document.getElementById('endereco')?.value ?? null,
-    })
-  `);
-  check('a tela de configuração expõe a ponte de IPC', configuracao.temPonte === true);
-  check('avisa quando o servidor não respondeu',
-    (configuracao.aviso ?? '').includes('192.168.0.99'), JSON.stringify(configuracao.aviso));
-  check('já vem preenchida com o endereço tentado',
-    configuracao.campo === 'http://192.168.0.99:3001', configuracao.campo);
-
-  // 2) O cliente React carrega de verdade dentro do Electron.
+  // O cliente React carrega de verdade dentro do Electron.
   const montou = await carregar(janela, janela.loadURL(BASE));
   check('a interface do servidor sobe dentro do app', montou === true);
 
   const dentro = await janela.webContents.executeJavaScript(`
     ({
       titulo: document.title,
-      pontePresente: typeof window.appConfig !== 'undefined',
       ponteDesktop: typeof window.appDesktop,
       desktopNotificar: typeof window.appDesktop?.notificar,
       desktopJogo: typeof window.appDesktop?.aoDetectarJogo,
@@ -175,11 +157,8 @@ async function testarJanelas() {
     })
   `);
   check('o título é o do app', dentro.titulo === 'discordia', dentro.titulo);
-  // A ponte de CONFIGURAÇÃO (trocar de servidor) nunca pode chegar na página
-  // vinda da rede; a ponte de APP (notificação e jogo) chega de propósito, e
-  // quem confere se pode usá-la é o processo principal (ver main.js).
-  check('a ponte de configuracao NAO vaza para a pagina do servidor',
-    dentro.pontePresente === false);
+  // A ponte do app chega de propósito, e quem confere se pode usá-la é o
+  // processo principal (ver main.js).
   check('a ponte do app esta disponivel na pagina do servidor',
     dentro.ponteDesktop === 'object', dentro.ponteDesktop);
   check('a ponte do app expoe notificar', dentro.desktopNotificar === 'function');

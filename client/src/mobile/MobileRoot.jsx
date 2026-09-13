@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Network } from '@capacitor/network';
 import { App as NativeApp } from '@capacitor/app';
-import { Preferences } from '@capacitor/preferences';
 import App from '../App.jsx';
 import { platform, saveServerUrl } from '../platform/index.js';
+import discordiaLogo from '../assets/discordia-logo.png';
 import MobileUpdater from './MobileUpdater.jsx';
 
 const HEALTH_TIMEOUT_MS = 7000;
-const MOBILE_SERVER_CANDIDATES = [
-  'http://192.168.0.56:3001',
-  'http://discord-caseiro.duckdns.org:3001',
-];
+const RETRY_DELAY_MS = 3000;
+const MOBILE_SERVER_URL = 'https://discord-caseiro.duckdns.org:3001';
 
 async function serverHealth(baseUrl) {
   const controller = new AbortController();
@@ -27,14 +25,13 @@ async function serverHealth(baseUrl) {
   }
 }
 
-function MobileConnecting({ error, onRetry }) {
+function MobileConnecting() {
   return (
     <main className="mobile-server-screen">
       <section className="mobile-server-panel" aria-live="polite">
-        <div className="mobile-server-logo">d</div>
+        <img className="mobile-server-logo" src={discordiaLogo} alt="" />
         <h1>discordia</h1>
-        <p>{error || 'Conectando...'}</p>
-        {error && <button className="primary" type="button" onClick={onRetry}>Tentar novamente</button>}
+        <p>Conectando...</p>
       </section>
     </main>
   );
@@ -42,37 +39,24 @@ function MobileConnecting({ error, onRetry }) {
 
 export default function MobileRoot() {
   const [connected, setConnected] = useState(!platform.native);
-  const [error, setError] = useState('');
-  const [connecting, setConnecting] = useState(platform.native);
   const checkingRef = useRef(false);
+  const retryRef = useRef(null);
 
   const check = useCallback(async () => {
     if (!platform.native || checkingRef.current) return;
+    clearTimeout(retryRef.current);
     checkingRef.current = true;
-    setConnecting(true);
-    setError('');
-    const candidates = [...MOBILE_SERVER_CANDIDATES];
-    const saved = platform.native
-      ? await Preferences.get({ key: 'discordia:server-url' }).then((r) => r.value).catch(() => '')
-      : '';
-    if (saved && !candidates.includes(saved)) candidates.push(saved);
-
-    for (const candidate of candidates) {
-      try {
-        await serverHealth(candidate);
-        await saveServerUrl(candidate);
-        setConnected(true);
-        setConnecting(false);
-        checkingRef.current = false;
-        return;
-      } catch (err) {
-        console.warn('[mobile] servidor indisponivel', candidate, err?.message || err);
-      }
+    try {
+      await serverHealth(MOBILE_SERVER_URL);
+      await saveServerUrl(MOBILE_SERVER_URL);
+      setConnected(true);
+    } catch (err) {
+      console.warn('[mobile] servidor indisponivel', err?.message || err);
+      setConnected(false);
+      retryRef.current = setTimeout(() => void check(), RETRY_DELAY_MS);
+    } finally {
+      checkingRef.current = false;
     }
-    setConnected(false);
-    setError('Nao foi possivel conectar ao servidor.');
-    setConnecting(false);
-    checkingRef.current = false;
   }, []);
 
   useEffect(() => {
@@ -89,6 +73,7 @@ export default function MobileRoot() {
     };
     window.addEventListener('discordia:configure-server', reconnect);
     return () => {
+      clearTimeout(retryRef.current);
       networkListener?.remove();
       window.removeEventListener('discordia:configure-server', reconnect);
     };
@@ -125,5 +110,5 @@ export default function MobileRoot() {
   }, []);
 
   if (connected) return <><App /><MobileUpdater /></>;
-  return <MobileConnecting error={connecting ? 'Conectando...' : error} onRetry={check} />;
+  return <MobileConnecting />;
 }

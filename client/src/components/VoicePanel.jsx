@@ -24,6 +24,10 @@ export default function VoicePanel({ voice, channelName, actions }) {
   const reconectando = voice.connectionStatus === 'reconnecting';
   const offline = voice.connectionStatus === 'offline';
 
+  const ping = voice.latency?.maxMs ?? voice.latency?.averageMs;
+  const pingClass = ping === null || ping === undefined ? 'indisponivel'
+    : ping <= 100 ? 'boa' : ping <= 200 ? 'media' : 'ruim';
+
   const falhou = Boolean(voice.error) && !voice.channelId;
 
   const situacao = falhou ? 'não deu pra entrar'
@@ -44,6 +48,9 @@ export default function VoicePanel({ voice, channelName, actions }) {
           {situacao}
         </span>
         {voice.channelId && <span className="voice-canal">{channelName}</span>}
+        {voice.channelId && <span className={`voice-latencia ${pingClass}`} title="Latência do áudio da chamada">
+          Ping: {ping === null || ping === undefined ? '--' : `${ping} ms`}
+        </span>}
         {pushToTalk && <span className={`voice-ptt-status ${transmitting ? 'transmitindo' : ''}`}>{transmitting ? 'transmitindo' : 'aperte para falar'}</span>}
       </div>
 

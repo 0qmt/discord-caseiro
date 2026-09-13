@@ -1,6 +1,6 @@
 {
   "name": "discord-caseiro-client",
-  "version": "0.2.68",
+  "version": "0.2.72",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,0 +1,15 @@
+{
+	admin off
+	auto_https disable_redirects
+}
+
+https://discord-caseiro.duckdns.org:{$DISCORDIA_HTTPS_PORT:3001} {
+	tls {
+		dns duckdns {env.DUCKDNS_TOKEN} {
+			resolver 1.1.1.1:53
+		}
+	}
+
+	encode zstd gzip
+	reverse_proxy {$DISCORDIA_UPSTREAM:127.0.0.1:3002}
+}

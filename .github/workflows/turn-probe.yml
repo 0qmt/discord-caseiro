@@ -1,0 +1,40 @@
+name: TURN external probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Install TURN client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq coturn jq
+
+      - name: Exercise UDP relay from outside the home network
+        env:
+          ICE_ENDPOINT: https://discord-caseiro.duckdns.org:3001/api/ice
+        run: |
+          set -euo pipefail
+          ice_json="$(curl --fail --silent --show-error --max-time 15 "$ICE_ENDPOINT")"
+          turn_url="$(jq -r '.iceServers[] | select(.credential != null) | .urls | if type == "array" then .[] else . end | select(contains("transport=udp"))' <<<"$ice_json" | head -n 1)"
+          username="$(jq -r '.iceServers[] | select(.credential != null) | .username' <<<"$ice_json" | head -n 1)"
+          credential="$(jq -r '.iceServers[] | select(.credential != null) | .credential' <<<"$ice_json" | head -n 1)"
+
+          test -n "$turn_url"
+          test -n "$username"
+          test -n "$credential"
+          address="${turn_url#turn:}"
+          host="${address%%:*}"
+          port_and_query="${address#*:}"
+          port="${port_and_query%%\?*}"
+
+          output="$(timeout 45s turnutils_uclient -y -c -X -n 3 -u "$username" -w "$credential" -p "$port" "$host" 2>&1)"
+          printf '%s\n' "$output" | sed -E 's/(password|credential)[^ ]*/\1=[hidden]/Ig'
+          printf '%s\n' "$output" | grep -Eq 'tot_recv_bytes[^0-9]*[1-9][0-9]*'
+

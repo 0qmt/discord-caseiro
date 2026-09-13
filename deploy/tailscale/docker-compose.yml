@@ -1,0 +1,18 @@
+services:
+  funnel:
+    image: tailscale/tailscale:stable
+    container_name: pepo-tailscale-funnel
+    hostname: discordia
+    network_mode: host
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+      TS_EXTRA_ARGS: "--accept-dns=false --hostname=discordia"
+    volumes:
+      - /home/umbrel/umbrel/app-data/pepo-tailscale/state:/var/lib/tailscale

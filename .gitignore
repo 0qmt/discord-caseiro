@@ -5,3 +5,4 @@ dist/
 _migracao/
 data/
 *.log
+deploy/duckdns/duckdns.env

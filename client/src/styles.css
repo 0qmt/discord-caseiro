@@ -1468,6 +1468,11 @@ button.member-name:hover, button.author:hover { text-decoration: underline; }
 .voice-situacao { font-size: 12px; font-weight: 700; color: #e0a03a; }
 .voice-situacao.on { color: var(--ok); }
 .voice-canal { font-size: 12px; color: var(--text-dim); }
+.voice-latencia { font-size: 11px; font-variant-numeric: tabular-nums; }
+.voice-latencia.boa { color: var(--ok); }
+.voice-latencia.media { color: #e0a03a; }
+.voice-latencia.ruim { color: var(--danger); }
+.voice-latencia.indisponivel { color: var(--text-dim); }
 
 .voice-erro {
   margin-bottom: 8px;
@@ -3281,25 +3286,27 @@ button.member-name:hover, button.author:hover { text-decoration: underline; }
 
 .mobile-server-panel {
   display: grid;
-  gap: 14px;
+  justify-items: center;
+  gap: 12px;
   width: min(100%, 400px);
   padding: 24px;
-  border: 1px solid rgba(255, 255, 255, .1);
-  border-radius: 8px;
-  background: #202225;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, .34);
+  text-align: center;
 }
 
 .mobile-server-logo {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  background: #5865f2;
-  color: white;
-  font-size: 28px;
-  font-weight: 900;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  animation: mobile-server-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes mobile-server-pulse {
+  0%, 100% { transform: scale(1); opacity: .88; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-server-logo { animation: none; }
 }
 
 .mobile-server-panel h1,
