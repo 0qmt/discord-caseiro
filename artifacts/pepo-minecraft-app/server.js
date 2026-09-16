@@ -139,6 +139,13 @@ function parseLine(l) {
 function running() { return !!(mc.proc && mc.proc.exitCode === null && !mc.proc.killed); }
 function activeLoader() { return LOADERS[CFG.loader] ? CFG.loader : inferLoader(); }
 function activeLauncher() { return LOADERS[activeLoader()].jar; }
+function loaderInstalled(id) {
+  if (!LOADERS[id]) return false;
+  if (!['vanilla', 'paper', 'purpur'].includes(id)) return fs.existsSync(LOADERS[id].jar);
+  if (!fs.existsSync(JAR_PATH)) return false;
+  if (id === 'paper') return activeLoader() === 'paper' || CFG.build != null;
+  return activeLoader() === id;
+}
 function javaArgs() {
   return [
     `-Xms${CFG.xms}`, `-Xmx${CFG.xmx}`,
@@ -610,13 +617,13 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       active: activeLoader(),
       detected: mc.detectedLoader,
-      loaders: Object.entries(LOADERS).map(([id, item]) => ({ id, label: item.label, family: item.family, packages: item.packages, installed: fs.existsSync(item.jar), active: id === activeLoader(), automaticInstall: ['paper'].includes(id) })),
+      loaders: Object.entries(LOADERS).map(([id, item]) => ({ id, label: item.label, family: item.family, packages: item.packages, installed: loaderInstalled(id), active: id === activeLoader(), automaticInstall: ['paper'].includes(id) })),
     });
     if (p === '/api/loaders/select' && req.method === 'POST') {
       if (running()) return sendJSON(res, 400, { ok: false, error: 'pare o servidor antes de trocar o loader' });
       const id = String((await jbody(req)).loader || '').toLowerCase();
       if (!LOADERS[id]) return sendJSON(res, 400, { ok: false, error: 'loader invalido' });
-      if (!fs.existsSync(LOADERS[id].jar)) return sendJSON(res, 400, { ok: false, error: `${LOADERS[id].label} ainda nao esta instalado` });
+      if (!loaderInstalled(id)) return sendJSON(res, 400, { ok: false, error: `${LOADERS[id].label} ainda nao esta instalado` });
       CFG.loader = id; saveCfg();
       return sendJSON(res, 200, { ok: true, active: id });
     }
