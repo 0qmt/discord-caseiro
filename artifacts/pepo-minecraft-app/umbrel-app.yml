@@ -2,34 +2,34 @@ manifestVersion: 1
 id: pepo-minecraft
 category: media
 name: Minecraft Server
-version: "1.0.0"
-tagline: Servidor Paper com painel pra tudo — RAM, plugins, mapas e console
+version: "1.1.0"
+tagline: Base de Operações para mundos, mods, jogadores e backups
 icon: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgdmlld0JveD0iMCAwIDUxMiA1MTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMTIiIGZpbGw9IiMwRjEyMTYiLz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyNTYgMjYyKSI+CiAgICA8cGF0aCBkPSJNMCAtMTUwIEwxNTAgLTcwIEwwIDEwIEwtMTUwIC03MCBaIiBmaWxsPSIjNjlCOTRGIi8+CiAgICA8cGF0aCBkPSJNLTE1MCAtNzAgTDAgMTAgTDAgMTcwIEwtMTUwIDkwIFoiIGZpbGw9IiM3QTU1M0EiLz4KICAgIDxwYXRoIGQ9Ik0tMTUwIC03MCBMMCAxMCBMMCA0NCBMLTE1MCAtMzYgWiIgZmlsbD0iIzRFOUUzRSIvPgogICAgPHBhdGggZD0iTTE1MCAtNzAgTDAgMTAgTDAgMTcwIEwxNTAgOTAgWiIgZmlsbD0iIzVGNDYzMCIvPgogICAgPHBhdGggZD0iTTE1MCAtNzAgTDAgMTAgTDAgNDQgTDE1MCAtMzYgWiIgZmlsbD0iIzNFODIzMiIvPgogIDwvZz4KPC9zdmc+Cg=="
 description: >-
-  Um servidor de Minecraft (Java Edition, PaperMC) que roda no seu Umbrel, com um
-  painel completo no estilo do umbrelOS:
+  Uma Base de Operações para Minecraft Java Edition no Umbrel, com loader
+  detectado de verdade e evidências claras de compatibilidade:
 
 
   - Iniciar / parar / reiniciar o servidor com um clique
 
   - Console ao vivo + digitar comandos
 
-  - Escolher e trocar a versao do Paper (baixa sozinho)
+  - Catálogo de loaders: Vanilla, Paper, Purpur, Fabric, Quilt, Forge e NeoForge
 
-  - Plugins: buscar no Modrinth, instalar por link ou upload, ativar/desativar
+  - Mods e plugins com validação em cinco níveis
 
-  - Mapas: subir um mundo em .zip, ativar, baixar de volta, excluir
+  - Mundos: ativar, exportar e proteger com backup
 
-  - server.properties com editor amigavel
+  - Jogadores: whitelist, OP, kick e ban
 
-  - Quanta RAM o servidor usa (sliders de Xms/Xmx) + flags da JVM
+  - Console ao vivo, RAM, flags da JVM e endereços de conexão
 
-  - Autostart opcional
+  - Backups online com save-all, save-off e retorno seguro de save-on
 
 
   Os amigos entram pelo IP publico da sua casa na porta 25565 (precisa liberar
   essa porta no roteador).
-releaseNotes: Primeira versao.
+releaseNotes: Nova Base de Operações, suporte correto a Fabric, validação de pacotes e backups.
 developer: pepo
 website: https://umbrel.local
 dependencies: []
