@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171615">
+  <title>Base de Operações · Minecraft</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <svg class="svg-defs" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></symbol>
+    <symbol id="i-world" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c3 3 3 13 0 16M12 4c-3 3-3 13 0 16"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2c0-3 2-5 6-5s6 2 6 5v2M16 5c3 0 4 4 1 6M17 14c3 0 4 2 4 5"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 6 6 6-6 6M12 18h8"/></symbol>
+    <symbol id="i-backup" viewBox="0 0 24 24"><path d="M5 8a8 8 0 1 1-1 7M5 3v5h5M12 7v6l4 2"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="m13 2-8 12h6l-1 8 9-13h-6z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 13v-2l2-1-2-4-2 1-2-2V3h-6v2L7 7 5 6l-2 4 2 1v2l-2 1 2 4 2-1 2 2v2h6v-2l2-2 2 1 2-4z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7V3l-2 2a8 8 0 1 0 2 9M20 3h-5"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <button class="menu-button" id="menuButton" aria-label="Abrir menu">☰</button>
+      <a class="brand" href="#overview" aria-label="Base de Operações">
+        <span class="brand-cube"><span></span></span>
+        <span><b>BASE DE OPERAÇÕES</b><small>MINECRAFT SERVER</small></span>
+      </a>
+      <div class="top-status">
+        <span class="connection-dot" id="connectionDot"></span>
+        <span id="topStatus">Conectando…</span>
+        <span class="top-divider"></span>
+        <span id="topVersion">...</span>
+      </div>
+    </header>
+
+    <aside class="sidebar" id="sidebar">
+      <nav aria-label="Navegação principal">
+        <button class="nav-item active" data-view="overview"><svg><use href="#i-grid"/></svg><span>Visão geral</span></button>
+        <button class="nav-item" data-view="worlds"><svg><use href="#i-world"/></svg><span>Mundos</span></button>
+        <button class="nav-item" data-view="packages"><svg><use href="#i-box"/></svg><span>Mods & plugins</span><span class="nav-badge" id="packageCount">0</span></button>
+        <button class="nav-item" data-view="players"><svg><use href="#i-users"/></svg><span>Jogadores</span><span class="nav-badge" id="playerCount">0</span></button>
+        <button class="nav-item" data-view="console"><svg><use href="#i-terminal"/></svg><span>Console</span></button>
+        <button class="nav-item" data-view="backups"><svg><use href="#i-backup"/></svg><span>Backups</span></button>
+        <button class="nav-item" data-view="automation"><svg><use href="#i-bolt"/></svg><span>Automação</span></button>
+        <span class="nav-separator"></span>
+        <button class="nav-item" data-view="settings"><svg><use href="#i-gear"/></svg><span>Configurações</span></button>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="eyebrow">HOST</span>
+        <b>umbrel.local</b>
+        <small id="hostMemory">Memória: ...</small>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="view active" id="view-overview">
+        <div class="page-heading"><div><span class="eyebrow">CENTRAL DE CONTROLE</span><h1>Visão geral</h1><p>O que importa para manter o mundo saudável, em um só lugar.</p></div><span class="last-update" id="lastUpdate">Atualizando…</span></div>
+        <div class="command-grid">
+          <article class="server-card panel">
+            <div class="server-card-head">
+              <div><span class="eyebrow">SERVIDOR PRINCIPAL</span><h2 id="serverTitle">Mundo atual</h2></div>
+              <span class="status-chip" id="serverChip">VERIFICANDO</span>
+            </div>
+            <div class="server-facts">
+              <div><small>LOADER</small><strong id="factLoader">...</strong></div>
+              <div><small>VERSÃO</small><strong id="factVersion">...</strong></div>
+              <div><small>JOGADORES</small><strong id="factPlayers">0 / ...</strong></div>
+              <div><small>ATIVIDADE</small><strong id="factUptime">...</strong></div>
+            </div>
+            <div class="power-actions">
+              <button class="btn primary" id="startButton"><svg><use href="#i-play"/></svg>Iniciar servidor</button>
+              <button class="btn" id="restartButton"><svg><use href="#i-refresh"/></svg>Reiniciar</button>
+              <button class="btn danger" id="stopButton"><svg><use href="#i-stop"/></svg>Parar</button>
+            </div>
+            <p class="loader-warning hidden" id="loaderWarning"></p>
+          </article>
+
+          <article class="health-card panel">
+            <div class="panel-title"><div><span class="eyebrow">SAÚDE DA BASE</span><h3>Recursos do host</h3></div><span class="block-mark"></span></div>
+            <div class="meter-row"><span>Memória do container</span><b id="memoryValue">...</b><div class="meter"><span id="memoryMeter"></span></div></div>
+            <div class="meter-row"><span>Carga do sistema</span><b id="loadValue">...</b><div class="meter"><span id="loadMeter"></span></div></div>
+            <div class="health-note" id="healthNote">Aguardando telemetria do Umbrel.</div>
+          </article>
+        </div>
+
+        <div class="overview-grid">
+          <article class="panel compact-panel"><div class="panel-title"><div><span class="eyebrow">MUNDO ATIVO</span><h3 id="activeWorld">...</h3></div><button class="text-action" data-go="worlds">GERENCIAR</button></div><div class="world-preview"><span class="world-block"></span><div><b>Proteção recomendada</b><p>Faça backup antes de trocar mundo, loader ou conjunto de mods.</p></div></div></article>
+          <article class="panel compact-panel"><div class="panel-title"><div><span class="eyebrow">PACOTES</span><h3>Mods e plugins</h3></div><button class="text-action" data-go="packages">ABRIR</button></div><div class="validation-summary" id="validationSummary"><span>Carregando inventário…</span></div></article>
+          <article class="panel compact-panel"><div class="panel-title"><div><span class="eyebrow">JOGADORES</span><h3>Agora no servidor</h3></div><button class="text-action" data-go="players">GERENCIAR</button></div><div class="player-strip" id="overviewPlayers"><span class="empty-copy">Nenhum jogador online.</span></div></article>
+          <article class="panel compact-panel console-preview"><div class="panel-title"><div><span class="eyebrow">ÚLTIMOS EVENTOS</span><h3>Console ao vivo</h3></div><button class="text-action" data-go="console">EXPANDIR</button></div><pre id="overviewLog">Conectando ao fluxo do servidor…</pre></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-worlds"><div class="page-heading"><div><span class="eyebrow">BIBLIOTECA</span><h1>Mundos</h1><p>Ative, exporte e proteja cada universo sem perder o atual.</p></div><button class="btn" id="refreshWorlds">Atualizar</button></div><div class="notice">A troca de mundo altera <code>level-name</code>. Se o servidor estiver ligado, o novo mundo entra apenas após reiniciar.</div><div class="card-list" id="worldList"></div></section>
+
+      <section class="view" id="view-packages"><div class="page-heading"><div><span class="eyebrow">ARSENAL</span><h1>Mods & plugins</h1><p>Compatibilidade e evidências reais, sem promessas falsas.</p></div><button class="btn" id="refreshPackages">Revalidar</button></div><div class="validation-legend"><span><i>1</i> JAR válido</span><span><i>2</i> Compatível</span><span><i>3</i> Carregado</span><span><i>4</i> Mundo iniciou</span><span><i>5</i> Função confirmada</span></div><div class="tabs"><button class="tab active" data-package-tab="mods">Mods</button><button class="tab" data-package-tab="plugins">Plugins</button></div><div class="package-context" id="packageContext"></div><div class="card-list" id="packageList"></div></section>
+
+      <section class="view" id="view-players"><div class="page-heading"><div><span class="eyebrow">COMUNIDADE</span><h1>Jogadores</h1><p>Veja quem está online e aplique ações administrativas com clareza.</p></div><button class="btn" id="refreshPlayers">Atualizar</button></div><div class="panel form-panel"><label>Jogador<input id="playerName" maxlength="16" placeholder="Nome exato"></label><label>Ação<select id="playerAction"><option value="whitelist">Adicionar à whitelist</option><option value="unwhitelist">Remover da whitelist</option><option value="op">Dar OP</option><option value="deop">Remover OP</option><option value="kick">Expulsar</option><option value="ban">Banir</option><option value="pardon">Perdoar ban</option></select></label><button class="btn primary" id="playerActionButton">Executar</button></div><div class="card-list" id="playerList"></div></section>
+
+      <section class="view" id="view-console"><div class="page-heading"><div><span class="eyebrow">TERMINAL</span><h1>Console ao vivo</h1><p>Saída bruta do servidor e comandos com histórico.</p></div><button class="btn" id="clearConsole">Limpar tela</button></div><div class="terminal panel"><pre id="fullLog"></pre><form id="consoleForm"><span>&gt;</span><input id="consoleInput" autocomplete="off" placeholder="Digite um comando, sem /"><button class="btn primary" type="submit">Enviar</button></form></div></section>
+
+      <section class="view" id="view-backups"><div class="page-heading"><div><span class="eyebrow">PONTO DE RETORNO</span><h1>Backups</h1><p>Cópias do mundo ativo, propriedades, whitelist e operadores.</p></div><button class="btn primary" id="createBackup">Criar backup agora</button></div><div class="notice">Durante um backup online, o painel força a gravação do mundo e pausa salvamentos apenas pelo tempo necessário para compactar.</div><div class="card-list" id="backupList"></div></section>
+
+      <section class="view" id="view-automation"><div class="page-heading"><div><span class="eyebrow">ROTINAS</span><h1>Automação</h1><p>Menos manutenção manual, sem esconder ações que podem afetar jogadores.</p></div></div><div class="automation-grid"><article class="panel automation-card"><span class="automation-icon"><svg><use href="#i-play"/></svg></span><div><h3>Inicialização automática</h3><p>Inicia o Minecraft quando o container do painel sobe.</p></div><button class="switch" id="autostartSwitch" role="switch" aria-checked="false"><span></span></button></article><article class="panel automation-card muted"><span class="automation-icon"><svg><use href="#i-backup"/></svg></span><div><h3>Backup agendado</h3><p>Próxima entrega: retenção e horário configuráveis.</p></div><span class="soon">EM BREVE</span></article><article class="panel automation-card muted"><span class="automation-icon"><svg><use href="#i-refresh"/></svg></span><div><h3>Reinício seguro</h3><p>Próxima entrega: aviso aos jogadores e reinício em janela definida.</p></div><span class="soon">EM BREVE</span></article></div></section>
+
+      <section class="view" id="view-settings"><div class="page-heading"><div><span class="eyebrow">SALA DE MÁQUINAS</span><h1>Configurações</h1><p>Loader, memória e identidade de conexão do servidor.</p></div></div><div class="settings-grid"><article class="panel"><div class="panel-title"><div><span class="eyebrow">RUNTIME</span><h3>Loader do servidor</h3></div></div><p class="field-help">Só é possível alternar para launchers já instalados. Trocar loader exige servidor parado.</p><div class="loader-grid" id="loaderGrid"></div></article><article class="panel"><div class="panel-title"><div><span class="eyebrow">JAVA</span><h3>Memória e inicialização</h3></div></div><div class="form-stack"><label>Memória inicial (Xms)<input id="xmsInput" placeholder="1024M"></label><label>Memória máxima (Xmx)<input id="xmxInput" placeholder="1536M"></label><label>Flags adicionais<input id="flagsInput" placeholder="Uma flag por espaço"></label><button class="btn primary" id="saveRuntime">Salvar runtime</button></div></article><article class="panel"><div class="panel-title"><div><span class="eyebrow">ACESSO</span><h3>Endereços</h3></div></div><div class="form-stack"><label>Hostname externo<input id="hostnameInput"></label><label>Endereço local<input id="lanInput"></label><button class="btn primary" id="saveAddresses">Salvar endereços</button></div></article></div></section>
+    </main>
+  </div>
+  <div class="scrim" id="scrim"></div>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

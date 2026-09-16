@@ -1,0 +1,22 @@
+services:
+  app_proxy:
+    environment:
+      APP_HOST: pepo-minecraft_server_1
+      APP_PORT: 8080
+    container_name: pepo-minecraft_app_proxy_1
+  server:
+    build:
+      context: ${APP_DATA_DIR}
+      dockerfile: Dockerfile
+    restart: on-failure
+    stop_grace_period: 3m
+    user: '1000:1000'
+    ports:
+      - '25565:25565'
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+    environment:
+      MC_DATA: /data
+      PANEL_PORT: '8080'
+      TZ: America/Sao_Paulo
+    container_name: pepo-minecraft_server_1

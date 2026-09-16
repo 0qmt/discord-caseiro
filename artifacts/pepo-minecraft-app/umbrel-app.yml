@@ -1,0 +1,46 @@
+manifestVersion: 1
+id: pepo-minecraft
+category: media
+name: Minecraft Server
+version: "1.0.0"
+tagline: Servidor Paper com painel pra tudo — RAM, plugins, mapas e console
+icon: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgdmlld0JveD0iMCAwIDUxMiA1MTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMTIiIGZpbGw9IiMwRjEyMTYiLz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyNTYgMjYyKSI+CiAgICA8cGF0aCBkPSJNMCAtMTUwIEwxNTAgLTcwIEwwIDEwIEwtMTUwIC03MCBaIiBmaWxsPSIjNjlCOTRGIi8+CiAgICA8cGF0aCBkPSJNLTE1MCAtNzAgTDAgMTAgTDAgMTcwIEwtMTUwIDkwIFoiIGZpbGw9IiM3QTU1M0EiLz4KICAgIDxwYXRoIGQ9Ik0tMTUwIC03MCBMMCAxMCBMMCA0NCBMLTE1MCAtMzYgWiIgZmlsbD0iIzRFOUUzRSIvPgogICAgPHBhdGggZD0iTTE1MCAtNzAgTDAgMTAgTDAgMTcwIEwxNTAgOTAgWiIgZmlsbD0iIzVGNDYzMCIvPgogICAgPHBhdGggZD0iTTE1MCAtNzAgTDAgMTAgTDAgNDQgTDE1MCAtMzYgWiIgZmlsbD0iIzNFODIzMiIvPgogIDwvZz4KPC9zdmc+Cg=="
+description: >-
+  Um servidor de Minecraft (Java Edition, PaperMC) que roda no seu Umbrel, com um
+  painel completo no estilo do umbrelOS:
+
+
+  - Iniciar / parar / reiniciar o servidor com um clique
+
+  - Console ao vivo + digitar comandos
+
+  - Escolher e trocar a versao do Paper (baixa sozinho)
+
+  - Plugins: buscar no Modrinth, instalar por link ou upload, ativar/desativar
+
+  - Mapas: subir um mundo em .zip, ativar, baixar de volta, excluir
+
+  - server.properties com editor amigavel
+
+  - Quanta RAM o servidor usa (sliders de Xms/Xmx) + flags da JVM
+
+  - Autostart opcional
+
+
+  Os amigos entram pelo IP publico da sua casa na porta 25565 (precisa liberar
+  essa porta no roteador).
+releaseNotes: Primeira versao.
+developer: pepo
+website: https://umbrel.local
+dependencies: []
+repo: ""
+support: https://community.umbrel.com
+port: 8580
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+deterministicPassword: false
+torOnly: false
+submitter: pepo
+submission: ""
