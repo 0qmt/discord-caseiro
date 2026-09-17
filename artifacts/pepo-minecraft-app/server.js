@@ -545,13 +545,14 @@ function profileWorldPath(profile) {
   if (!full.startsWith(path.resolve(DATA) + path.sep)) throw new Error('caminho de mundo invalido');
   return full;
 }
-function profilesView() {
-  return PROFILE_STATE.profiles.map((profile) => ({
+function profileView(profile) {
+  return {
     id: profile.id, name: profile.name, active: profile.id === PROFILE_STATE.activeProfileId, loader: profile.loader, mcVersion: profile.mcVersion,
     worldName: profile.worldName, worldExists: isWorldDir(profileWorldPath(profile)), worldSize: fs.existsSync(profileWorldPath(profile)) ? dirSize(profileWorldPath(profile)) : 0,
     modCount: (profile.mods || []).length, pluginCount: (profile.plugins || []).length, packagesDirty: !!profile.packagesDirty, lastStartedAt: profile.lastStartedAt || null, lastResult: profile.lastResult || null,
-  }));
+  };
 }
+function profilesView() { return PROFILE_STATE.profiles.map(profileView); }
 function libraryView(loader) {
   return PROFILE_STATE.library.map((entry) => ({ ...entry, compatible: packageCompatible(entry, loader), present: fs.existsSync(libraryFile(entry)) }));
 }
@@ -866,7 +867,7 @@ const server = http.createServer(async (req, res) => {
       ok: true, activeProfileId: PROFILE_STATE.activeProfileId, profiles: profilesView(), switching: profileSwitchState,
     });
     if (p === '/api/profiles' && req.method === 'POST') {
-      try { return sendJSON(res, 200, { ok: true, profile: createProfile(await jbody(req)), profiles: profilesView() }); }
+      try { return sendJSON(res, 200, { ok: true, profile: profileView(createProfile(await jbody(req))), profiles: profilesView() }); }
       catch (e) { return sendJSON(res, 400, { ok: false, error: e.message }); }
     }
     if (p === '/api/profiles/library' && req.method === 'GET') {
