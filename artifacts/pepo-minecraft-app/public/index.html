@@ -40,7 +40,7 @@
     <aside class="sidebar" id="sidebar">
       <nav aria-label="Navegação principal">
         <button class="nav-item active" data-view="overview"><svg><use href="#i-grid"/></svg><span>Visão geral</span></button>
-        <button class="nav-item" data-view="worlds"><svg><use href="#i-world"/></svg><span>Mundos</span></button>
+        <button class="nav-item" data-view="worlds"><svg><use href="#i-world"/></svg><span>Perfis</span></button>
         <button class="nav-item" data-view="packages"><svg><use href="#i-box"/></svg><span>Mods & plugins</span><span class="nav-badge" id="packageCount">0</span></button>
         <button class="nav-item" data-view="players"><svg><use href="#i-users"/></svg><span>Jogadores</span><span class="nav-badge" id="playerCount">0</span></button>
         <button class="nav-item" data-view="console"><svg><use href="#i-terminal"/></svg><span>Console</span></button>
@@ -88,14 +88,38 @@
         </div>
 
         <div class="overview-grid">
-          <article class="panel compact-panel"><div class="panel-title"><div><span class="eyebrow">MUNDO ATIVO</span><h3 id="activeWorld">...</h3></div><button class="text-action" data-go="worlds">GERENCIAR</button></div><div class="world-preview"><span class="world-block"></span><div><b>Proteção recomendada</b><p>Faça backup antes de trocar mundo, loader ou conjunto de mods.</p></div></div></article>
+          <article class="panel compact-panel"><div class="panel-title"><div><span class="eyebrow">PERFIL ATIVO</span><h3 id="activeWorld">...</h3></div><button class="text-action" data-go="worlds">GERENCIAR</button></div><div class="world-preview"><span class="world-block"></span><div><b id="activeProfileWorld">Mundo atual</b><p>Cada perfil guarda seu mundo, loader, configurações e seleção de mods.</p></div></div></article>
           <article class="panel compact-panel"><div class="panel-title"><div><span class="eyebrow">PACOTES</span><h3>Mods e plugins</h3></div><button class="text-action" data-go="packages">ABRIR</button></div><div class="validation-summary" id="validationSummary"><span>Carregando inventário…</span></div></article>
           <article class="panel compact-panel"><div class="panel-title"><div><span class="eyebrow">JOGADORES</span><h3>Agora no servidor</h3></div><button class="text-action" data-go="players">GERENCIAR</button></div><div class="player-strip" id="overviewPlayers"><span class="empty-copy">Nenhum jogador online.</span></div></article>
           <article class="panel compact-panel console-preview"><div class="panel-title"><div><span class="eyebrow">ÚLTIMOS EVENTOS</span><h3>Console ao vivo</h3></div><button class="text-action" data-go="console">EXPANDIR</button></div><pre id="overviewLog">Conectando ao fluxo do servidor…</pre></article>
         </div>
       </section>
 
-      <section class="view" id="view-worlds"><div class="page-heading"><div><span class="eyebrow">BIBLIOTECA</span><h1>Mundos</h1><p>Ative, exporte e proteja cada universo sem perder o atual.</p></div><button class="btn" id="refreshWorlds">Atualizar</button></div><div class="notice">A troca de mundo altera <code>level-name</code>. Se o servidor estiver ligado, o novo mundo entra apenas após reiniciar.</div><div class="card-list" id="worldList"></div></section>
+      <section class="view" id="view-worlds">
+        <div class="page-heading"><div><span class="eyebrow">SEUS SERVIDORES</span><h1>Perfis</h1><p>Um mundo completo por perfil. Os mesmos mods podem ser reaproveitados sem novo download.</p></div><div class="heading-actions"><button class="btn" id="refreshWorlds">Atualizar</button><button class="btn primary" id="newProfileButton">Novo perfil</button></div></div>
+        <div class="profile-switch-banner hidden" id="profileSwitchBanner"><span class="switch-loader"></span><div><b id="profileSwitchTitle">Trocando perfil</b><p id="profileSwitchCopy">Salvando o mundo atual e preparando o próximo.</p></div></div>
+        <div class="profile-workspace">
+          <div class="profile-stack" id="worldList"></div>
+          <aside class="profile-editor panel hidden" id="profileEditor">
+            <div id="profileCreatePane">
+              <div class="editor-heading"><div><h2>Novo perfil</h2><p>O Minecraft criará o mundo normalmente na primeira inicialização.</p></div><button class="editor-close" data-close-profile-editor>Fechar</button></div>
+              <form class="form-stack" id="profileCreateForm">
+                <label>Nome do perfil<input id="profileName" maxlength="48" required placeholder="Ex.: Criativo com mods"></label>
+                <label>Loader<select id="profileLoader"></select></label>
+                <label>Versão do Minecraft<input id="profileVersion" readonly></label>
+                <label>Puxar mods de<select id="profileSource"><option value="">Começar sem mods</option></select></label>
+                <p class="field-help" id="profileCompatibilityHelp">Somente pacotes compatíveis com o loader serão associados.</p>
+                <button class="btn primary" type="submit">Criar perfil</button>
+              </form>
+            </div>
+            <div class="hidden" id="profilePackagesPane">
+              <div class="editor-heading"><div><h2 id="profilePackagesTitle">Mods do perfil</h2><p>Os arquivos já estão na biblioteca. Marque apenas o que este perfil usará.</p></div><button class="editor-close" data-close-profile-editor>Fechar</button></div>
+              <div class="library-list" id="profileLibraryList"></div>
+              <button class="btn primary editor-save" id="saveProfilePackages">Salvar seleção</button>
+            </div>
+          </aside>
+        </div>
+      </section>
 
       <section class="view" id="view-packages"><div class="page-heading"><div><span class="eyebrow">ARSENAL</span><h1>Mods & plugins</h1><p>Compatibilidade e evidências reais, sem promessas falsas.</p></div><button class="btn" id="refreshPackages">Revalidar</button></div><div class="validation-legend"><span><i>1</i> JAR válido</span><span><i>2</i> Compatível</span><span><i>3</i> Carregado</span><span><i>4</i> Mundo iniciou</span><span><i>5</i> Função confirmada</span></div><div class="tabs"><button class="tab active" data-package-tab="mods">Mods</button><button class="tab" data-package-tab="plugins">Plugins</button></div><div class="package-context" id="packageContext"></div><div class="card-list" id="packageList"></div></section>
 

@@ -2,7 +2,7 @@
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const state = { status: null, worlds: [], mods: [], plugins: [], backups: [], loaders: [], packageTab: 'mods', log: [] };
+const state = { status: null, profiles: [], activeProfileId: null, profileLibrary: [], editProfileId: null, mods: [], plugins: [], backups: [], loaders: [], packageTab: 'mods', log: [] };
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const formatBytes = (n) => n == null ? '—' : n > 1073741824 ? `${(n / 1073741824).toFixed(1)} GB` : n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
 const formatDuration = (ms) => { if (!ms) return '—'; const h = Math.floor(ms / 3600000); const m = Math.floor((ms % 3600000) / 60000); return h ? `${h}h ${m}min` : `${m}min`; };
@@ -14,7 +14,7 @@ async function api(endpoint, options = {}) {
   try {
     const response = await fetch(endpoint, init);
     const data = await response.json();
-    if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
+    if (!response.ok || data.ok === false) { const error = new Error(data.error || `HTTP ${response.status}`); error.data = data; throw error; }
     return data;
   } catch (error) {
     toast(error.message || 'Não foi possível concluir a operação.', true);
@@ -33,7 +33,7 @@ function showView(name) {
   $$('.nav-item').forEach((item) => item.classList.toggle('active', item.dataset.view === name));
   location.hash = name;
   $('#sidebar').classList.remove('open'); $('#scrim').classList.remove('open');
-  if (name === 'worlds') loadWorlds();
+  if (name === 'worlds') loadProfiles();
   if (name === 'packages') loadPackages();
   if (name === 'players') renderPlayers();
   if (name === 'backups') loadBackups();
@@ -52,6 +52,7 @@ function renderStatus() {
   $('#factVersion').textContent = s.mcVersion || '—';
   $('#factPlayers').textContent = `${s.players.length} / ${s.maxPlayers || '—'}`;
   $('#factUptime').textContent = s.running ? formatDuration(s.uptimeMs) : '—';
+  if (s.activeProfile) { $('#serverTitle').textContent = s.activeProfile.name; $('#activeWorld').textContent = s.activeProfile.name; }
   $('#playerCount').textContent = s.players.length;
   $('#startButton').disabled = s.running || !s.installed || !s.eula;
   $('#restartButton').disabled = !s.running;
@@ -80,12 +81,63 @@ async function power(action) {
   catch (_) {}
 }
 
-async function loadWorlds() {
+function profileResult(profile) {
+  if (!profile.lastResult) return '';
+  return profile.lastResult.ok ? '<span class="profile-result good">Última inicialização saudável</span>' : `<span class="profile-result bad">Falhou e voltou ao perfil anterior</span>`;
+}
+
+function profileCard(profile) {
+  const counts = `${profile.modCount} mod${profile.modCount === 1 ? '' : 's'} · ${profile.pluginCount} plugin${profile.pluginCount === 1 ? '' : 's'}`;
+  return `<article class="profile-card ${profile.active ? 'active' : ''}">
+    <div class="profile-world-tile"><span></span></div>
+    <div class="profile-main"><div class="profile-name"><h3>${esc(profile.name)}</h3>${profile.active ? '<span class="tag active">ATIVO</span>' : ''}</div><p>${esc(titleCase(profile.loader))} ${esc(profile.mcVersion || '')} · ${esc(counts)}</p>${profileResult(profile)}</div>
+    <dl class="profile-facts"><div><dt>Mundo</dt><dd>${profile.worldExists ? formatBytes(profile.worldSize) : 'Será criado ao iniciar'}</dd></div><div><dt>Pasta</dt><dd>${esc(profile.worldName)}</dd></div></dl>
+    <div class="profile-actions">${profile.active ? (profile.packagesDirty ? `<button class="btn primary" data-profile-switch="${esc(profile.id)}">Aplicar e reiniciar</button>` : '<span class="active-lock">Em execução</span>') : `<button class="btn primary" data-profile-switch="${esc(profile.id)}">Iniciar este perfil</button>`}<button class="btn" data-profile-packages="${esc(profile.id)}">Escolher mods</button>${profile.active ? '' : `<button class="mini-btn danger" data-profile-delete="${esc(profile.id)}">Excluir</button>`}</div>
+  </article>`;
+}
+
+function renderProfileFormOptions() {
+  const currentSource = $('#profileSource').value;
+  $('#profileSource').innerHTML = '<option value="">Começar sem mods</option>' + state.profiles.map((profile) => `<option value="${esc(profile.id)}">Puxar de ${esc(profile.name)} (${profile.modCount + profile.pluginCount})</option>`).join('');
+  if (state.profiles.some((profile) => profile.id === currentSource)) $('#profileSource').value = currentSource;
+  const installed = state.loaders.filter((loader) => loader.installed);
+  $('#profileLoader').innerHTML = installed.map((loader) => `<option value="${esc(loader.id)}">${esc(loader.label)}</option>`).join('');
+  const active = state.profiles.find((profile) => profile.active); if (active && installed.some((loader) => loader.id === active.loader)) $('#profileLoader').value = active.loader;
+  $('#profileVersion').value = state.status?.mcVersion || active?.mcVersion || '';
+}
+
+async function loadProfiles() {
   try {
-    const data = await api('/api/worlds'); state.worlds = data.worlds || [];
-    $('#activeWorld').textContent = data.active || 'world'; $('#serverTitle').textContent = data.active || 'Mundo atual';
-    $('#worldList').innerHTML = state.worlds.length ? state.worlds.map((w) => `<article class="list-card"><div><h3>${esc(w.name)} ${w.active ? '<span class="tag active">ATIVO</span>' : ''}</h3><p>${formatBytes(w.size)} · Nether ${w.hasNether ? 'presente' : 'não detectado'} · End ${w.hasEnd ? 'presente' : 'não detectado'}</p></div><div class="list-card-actions">${w.active ? '' : `<button class="mini-btn good" data-world-activate="${esc(w.name)}">Ativar</button>`}<a class="mini-btn" href="/api/worlds/download?name=${encodeURIComponent(w.name)}">Exportar</a></div></article>`).join('') : '<div class="notice">Nenhum mundo com level.dat foi encontrado.</div>';
+    const requests = [api('/api/profiles')]; if (!state.loaders.length) requests.push(api('/api/loaders'));
+    const [data, loaders] = await Promise.all(requests); if (loaders) state.loaders = loaders.loaders || [];
+    state.profiles = data.profiles || []; state.activeProfileId = data.activeProfileId;
+    const active = state.profiles.find((profile) => profile.active);
+    if (active) { $('#activeWorld').textContent = active.name; $('#serverTitle').textContent = active.name; $('#activeProfileWorld').textContent = active.worldName; }
+    $('#worldList').innerHTML = state.profiles.length ? state.profiles.map(profileCard).join('') : '<div class="notice">Nenhum perfil encontrado.</div>';
+    renderProfileFormOptions();
+    const switching = data.switching || {}; $('#profileSwitchBanner').classList.toggle('hidden', !switching.running);
+    if (switching.running) { $('#profileSwitchTitle').textContent = 'Trocando perfil'; $('#profileSwitchCopy').textContent = `Etapa atual: ${switching.phase || 'preparando'}`; }
   } catch (_) {}
+}
+
+function openProfileEditor(pane) {
+  $('#profileEditor').classList.remove('hidden'); $('#profileCreatePane').classList.toggle('hidden', pane !== 'create'); $('#profilePackagesPane').classList.toggle('hidden', pane !== 'packages');
+  if (matchMedia('(max-width: 980px)').matches) $('#profileEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closeProfileEditor() { $('#profileEditor').classList.add('hidden'); state.editProfileId = null; }
+async function editProfilePackages(profileId) {
+  try {
+    const data = await api(`/api/profiles/library?profileId=${encodeURIComponent(profileId)}`); const profile = state.profiles.find((item) => item.id === profileId);
+    state.editProfileId = profileId; state.profileLibrary = data.library || []; const selected = new Set(data.selected || []);
+    $('#profilePackagesTitle').textContent = `Mods de ${profile?.name || 'perfil'}`;
+    $('#profileLibraryList').innerHTML = state.profileLibrary.length ? state.profileLibrary.map((entry) => `<label class="library-option ${entry.compatible ? '' : 'incompatible'}"><input type="checkbox" value="${esc(entry.key)}" ${selected.has(entry.key) ? 'checked' : ''} ${entry.compatible ? '' : 'disabled'}><span><b>${esc(entry.filename)}</b><small>${entry.compatible ? `${entry.kind === 'mod' ? 'Mod' : 'Plugin'} compatível, já baixado` : `Incompatível com ${esc(profile?.loader || 'este loader')}`}</small></span><em>${formatBytes(entry.size)}</em></label>`).join('') : '<div class="notice">A biblioteca ainda está vazia.</div>';
+    openProfileEditor('packages');
+  } catch (_) {}
+}
+
+function setSwitching(active, profileName = '') {
+  $('#profileSwitchBanner').classList.toggle('hidden', !active); $$('.profile-actions button').forEach((button) => { button.disabled = active; });
+  if (active) { $('#profileSwitchTitle').textContent = `Abrindo ${profileName}`; $('#profileSwitchCopy').textContent = 'Salvando o perfil atual, montando os mods e verificando o novo mundo.'; }
 }
 
 function packageCard(p) {
@@ -137,7 +189,20 @@ function connectConsole() {
 document.addEventListener('click', async (event) => {
   const nav = event.target.closest('[data-view]'); if (nav) return showView(nav.dataset.view);
   const go = event.target.closest('[data-go]'); if (go) return showView(go.dataset.go);
-  const world = event.target.closest('[data-world-activate]'); if (world) { try { await api('/api/worlds/activate', { method: 'POST', body: { name: world.dataset.worldActivate } }); toast('Mundo selecionado. Reinicie o servidor para carregar.'); loadWorlds(); } catch (_) {} return; }
+  if (event.target.closest('[data-close-profile-editor]')) { closeProfileEditor(); return; }
+  const switchButton = event.target.closest('[data-profile-switch]'); if (switchButton) {
+    const profile = state.profiles.find((item) => item.id === switchButton.dataset.profileSwitch); setSwitching(true, profile?.name || 'perfil');
+    try { await api('/api/profiles/switch', { method: 'POST', body: { profileId: switchButton.dataset.profileSwitch } }); toast(`${profile?.name || 'Perfil'} está online.`); await Promise.all([refreshStatus(true), loadProfiles(), loadPackages()]); }
+    catch (error) { if (error.data?.rolledBack) toast(error.data.rollbackReady ? 'O novo perfil falhou. O perfil anterior voltou a ficar online.' : 'O novo perfil falhou e o rollback precisa de atenção.', true); }
+    finally { setSwitching(false); }
+    return;
+  }
+  const packages = event.target.closest('[data-profile-packages]'); if (packages) { editProfilePackages(packages.dataset.profilePackages); return; }
+  const remove = event.target.closest('[data-profile-delete]'); if (remove) {
+    const profile = state.profiles.find((item) => item.id === remove.dataset.profileDelete); if (!confirm(`Mover o perfil ${profile?.name || ''} para a lixeira recuperável?`)) return;
+    try { await api('/api/profiles/delete', { method: 'POST', body: { profileId: remove.dataset.profileDelete } }); toast('Perfil movido para a lixeira recuperável.'); closeProfileEditor(); loadProfiles(); } catch (_) {}
+    return;
+  }
   const toggle = event.target.closest('[data-package-toggle]'); if (toggle) { const kind = state.packageTab; try { await api(`/api/${kind}/toggle`, { method: 'POST', body: { name: toggle.dataset.packageToggle, enabled: toggle.dataset.enable === 'true' } }); toast('Estado do pacote atualizado. Reinicie para aplicar.'); loadPackages(); } catch (_) {} return; }
   const confirm = event.target.closest('[data-package-confirm]'); if (confirm) { try { await api('/api/packages/confirm', { method: 'POST', body: { name: confirm.dataset.packageConfirm, note: 'Função confirmada manualmente no mundo' } }); toast('Teste manual registrado como evidência nível 5.'); loadPackages(); } catch (_) {} return; }
   const fill = event.target.closest('[data-fill-player]'); if (fill) $('#playerName').value = fill.dataset.fillPlayer;
@@ -149,7 +214,19 @@ $$('[data-package-tab]').forEach((button) => button.addEventListener('click', ()
 $('#menuButton').onclick = () => { $('#sidebar').classList.toggle('open'); $('#scrim').classList.toggle('open'); };
 $('#scrim').onclick = () => { $('#sidebar').classList.remove('open'); $('#scrim').classList.remove('open'); };
 $('#startButton').onclick = () => power('start'); $('#stopButton').onclick = () => power('stop'); $('#restartButton').onclick = () => power('restart');
-$('#refreshWorlds').onclick = loadWorlds; $('#refreshPackages').onclick = loadPackages; $('#refreshPlayers').onclick = () => refreshStatus();
+$('#refreshWorlds').onclick = loadProfiles; $('#refreshPackages').onclick = loadPackages; $('#refreshPlayers').onclick = () => refreshStatus();
+$('#newProfileButton').onclick = () => { renderProfileFormOptions(); openProfileEditor('create'); $('#profileName').focus(); };
+$('#profileCreateForm').onsubmit = async (event) => {
+  event.preventDefault(); const sourceProfileId = $('#profileSource').value;
+  try {
+    const data = await api('/api/profiles', { method: 'POST', body: { name: $('#profileName').value.trim(), loader: $('#profileLoader').value, mcVersion: $('#profileVersion').value, sourceProfileId, copyPackages: !!sourceProfileId } });
+    toast(`${data.profile.name} criado. O mundo será gerado quando você iniciá-lo.`); event.target.reset(); closeProfileEditor(); await loadProfiles();
+  } catch (_) {}
+};
+$('#saveProfilePackages').onclick = async () => {
+  if (!state.editProfileId) return; const packageKeys = $$('#profileLibraryList input:checked').map((input) => input.value);
+  try { await api('/api/profiles/packages', { method: 'POST', body: { profileId: state.editProfileId, packageKeys } }); toast('Seleção de mods salva para este perfil.'); closeProfileEditor(); loadProfiles(); } catch (_) {}
+};
 $('#clearConsole').onclick = () => { state.log = []; $('#fullLog').textContent = ''; $('#overviewLog').textContent = ''; };
 $('#consoleForm').onsubmit = async (event) => { event.preventDefault(); const input = $('#consoleInput'); const command = input.value.trim(); if (!command) return; try { await api('/api/console', { method: 'POST', body: { command } }); input.value = ''; } catch (_) {} };
 $('#playerActionButton').onclick = async () => { const player = $('#playerName').value.trim(); const action = $('#playerAction').value; try { await api('/api/players/action', { method: 'POST', body: { player, action } }); toast('Comando enviado ao servidor.'); } catch (_) {} };
@@ -161,7 +238,7 @@ $('#saveAddresses').onclick = async () => { try { await api('/api/settings', { m
 async function boot() {
   const initial = location.hash.replace('#', '') || 'overview'; showView($(`#view-${initial}`) ? initial : 'overview');
   connectConsole();
-  await Promise.all([refreshStatus(), loadWorlds(), loadPackages(), loadSettings()]);
+  await Promise.all([refreshStatus(), loadProfiles(), loadPackages(), loadSettings()]);
   setInterval(() => refreshStatus(true), 4000);
 }
 boot();

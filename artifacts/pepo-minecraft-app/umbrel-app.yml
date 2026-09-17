@@ -2,7 +2,7 @@ manifestVersion: 1
 id: pepo-minecraft
 category: media
 name: Minecraft Server
-version: "1.1.0"
+version: "1.2.0"
 tagline: Base de Operações para mundos, mods, jogadores e backups
 icon: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgdmlld0JveD0iMCAwIDUxMiA1MTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMTIiIGZpbGw9IiMwRjEyMTYiLz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyNTYgMjYyKSI+CiAgICA8cGF0aCBkPSJNMCAtMTUwIEwxNTAgLTcwIEwwIDEwIEwtMTUwIC03MCBaIiBmaWxsPSIjNjlCOTRGIi8+CiAgICA8cGF0aCBkPSJNLTE1MCAtNzAgTDAgMTAgTDAgMTcwIEwtMTUwIDkwIFoiIGZpbGw9IiM3QTU1M0EiLz4KICAgIDxwYXRoIGQ9Ik0tMTUwIC03MCBMMCAxMCBMMCA0NCBMLTE1MCAtMzYgWiIgZmlsbD0iIzRFOUUzRSIvPgogICAgPHBhdGggZD0iTTE1MCAtNzAgTDAgMTAgTDAgMTcwIEwxNTAgOTAgWiIgZmlsbD0iIzVGNDYzMCIvPgogICAgPHBhdGggZD0iTTE1MCAtNzAgTDAgMTAgTDAgNDQgTDE1MCAtMzYgWiIgZmlsbD0iIzNFODIzMiIvPgogIDwvZz4KPC9zdmc+Cg=="
 description: >-
@@ -29,7 +29,7 @@ description: >-
 
   Os amigos entram pelo IP publico da sua casa na porta 25565 (precisa liberar
   essa porta no roteador).
-releaseNotes: Nova Base de Operações, suporte correto a Fabric, validação de pacotes e backups.
+releaseNotes: Perfis completos com mundos independentes e biblioteca compartilhada de mods.
 developer: pepo
 website: https://umbrel.local
 dependencies: []

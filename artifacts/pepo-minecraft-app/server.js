@@ -18,6 +18,7 @@ const path = require('path');
 const os = require('os');
 const url = require('url');
 const zlib = require('zlib');
+const crypto = require('crypto');
 
 const DATA = process.env.MC_DATA || '/data';
 const PORT = parseInt(process.env.PANEL_PORT || '8080', 10);
@@ -33,6 +34,11 @@ const PLUGINS_OFF = path.join(DATA, 'plugins-disabled');
 const MODS = path.join(DATA, 'mods');
 const MODS_OFF = path.join(DATA, 'mods-disabled');
 const BACKUPS = path.join(DATA, 'panel-backups');
+const PROFILES_DIR = path.join(DATA, 'profiles');
+const PROFILES_PATH = path.join(PROFILES_DIR, 'profiles.json');
+const PROFILE_WORLDS = path.join(DATA, 'profile-worlds');
+const PROFILE_TRASH = path.join(DATA, 'profile-trash');
+const PACKAGE_LIBRARY = path.join(DATA, 'package-library');
 const UA = 'pepo-umbrel-minecraft-panel/1.0 (+self-hosted)';
 
 const LOADERS = {
@@ -58,6 +64,7 @@ const DEFAULT_CFG = {
   installedAt: 0,
   loader: '',
   packageConfirmations: {},
+  activeProfileId: '',
   connectHostname: 'discord-caseiro.duckdns.org', // dominio dinamico da casa (aponta pro mesmo IP); limpe se nao quiser
   lanHint: 'umbrel.local',// como os amigos da mesma rede chegam
 };
@@ -366,6 +373,18 @@ function listJars(enabledDir, disabledDir) {
   out.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   return out;
 }
+function archiveList(file) {
+  let result = spawnSync('unzip', ['-Z1', file], { encoding: 'utf8', timeout: 4000 });
+  if (result.status === 0 && result.stdout) return result.stdout;
+  result = spawnSync('tar', ['-tf', file], { encoding: 'utf8', timeout: 4000 });
+  return result.status === 0 ? (result.stdout || '') : '';
+}
+function archiveRead(file, entry) {
+  let result = spawnSync('unzip', ['-p', file, entry], { encoding: 'utf8', timeout: 4000 });
+  if (result.status === 0 && result.stdout) return result.stdout;
+  result = spawnSync('tar', ['-xOf', file, entry], { encoding: 'utf8', timeout: 4000 });
+  return result.status === 0 ? (result.stdout || '') : '';
+}
 function inspectJar(file, filename) {
   const result = { validJar: false, metadata: null, packageId: null, compatible: null, validationLevel: 0, validationLabel: 'Nao validado' };
   try {
@@ -376,7 +395,7 @@ function inspectJar(file, filename) {
   if (!result.validJar) return result;
   result.validationLevel = 1; result.validationLabel = 'JAR valido';
   try {
-    const listing = spawnSync('unzip', ['-Z1', file], { encoding: 'utf8', timeout: 4000 }).stdout || '';
+    const listing = archiveList(file);
     const candidates = [
       ['fabric.mod.json', 'fabric'], ['quilt.mod.json', 'quilt'], ['META-INF/neoforge.mods.toml', 'neoforge'],
       ['META-INF/mods.toml', 'forge'], ['paper-plugin.yml', 'paper'], ['plugin.yml', 'bukkit'],
@@ -385,7 +404,7 @@ function inspectJar(file, filename) {
     if (found) {
       result.metadata = found[1];
       if (found[0].endsWith('.json')) {
-        const raw = spawnSync('unzip', ['-p', file, found[0]], { encoding: 'utf8', timeout: 4000 }).stdout || '';
+        const raw = archiveRead(file, found[0]);
         try {
           const j = JSON.parse(raw);
           result.packageId = String(j.id || (j.quilt_loader && j.quilt_loader.id) || '').toLowerCase() || null;
@@ -426,6 +445,219 @@ function deletePlugin(name) { return deleteJar(name, PLUGINS, PLUGINS_OFF); }
 function listMods() { return listJars(MODS, MODS_OFF); }
 function toggleMod(name, enable) { return toggleJar(name, enable, MODS, MODS_OFF); }
 function deleteMod(name) { return deleteJar(name, MODS, MODS_OFF); }
+
+// --------------------------------------------------------------------------
+// perfis e biblioteca compartilhada de pacotes
+// --------------------------------------------------------------------------
+let PROFILE_STATE = { version: 1, activeProfileId: null, profiles: [], library: [] };
+let profileSwitchState = { running: false, targetId: null, phase: null, startedAt: 0, error: null };
+
+function atomicWriteJSON(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
+  fs.renameSync(tmp, file);
+}
+function saveProfiles() { atomicWriteJSON(PROFILES_PATH, PROFILE_STATE); }
+function slugId(value) {
+  const slug = String(value || 'perfil').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'perfil';
+  return `${slug}-${Date.now().toString(36)}`;
+}
+function sha256File(file) {
+  const hash = crypto.createHash('sha256');
+  const fd = fs.openSync(file, 'r'); const buf = Buffer.alloc(1024 * 1024);
+  try { let n; while ((n = fs.readSync(fd, buf, 0, buf.length, null)) > 0) hash.update(buf.subarray(0, n)); }
+  finally { fs.closeSync(fd); }
+  return hash.digest('hex');
+}
+function libraryFile(entry) { return path.join(PACKAGE_LIBRARY, entry.kind, `${entry.sha256}-${entry.filename}`); }
+function libraryEntry(key) { return PROFILE_STATE.library.find((entry) => entry.key === key) || null; }
+function importPackageToLibrary(file, kind) {
+  const filename = safeJar(path.basename(file)); if (!filename || !fs.existsSync(file)) return null;
+  const sha256 = sha256File(file); const key = `${kind}:${sha256}`;
+  let entry = libraryEntry(key);
+  if (!entry) {
+    const inspected = inspectJar(file, filename);
+    entry = { key, kind, sha256, filename, size: fs.statSync(file).size, metadata: inspected.metadata, packageId: inspected.packageId, importedAt: Date.now() };
+    PROFILE_STATE.library.push(entry);
+  }
+  const dest = libraryFile(entry);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  if (!fs.existsSync(dest)) { try { fs.linkSync(file, dest); } catch (_) { fs.copyFileSync(file, dest); } }
+  return entry;
+}
+function importDirectoryToLibrary(dir, kind) {
+  let files = []; try { files = fs.readdirSync(dir); } catch (_) {}
+  return files.filter((name) => /\.jar$/i.test(name)).map((name) => importPackageToLibrary(path.join(dir, name), kind)).filter(Boolean);
+}
+function activeProfile() { return PROFILE_STATE.profiles.find((profile) => profile.id === PROFILE_STATE.activeProfileId) || null; }
+function packageCompatible(entry, loader) {
+  const info = LOADERS[loader]; if (!entry || !info) return false;
+  if (entry.kind === 'mod') return info.packages === 'mods' && entry.metadata === info.family;
+  return info.packages === 'plugins' && ['bukkit', 'paper'].includes(entry.metadata);
+}
+function snapshotActiveProfile() {
+  const profile = activeProfile(); if (!profile) return;
+  const enabledMods = importDirectoryToLibrary(MODS, 'mod');
+  const enabledPlugins = importDirectoryToLibrary(PLUGINS, 'plugin');
+  importDirectoryToLibrary(MODS_OFF, 'mod'); importDirectoryToLibrary(PLUGINS_OFF, 'plugin');
+  if (!profile.packagesDirty) {
+    profile.mods = enabledMods.map((entry) => entry.key);
+    profile.plugins = enabledPlugins.map((entry) => entry.key);
+  }
+  profile.properties = readProps();
+  profile.worldName = profile.properties['level-name'] || profile.worldName || 'world';
+  profile.loader = activeLoader(); profile.mcVersion = CFG.mcVersion || profile.mcVersion || '';
+  profile.xms = CFG.xms; profile.xmx = CFG.xmx; profile.javaFlags = Array.isArray(CFG.javaFlags) ? CFG.javaFlags.slice() : [];
+  profile.updatedAt = Date.now(); saveProfiles();
+}
+function initializeProfiles() {
+  fs.mkdirSync(PROFILES_DIR, { recursive: true }); fs.mkdirSync(PACKAGE_LIBRARY, { recursive: true });
+  if (fs.existsSync(PROFILES_PATH)) {
+    try { PROFILE_STATE = JSON.parse(fs.readFileSync(PROFILES_PATH, 'utf8')); } catch (e) { throw new Error(`profiles.json invalido: ${e.message}`); }
+    PROFILE_STATE.profiles = Array.isArray(PROFILE_STATE.profiles) ? PROFILE_STATE.profiles : [];
+    PROFILE_STATE.library = Array.isArray(PROFILE_STATE.library) ? PROFILE_STATE.library : [];
+  }
+  if (!PROFILE_STATE.profiles.length) {
+    const properties = readProps();
+    const principal = {
+      id: 'principal', name: 'Principal', worldName: properties['level-name'] || 'world', loader: activeLoader(), mcVersion: CFG.mcVersion || '',
+      xms: CFG.xms, xmx: CFG.xmx, javaFlags: Array.isArray(CFG.javaFlags) ? CFG.javaFlags.slice() : [], properties,
+      mods: [], plugins: [], createdAt: Date.now(), updatedAt: Date.now(), lastStartedAt: null, lastResult: null,
+    };
+    PROFILE_STATE.activeProfileId = principal.id; PROFILE_STATE.profiles = [principal];
+    principal.mods = importDirectoryToLibrary(MODS, 'mod').map((entry) => entry.key);
+    principal.plugins = importDirectoryToLibrary(PLUGINS, 'plugin').map((entry) => entry.key);
+    importDirectoryToLibrary(MODS_OFF, 'mod'); importDirectoryToLibrary(PLUGINS_OFF, 'plugin');
+    saveProfiles();
+  }
+  for (const entry of PROFILE_STATE.library) {
+    if (!entry.metadata && fs.existsSync(libraryFile(entry))) {
+      const inspected = inspectJar(libraryFile(entry), entry.filename);
+      entry.metadata = inspected.metadata; entry.packageId = inspected.packageId;
+    }
+  }
+  if (!PROFILE_STATE.profiles.some((profile) => profile.id === PROFILE_STATE.activeProfileId)) PROFILE_STATE.activeProfileId = PROFILE_STATE.profiles[0].id;
+  CFG.activeProfileId = PROFILE_STATE.activeProfileId; saveCfg(); saveProfiles();
+}
+function profileWorldPath(profile) {
+  const full = path.resolve(DATA, String(profile.worldName || ''));
+  if (!full.startsWith(path.resolve(DATA) + path.sep)) throw new Error('caminho de mundo invalido');
+  return full;
+}
+function profilesView() {
+  return PROFILE_STATE.profiles.map((profile) => ({
+    id: profile.id, name: profile.name, active: profile.id === PROFILE_STATE.activeProfileId, loader: profile.loader, mcVersion: profile.mcVersion,
+    worldName: profile.worldName, worldExists: isWorldDir(profileWorldPath(profile)), worldSize: fs.existsSync(profileWorldPath(profile)) ? dirSize(profileWorldPath(profile)) : 0,
+    modCount: (profile.mods || []).length, pluginCount: (profile.plugins || []).length, packagesDirty: !!profile.packagesDirty, lastStartedAt: profile.lastStartedAt || null, lastResult: profile.lastResult || null,
+  }));
+}
+function libraryView(loader) {
+  return PROFILE_STATE.library.map((entry) => ({ ...entry, compatible: packageCompatible(entry, loader), present: fs.existsSync(libraryFile(entry)) }));
+}
+function createProfile(input) {
+  const name = String(input.name || '').trim().slice(0, 48); if (!name) throw new Error('informe o nome do perfil');
+  const loader = String(input.loader || activeLoader()).toLowerCase(); if (!LOADERS[loader]) throw new Error('loader invalido');
+  if (!loaderInstalled(loader)) throw new Error(`${LOADERS[loader].label} ainda nao esta instalado`);
+  const mcVersion = String(input.mcVersion || CFG.mcVersion || '').trim();
+  if (mcVersion !== String(CFG.mcVersion || '')) throw new Error('esta versao ainda nao possui runtime instalado');
+  const id = slugId(name); const source = PROFILE_STATE.profiles.find((profile) => profile.id === input.sourceProfileId) || activeProfile();
+  let selected = Array.isArray(input.packageKeys) ? input.packageKeys : (input.copyPackages && source ? [...(source.mods || []), ...(source.plugins || [])] : []);
+  selected = [...new Set(selected)].filter((key) => { const entry = libraryEntry(key); return entry && packageCompatible(entry, loader); });
+  const properties = { ...(source && source.properties || readProps()), 'level-name': `profile-worlds/${id}` };
+  const profile = {
+    id, name, worldName: properties['level-name'], loader, mcVersion, xms: source?.xms || CFG.xms, xmx: source?.xmx || CFG.xmx,
+    javaFlags: Array.isArray(source?.javaFlags) ? source.javaFlags.slice() : [], properties,
+    mods: selected.filter((key) => libraryEntry(key)?.kind === 'mod'), plugins: selected.filter((key) => libraryEntry(key)?.kind === 'plugin'),
+    createdAt: Date.now(), updatedAt: Date.now(), lastStartedAt: null, lastResult: null,
+  };
+  PROFILE_STATE.profiles.push(profile); saveProfiles(); return profile;
+}
+function setProfilePackages(profileId, keys) {
+  const profile = PROFILE_STATE.profiles.find((item) => item.id === profileId); if (!profile) throw new Error('perfil nao encontrado');
+  const selected = [...new Set(Array.isArray(keys) ? keys : [])].filter((key) => { const entry = libraryEntry(key); return entry && packageCompatible(entry, profile.loader); });
+  profile.mods = selected.filter((key) => libraryEntry(key)?.kind === 'mod');
+  profile.plugins = selected.filter((key) => libraryEntry(key)?.kind === 'plugin');
+  profile.packagesDirty = true;
+  profile.updatedAt = Date.now(); saveProfiles(); return profile;
+}
+function stageProfilePackages(profile) {
+  const root = path.join(PROFILES_DIR, `.stage-${Date.now()}-${process.pid}`);
+  for (const dir of ['mods', 'plugins', 'mods-disabled', 'plugins-disabled']) fs.mkdirSync(path.join(root, dir), { recursive: true });
+  for (const key of [...(profile.mods || []), ...(profile.plugins || [])]) {
+    const entry = libraryEntry(key); if (!entry || !packageCompatible(entry, profile.loader)) throw new Error(`pacote incompativel no perfil: ${key}`);
+    const source = libraryFile(entry); if (!fs.existsSync(source)) throw new Error(`arquivo ausente na biblioteca: ${entry.filename}`);
+    const dest = path.join(root, entry.kind === 'mod' ? 'mods' : 'plugins', entry.filename);
+    try { fs.linkSync(source, dest); } catch (_) { fs.copyFileSync(source, dest); }
+  }
+  return root;
+}
+function writeProfileProperties(profile) {
+  const props = { ...(profile.properties || {}), 'level-name': profile.worldName };
+  const lines = Object.entries(props).filter(([key]) => /^[A-Za-z0-9._-]+$/.test(key)).map(([key, value]) => `${key}=${String(value).replace(/[\r\n]/g, '')}`);
+  fs.writeFileSync(PROPS_PATH, `# gerenciado pelo perfil ${profile.name}\n${lines.join('\n')}\n`);
+}
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function waitForServerReady(timeoutMs = 120000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (!running()) return { ok: false, error: mc.lastExit ? `processo encerrou com codigo ${mc.lastExit.code}` : 'processo encerrou' };
+    if (mc.doneAt) return { ok: true };
+    await delay(1000);
+  }
+  return { ok: false, error: 'tempo limite aguardando o mundo iniciar' };
+}
+function moveRuntimeDirectories(fromRoot, toRoot, suffix = '') {
+  fs.mkdirSync(toRoot, { recursive: true });
+  for (const name of ['mods', 'plugins', 'mods-disabled', 'plugins-disabled']) {
+    const from = path.join(fromRoot, name); const to = path.join(toRoot, `${name}${suffix}`);
+    if (fs.existsSync(from)) fs.renameSync(from, to);
+  }
+}
+async function switchProfile(profileId) {
+  if (profileSwitchState.running) throw new Error('ja existe uma troca de perfil em andamento');
+  const target = PROFILE_STATE.profiles.find((profile) => profile.id === profileId); if (!target) throw new Error('perfil nao encontrado');
+  if (target.id === PROFILE_STATE.activeProfileId && running() && !target.packagesDirty) return { ok: true, alreadyActive: true };
+  if (!loaderInstalled(target.loader)) throw new Error(`runtime de ${target.loader} nao instalado`);
+  snapshotActiveProfile();
+  const previous = activeProfile(); const previousPropsText = fs.existsSync(PROPS_PATH) ? fs.readFileSync(PROPS_PATH, 'utf8') : '';
+  const previousCfg = { loader: CFG.loader, mcVersion: CFG.mcVersion, xms: CFG.xms, xmx: CFG.xmx, javaFlags: CFG.javaFlags, activeProfileId: CFG.activeProfileId };
+  const stage = stageProfilePackages(target); const history = path.join(PROFILES_DIR, '.runtime-history', `${Date.now()}-${previous?.id || 'none'}`);
+  profileSwitchState = { running: true, targetId: target.id, phase: 'salvando', startedAt: Date.now(), error: null };
+  try {
+    if (running()) { sendCmd(`say Trocando para o perfil ${target.name} em 5 segundos.`); await delay(3000); await stopServer(false); }
+    profileSwitchState.phase = 'montando'; moveRuntimeDirectories(DATA, history); moveRuntimeDirectories(stage, DATA);
+    writeProfileProperties(target);
+    CFG.loader = target.loader; CFG.mcVersion = target.mcVersion; CFG.xms = target.xms; CFG.xmx = target.xmx; CFG.javaFlags = target.javaFlags || [];
+    CFG.activeProfileId = target.id; PROFILE_STATE.activeProfileId = target.id; saveCfg(); saveProfiles();
+    profileSwitchState.phase = 'iniciando'; const started = startServer(); if (!started.ok) throw new Error(started.error);
+    const health = await waitForServerReady(); if (!health.ok) throw new Error(health.error);
+    target.lastStartedAt = Date.now(); target.lastResult = { ok: true, at: Date.now() }; target.packagesDirty = false; target.updatedAt = Date.now(); saveProfiles();
+    try { fs.rmSync(stage, { recursive: true, force: true }); } catch (_) {}
+    profileSwitchState = { running: false, targetId: null, phase: 'pronto', startedAt: 0, error: null };
+    return { ok: true, activeProfileId: target.id };
+  } catch (error) {
+    profileSwitchState.phase = 'rollback'; profileSwitchState.error = error.message;
+    if (running()) await stopServer(false);
+    const failed = path.join(history, 'failed-target'); fs.mkdirSync(failed, { recursive: true }); moveRuntimeDirectories(DATA, failed);
+    moveRuntimeDirectories(history, DATA);
+    fs.writeFileSync(PROPS_PATH, previousPropsText);
+    Object.assign(CFG, previousCfg); PROFILE_STATE.activeProfileId = previous?.id || previousCfg.activeProfileId; saveCfg();
+    if (target) target.lastResult = { ok: false, at: Date.now(), error: error.message, rolledBack: true }; saveProfiles();
+    let rollbackReady = false;
+    if (previous) { const restarted = startServer(); if (restarted.ok) rollbackReady = (await waitForServerReady()).ok; }
+    profileSwitchState = { running: false, targetId: null, phase: 'rollback-concluido', startedAt: 0, error: error.message };
+    const wrapped = new Error(error.message); wrapped.rolledBack = true; wrapped.rollbackReady = rollbackReady; throw wrapped;
+  }
+}
+function trashProfile(profileId) {
+  const index = PROFILE_STATE.profiles.findIndex((profile) => profile.id === profileId); if (index < 0) throw new Error('perfil nao encontrado');
+  const profile = PROFILE_STATE.profiles[index]; if (profile.id === PROFILE_STATE.activeProfileId) throw new Error('o perfil ativo nao pode ser excluido');
+  const trash = path.join(PROFILE_TRASH, `${Date.now()}-${profile.id}`); fs.mkdirSync(trash, { recursive: true });
+  const world = profileWorldPath(profile); if (fs.existsSync(world)) fs.renameSync(world, path.join(trash, path.basename(world)));
+  atomicWriteJSON(path.join(trash, 'profile.json'), profile);
+  PROFILE_STATE.profiles.splice(index, 1); saveProfiles(); return { id: profile.id, trash };
+}
 
 // --------------------------------------------------------------------------
 // modrinth
@@ -495,11 +727,12 @@ function listBackups() {
 }
 async function createBackup(label) {
   fs.mkdirSync(BACKUPS, { recursive: true });
-  const active = safeWorldName(readProps()['level-name'] || 'world') || 'world';
-  if (!isWorldDir(path.join(DATA, active))) throw new Error('mundo ativo nao encontrado');
+  const active = String(activeProfile()?.worldName || readProps()['level-name'] || 'world');
+  const activePath = path.resolve(DATA, active);
+  if (!activePath.startsWith(path.resolve(DATA) + path.sep) || !isWorldDir(activePath)) throw new Error('mundo ativo nao encontrado');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const safeLabel = String(label || 'manual').replace(/[^a-z0-9_-]+/gi, '-').slice(0, 40) || 'manual';
-  const filename = `${stamp}-${safeLabel}-${active}.zip`;
+  const filename = `${stamp}-${safeLabel}-${path.basename(active)}.zip`;
   if (running()) { sendCmd('save-all flush'); sendCmd('save-off'); await new Promise((r) => setTimeout(r, 1200)); }
   try {
     const names = [active, `${active}_nether`, `${active}_the_end`, 'server.properties', 'whitelist.json', 'ops.json'].filter((n) => fs.existsSync(path.join(DATA, n)));
@@ -595,6 +828,8 @@ function status() {
     loaderDetected: mc.detectedLoader,
     loaderMismatch: !!(mc.detectedLoader && mc.detectedLoader !== configured),
     packageErrors: mc.packageErrors.slice(-8),
+    activeProfile: activeProfile() ? { id: activeProfile().id, name: activeProfile().name } : null,
+    profileSwitch: profileSwitchState,
     mem: hostMem(),
     load: os.loadavg ? os.loadavg().map((x) => Math.round(x * 100) / 100) : null,
   };
@@ -626,6 +861,32 @@ const server = http.createServer(async (req, res) => {
       if (!loaderInstalled(id)) return sendJSON(res, 400, { ok: false, error: `${LOADERS[id].label} ainda nao esta instalado` });
       CFG.loader = id; saveCfg();
       return sendJSON(res, 200, { ok: true, active: id });
+    }
+    if (p === '/api/profiles' && req.method === 'GET') return sendJSON(res, 200, {
+      ok: true, activeProfileId: PROFILE_STATE.activeProfileId, profiles: profilesView(), switching: profileSwitchState,
+    });
+    if (p === '/api/profiles' && req.method === 'POST') {
+      try { return sendJSON(res, 200, { ok: true, profile: createProfile(await jbody(req)), profiles: profilesView() }); }
+      catch (e) { return sendJSON(res, 400, { ok: false, error: e.message }); }
+    }
+    if (p === '/api/profiles/library' && req.method === 'GET') {
+      const profile = PROFILE_STATE.profiles.find((item) => item.id === String(u.query.profileId || '')) || activeProfile();
+      return sendJSON(res, 200, { ok: true, profileId: profile?.id || null, selected: profile ? [...(profile.mods || []), ...(profile.plugins || [])] : [], library: libraryView(profile?.loader || activeLoader()) });
+    }
+    if (p === '/api/profiles/packages' && req.method === 'POST') {
+      const b = await jbody(req);
+      try { const profile = setProfilePackages(String(b.profileId || ''), b.packageKeys); return sendJSON(res, 200, { ok: true, profile: { id: profile.id, name: profile.name } }); }
+      catch (e) { return sendJSON(res, 400, { ok: false, error: e.message }); }
+    }
+    if (p === '/api/profiles/switch' && req.method === 'POST') {
+      const b = await jbody(req);
+      try { return sendJSON(res, 200, await switchProfile(String(b.profileId || ''))); }
+      catch (e) { return sendJSON(res, 400, { ok: false, error: e.message, rolledBack: !!e.rolledBack, rollbackReady: !!e.rollbackReady }); }
+    }
+    if (p === '/api/profiles/delete' && req.method === 'POST') {
+      const b = await jbody(req);
+      try { return sendJSON(res, 200, { ok: true, trashed: trashProfile(String(b.profileId || '')) }); }
+      catch (e) { return sendJSON(res, 400, { ok: false, error: e.message }); }
     }
 
     if (p === '/api/console/stream' && req.method === 'GET') {
@@ -868,6 +1129,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+initializeProfiles();
 server.listen(PORT, '0.0.0.0', () => {
   log(`painel ouvindo em :${PORT}  data=${DATA} loader=${activeLoader()}`);
   if (!fs.existsSync(activeLauncher())) log(`launcher de ${LOADERS[activeLoader()].label} ainda nao instalado`);
