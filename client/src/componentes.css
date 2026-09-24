@@ -253,6 +253,33 @@
 .ctx-slider { padding: 6px 8px 10px; }
 .ctx-slider input[type="range"] { width: 100%; padding: 0; background: none; border: none; accent-color: var(--accent); }
 .ctx-slider-topo { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+.ctx-slider-topo > span:first-child { display: flex; align-items: center; gap: 6px; }
+.ctx-slider-topo small {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(240, 178, 50, .14);
+  color: var(--idle);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.ctx-slider-extra,
+.ctx-slider-reset {
+  width: 100%;
+  margin-top: 5px;
+  padding: 5px 7px;
+  border-radius: 4px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+}
+.ctx-slider-extra { color: var(--idle); }
+.ctx-slider-extra:hover,
+.ctx-slider-reset:hover { background: var(--hover); color: var(--text); }
+.ctx-slider-extra:focus-visible,
+.ctx-slider-reset:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 /* ========================================================================== */
 /*  Presença: bolinha de status e linha de atividade                          */

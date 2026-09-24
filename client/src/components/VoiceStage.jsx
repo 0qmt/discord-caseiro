@@ -4,6 +4,7 @@ import Avatar from './Avatar.jsx';
 import Icon from './Icon.jsx';
 import { getSaidaAudio, assinarSaidaAudio } from '../lib/audioOutput.js';
 import { usePunch } from '../lib/usePunch.js';
+import { ganhoDoVolumeIndividual, limitarVolumeHtml } from '../lib/volumeGain.js';
 
 /**
  * Autoplay bloqueado pelo navegador falha em silêncio - sem isso, a pessoa
@@ -25,6 +26,9 @@ function tentarTocar(el) {
 function Media({ stream, kind, muted, className, style, videoRef, volume }) {
   const refInterno = useRef(null);
   const ref = videoRef ?? refInterno;
+  const grafoAudioRef = useRef(null);
+  const volumeAtualRef = useRef(volume ?? 1);
+  volumeAtualRef.current = volume ?? 1;
 
   useEffect(() => {
     const el = ref.current;
@@ -39,25 +43,82 @@ function Media({ stream, kind, muted, className, style, videoRef, volume }) {
     if (kind !== 'audio') return undefined;
     const el = ref.current;
     if (!el) return undefined;
-    el.muted = false;
     el.volume = 1;
     const tocar = () => tentarTocar(el);
     el.addEventListener('loadedmetadata', tocar);
     el.addEventListener('canplay', tocar);
     if (stream) tocar();
+
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let contexto = null;
+    let fonte = null;
+    let ganho = null;
+    let retomar = null;
+
+    if (stream && AudioContext) {
+      try {
+        contexto = new AudioContext();
+        fonte = contexto.createMediaStreamSource(stream);
+        ganho = contexto.createGain();
+        ganho.gain.setValueAtTime(
+          ganhoDoVolumeIndividual(volumeAtualRef.current),
+          contexto.currentTime,
+        );
+        fonte.connect(ganho);
+        ganho.connect(contexto.destination);
+        grafoAudioRef.current = { contexto, fonte, ganho };
+
+        // O MediaStream toca pelo grafo. A tag continua montada como fallback,
+        // mas fica muda para nunca existir uma segunda copia com eco.
+        el.muted = true;
+        retomar = () => contexto.resume().then(() => {
+          if (contexto.state !== 'running') return;
+          document.removeEventListener('pointerdown', retomar);
+          document.removeEventListener('keydown', retomar);
+        }).catch(() => {});
+        retomar();
+        document.addEventListener('pointerdown', retomar);
+        document.addEventListener('keydown', retomar);
+      } catch {
+        grafoAudioRef.current = null;
+        contexto?.close().catch(() => {});
+      }
+    }
+
+    // Navegador sem Web Audio: continua audivel, sem fingir ganho acima de 100%.
+    if (!grafoAudioRef.current) {
+      el.volume = limitarVolumeHtml(volumeAtualRef.current);
+      el.muted = volumeAtualRef.current === 0;
+    }
+
     return () => {
       el.removeEventListener('loadedmetadata', tocar);
       el.removeEventListener('canplay', tocar);
+      if (retomar) {
+        document.removeEventListener('pointerdown', retomar);
+        document.removeEventListener('keydown', retomar);
+      }
+      fonte?.disconnect();
+      ganho?.disconnect();
+      if (grafoAudioRef.current?.contexto === contexto) grafoAudioRef.current = null;
+      contexto?.close().catch(() => {});
     };
   }, [kind, stream]);
 
-  // Volume por pessoa e "silenciar só pra mim" (e ensurdecer, que zera tudo).
-  // `volume` do HTML vai só até 1; acima disso o navegador ignora, então 200%
-  // fica limitado a 100% - é o teto honesto sem passar por Web Audio.
+  // Ganho linear real: 200% = 2.0 e, depois da confirmacao, 400% = 4.0.
   useEffect(() => {
     const el = ref.current;
     if (!el || volume === undefined) return;
-    el.volume = Math.max(0, Math.min(1, volume));
+    const grafo = grafoAudioRef.current;
+    if (grafo) {
+      el.muted = true;
+      grafo.ganho.gain.setValueAtTime(
+        ganhoDoVolumeIndividual(volume),
+        grafo.contexto.currentTime,
+      );
+      return;
+    }
+    el.volume = limitarVolumeHtml(volume);
     el.muted = volume === 0;
   }, [volume]);
 
@@ -66,16 +127,22 @@ function Media({ stream, kind, muted, className, style, videoRef, volume }) {
   useEffect(() => {
     if (kind !== 'audio') return undefined;
     const el = ref.current;
-    if (!el || typeof el.setSinkId !== 'function') return undefined;
+    if (!el) return undefined;
     const aplicar = (deviceId) => {
-      if (deviceId) el.setSinkId(deviceId).catch(() => {});
+      if (!deviceId) return;
+      const contexto = grafoAudioRef.current?.contexto;
+      if (contexto && typeof contexto.setSinkId === 'function') {
+        contexto.setSinkId(deviceId).catch(() => {});
+      } else if (!contexto && typeof el.setSinkId === 'function') {
+        el.setSinkId(deviceId).catch(() => {});
+      }
     };
     aplicar(getSaidaAudio());
     return assinarSaidaAudio(aplicar);
   }, [kind]);
 
   if (kind === 'audio') {
-    return <audio ref={ref} autoPlay playsInline />;
+    return <audio ref={ref} autoPlay playsInline muted />;
   }
   return <video ref={ref} autoPlay playsInline muted={muted} className={className} style={style} />;
 }
@@ -595,7 +662,7 @@ function ParticipantControls({ peer, actions, podeModerarVoz }) {
       <button className="icon-btn" title="Controles de audio" onClick={(e) => { e.stopPropagation(); setAberto((v) => !v); }}><Icon name="volume" size={13} /></button>
       {aberto && (
         <span className="voice-participant-popover" onClick={(e) => e.stopPropagation()}>
-          <label><Icon name="volume" size={12} /><input aria-label="Volume do participante" type="range" min="0" max="2" step=".05" value={volume} onChange={(e) => actions?.definirVolume(peer.socketId, Number(e.target.value))} /></label>
+          <label><Icon name="volume" size={12} /><input aria-label="Volume do participante" type="range" min="0" max={peer.volumeAltoLiberado ? 4 : 2} step=".05" value={volume} onChange={(e) => actions?.definirVolume(peer.socketId, Number(e.target.value))} /></label>
           <button onClick={() => actions?.alternarSilencioLocal(peer.socketId)}>{peer.silenciadoLocal ? 'Ouvir novamente' : 'Silenciar so para mim'}</button>
           {podeModerarVoz && <button onClick={() => actions?.moderar(peer.socketId, { serverMuted: !peer.state.serverMuted })}>{peer.state.serverMuted ? 'Permitir microfone' : 'Silenciar para todos'}</button>}
           {podeModerarVoz && <button onClick={() => actions?.moderar(peer.socketId, { serverDeafened: !peer.state.serverDeafened })}>{peer.state.serverDeafened ? 'Permitir audio' : 'Ensurdecer para todos'}</button>}
