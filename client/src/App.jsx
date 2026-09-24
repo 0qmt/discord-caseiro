@@ -15,6 +15,7 @@ import {
 import { useAusenciaAutomatica, useDeteccaoDeJogo } from './lib/usePresenca.js';
 import { notificar, pedirPermissaoDeNotificacao } from './lib/notificar.js';
 import { useVoice } from './lib/useVoice.js';
+import { suportaGanhoWebAudio } from './lib/volumeGain.js';
 import AuthView from './components/AuthView.jsx';
 import Avatar from './components/Avatar.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
@@ -1494,6 +1495,19 @@ export default function App() {
     });
     if (souEu) return base;
 
+    const ganhoDisponivel = suportaGanhoWebAudio(window);
+    const volumeAltoLiberado = ganhoDisponivel
+      && voiceActions.volumeAltoLiberado(participante.socketId);
+    const maximoDoVolume = ganhoDisponivel ? (volumeAltoLiberado ? 400 : 200) : 100;
+
+    const pedirVolumeAlto = () => setModal({
+      type: 'confirm',
+      title: 'Liberar volume até 400%?',
+      message: 'Isso aplica ganho real ao áudio desta pessoa e pode ficar muito alto ou distorcido. Abaixe o volume físico do fone ou das caixas antes de liberar.',
+      confirmLabel: 'Liberar 400%',
+      onConfirm: () => voiceActions.desbloquearVolumeAlto(participante.socketId),
+    });
+
     const extras = [
       { tipo: 'sep' },
       {
@@ -1501,8 +1515,13 @@ export default function App() {
         label: 'Volume',
         valor: Math.round((voiceActions.volumeDe(participante.socketId) ?? 1) * 100),
         min: 0,
-        max: 200,
+        max: maximoDoVolume,
+        amplificado: volumeAltoLiberado,
         onChange: (v) => voiceActions.definirVolume(participante.socketId, v / 100),
+        onDesbloquear: ganhoDisponivel && !volumeAltoLiberado ? pedirVolumeAlto : null,
+        onBloquear: volumeAltoLiberado
+          ? () => voiceActions.bloquearVolumeAlto(participante.socketId)
+          : null,
       },
       {
         label: voiceActions.estaSilenciadoLocal(participante.socketId) ? 'Ouvir de novo' : 'Silenciar só pra mim',

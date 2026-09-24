@@ -95,7 +95,7 @@ function Reacoes({ item, onFechar }) {
 function Item({ item, onFechar }) {
   if (item.tipo === 'sep') return <div className="ctx-sep" />;
   if (item.tipo === 'titulo') return <div className="ctx-titulo">{item.label}</div>;
-  if (item.tipo === 'slider') return <Slider item={item} />;
+  if (item.tipo === 'slider') return <Slider item={item} onFechar={onFechar} />;
   if (item.tipo === 'sub') return <Submenu item={item} onFechar={onFechar} />;
   if (item.tipo === 'reacoes') return <Reacoes item={item} onFechar={onFechar} />;
   if (item.tipo === 'custom') return item.render();
@@ -123,18 +123,23 @@ function Item({ item, onFechar }) {
  * Volume por pessoa. O valor vive fora (no componente que abriu o menu), mas
  * o arrasto é local pra não re-renderizar a árvore inteira a cada pixel.
  */
-function Slider({ item }) {
+function Slider({ item, onFechar }) {
   const [valor, setValor] = useState(item.valor);
+  const maximo = item.max ?? 200;
+  const mostrarDesbloqueio = Boolean(item.onDesbloquear) && valor >= maximo;
   return (
     <div className="ctx-slider">
       <div className="ctx-slider-topo">
-        <span>{item.label}</span>
+        <span>
+          {item.label}
+          {item.amplificado && <small>Amplificado</small>}
+        </span>
         <span>{valor}%</span>
       </div>
       <input
         type="range"
         min={item.min ?? 0}
-        max={item.max ?? 200}
+        max={maximo}
         value={valor}
         onChange={(e) => {
           const novo = Number(e.target.value);
@@ -142,6 +147,24 @@ function Slider({ item }) {
           item.onChange?.(novo);
         }}
       />
+      {mostrarDesbloqueio && (
+        <button
+          type="button"
+          className="ctx-slider-extra"
+          onClick={() => { onFechar(); item.onDesbloquear(); }}
+        >
+          Tá pouco?
+        </button>
+      )}
+      {item.amplificado && item.onBloquear && (
+        <button
+          type="button"
+          className="ctx-slider-reset"
+          onClick={() => { onFechar(); item.onBloquear(); }}
+        >
+          Voltar ao limite de 200%
+        </button>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test src/lib/volumeGain.test.mjs",
     "build:android": "vite build --mode android && cap sync android",
     "android:sync": "cap sync android",
     "android:open": "cap open android",

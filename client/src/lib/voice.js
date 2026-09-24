@@ -1,6 +1,7 @@
 import { emitAck } from '../socket.js';
 import { serverPath } from '../platform/server.js';
 import { getEntradaAudio, assinarEntradaAudio } from './audioInput.js';
+import { limitarVolumeIndividual, VOLUME_PADRAO } from './volumeGain.js';
 
 /**
  * Cliente de voz/vídeo em malha (cada um conecta com cada um).
@@ -151,6 +152,7 @@ export class VoiceClient {
     // vão pro servidor e não mudam nada pros outros.
     this.volumes = new Map();
     this.silenciadosLocal = new Set();
+    this.volumesAltosLiberados = new Set();
     this.mutadoAntesDeEnsurdecer = false;
     this.peers = new Map();
     // Quem e quem no canal, e o ultimo estado (mic/camera/tela) que soubemos
@@ -218,6 +220,7 @@ export class VoiceClient {
         // Já resolvido aqui pra o <audio> só ter que obedecer.
         volume: this.volumeParaTocar(socketId),
         silenciadoLocal: this.silenciadosLocal.has(socketId),
+        volumeAltoLiberado: this.volumesAltosLiberados.has(socketId),
       })),
     };
   }
@@ -366,6 +369,9 @@ export class VoiceClient {
 
     this.participantes.clear();
     this.estadosConhecidos.clear();
+    this.volumes.clear();
+    this.silenciadosLocal.clear();
+    this.volumesAltosLiberados.clear();
     this.channelId = null;
     // Some com avisos e erros da call anterior (ex.: "sem microfone"), senão
     // ficam grudados no painel depois de sair - a não ser que este leave()
@@ -498,6 +504,12 @@ export class VoiceClient {
     this.analisadores.delete(socketId);
     this.statsAnteriores.delete(`${socketId}-screen`);
     this.avisar();
+  }
+
+  esquecerPreferenciasDeAudio(socketId) {
+    this.volumes.delete(socketId);
+    this.silenciadosLocal.delete(socketId);
+    this.volumesAltosLiberados.delete(socketId);
   }
 
   cancelarReconexao(socketId, peer = this.peers.get(socketId)) {
@@ -654,13 +666,19 @@ export class VoiceClient {
     }
 
     for (const socketId of [...this.peers.keys()]) {
-      if (!presentes.has(socketId)) this.removerPar(socketId);
+      if (!presentes.has(socketId)) {
+        this.removerPar(socketId);
+        this.esquecerPreferenciasDeAudio(socketId);
+      }
     }
     this.avisar();
   }
 
   aoSairAlguem({ channelId, socketId }) {
-    if (channelId === this.channelId) this.removerPar(socketId);
+    if (channelId === this.channelId) {
+      this.removerPar(socketId);
+      this.esquecerPreferenciasDeAudio(socketId);
+    }
   }
 
   /* ------------------------------- faixas ------------------------------ */
@@ -733,17 +751,32 @@ export class VoiceClient {
     this.avisar();
   }
 
-  /**
-   * Volume de UMA pessoa, só pra mim (0 a 2 = 0% a 200%). É estado local: não
-   * vai pro servidor nem afeta o que os outros ouvem.
-   */
+  /** Volume de UMA pessoa, so pra mim; 400% exige liberacao confirmada. */
   definirVolume(socketId, volume) {
-    this.volumes.set(socketId, Math.max(0, Math.min(2, volume)));
+    this.volumes.set(socketId, limitarVolumeIndividual(
+      volume,
+      this.volumesAltosLiberados.has(socketId),
+    ));
     this.avisar();
   }
 
   volumeDe(socketId) {
-    return this.volumes.get(socketId) ?? 1;
+    return this.volumes.get(socketId) ?? VOLUME_PADRAO;
+  }
+
+  desbloquearVolumeAlto(socketId) {
+    this.volumesAltosLiberados.add(socketId);
+    this.avisar();
+  }
+
+  bloquearVolumeAlto(socketId) {
+    this.volumesAltosLiberados.delete(socketId);
+    this.volumes.set(socketId, limitarVolumeIndividual(this.volumeDe(socketId), false));
+    this.avisar();
+  }
+
+  volumeAltoLiberado(socketId) {
+    return this.volumesAltosLiberados.has(socketId);
   }
 
   alternarSilencioLocal(socketId) {
