@@ -808,9 +808,12 @@ export class VoiceClient {
   }
 
   /** Convida alguém do mesmo servidor pra entrar na call em que estamos agora. */
-  convidar(userId) {
+  convidar(userId, toque = 'padrao') {
     if (!this.channelId) return;
-    this.socket.emit('voice:convidar', { userId });
+    this.socket.emit('voice:convidar', {
+      userId,
+      toque: toque === 'sirene' ? 'sirene' : 'padrao',
+    });
   }
 
   /** Some com a mensagem de erro sem precisar tentar entrar de novo. */

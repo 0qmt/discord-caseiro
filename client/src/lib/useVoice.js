@@ -179,7 +179,7 @@ export function useVoice(socket) {
     mover: (socketId, paraCanal) => clientRef.current?.mover(socketId, paraCanal),
     expulsar: (socketId) => clientRef.current?.expulsar(socketId),
     votarExpulsao: (socketId) => clientRef.current?.votarExpulsao(socketId),
-    convidar: (userId) => clientRef.current?.convidar(userId),
+    convidar: (userId, toque) => clientRef.current?.convidar(userId, toque),
     cancelarConvite: (userId) => socket?.emit('voice:convite-cancelar', { userId }),
     responderConvite: (id, resposta) => socket?.emit('voice:convite-responder', { id, resposta }),
     limparConvite: () => setConvite(null),

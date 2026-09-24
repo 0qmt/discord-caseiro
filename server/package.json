@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning --watch src/index.js",
     "start": "node --disable-warning=ExperimentalWarning src/index.js",
+    "test": "node --test src/lib/callInviteSound.test.mjs",
     "smoke": "node scripts/smoke.js",
     "teste:mencoes": "node scripts/teste-mencoes.mjs"
   },

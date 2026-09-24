@@ -1,4 +1,6 @@
 import { q } from '../db.js';
+import { config } from '../config.js';
+import { canUseSpecialCallSound } from './callInviteSound.js';
 
 /** Nunca devolvemos password_hash nem email de terceiros pro cliente. */
 export const publicUser = (u) =>
@@ -24,7 +26,13 @@ export const profileDto = (u) => ({
   themePosition: u.theme_position ?? null,
 });
 
-export const selfUser = (u) => ({ ...profileDto(u), email: u.email });
+export const selfUser = (u) => ({
+  ...profileDto(u),
+  email: u.email,
+  capabilities: {
+    specialCallSound: canUseSpecialCallSound(u.id, config.specialCallSoundUserId),
+  },
+});
 
 export const channelDto = (c) => ({
   id: c.id,

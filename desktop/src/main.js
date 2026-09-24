@@ -10,6 +10,7 @@ const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const config = require('./config.js');
 const jogos = require('./jogos.js');
 const { instalarPermissoes, instalarCapturaDeTela } = require('./sessao.js');
+const { normalizarToqueDeChamada } = require('./toque-chamada.js');
 
 const DEV_URL = process.env.DISCORD_CASEIRO_DEV_URL ?? null;
 const NOME_DO_APP = 'discordia';
@@ -54,6 +55,8 @@ const ehNossoServidor = (url) => config.mesmaOrigem(url, servidorAtual);
 const paginaLocal = (nome) => path.join(__dirname, nome);
 const SOM_DE_MENCAO = pathToFileURL(paginaLocal('som-mencao.mp3')).toString();
 const SOM_DE_CHAMADA = pathToFileURL(paginaLocal('som-chamada.mp3')).toString();
+const SOM_DE_SIRENE = pathToFileURL(paginaLocal('dog-siren.mp3')).toString();
+const SONS_DE_CHAMADA = Object.freeze({ padrao: SOM_DE_CHAMADA, sirene: SOM_DE_SIRENE });
 
 async function janelaLocalDeAudio() {
   if (janelaAudio && !janelaAudio.isDestroyed()) return janelaAudio;
@@ -516,9 +519,9 @@ ipcMain.on('app:tocar-som-mencao', (evento) => {
   tocarSomDeMencao();
 });
 
-ipcMain.on('app:iniciar-som-chamada', (evento) => {
+ipcMain.on('app:iniciar-som-chamada', (evento, toque) => {
   if (!veioDaNossaPagina(evento)) return;
-  tocarSomDeMencao(true, SOM_DE_CHAMADA);
+  tocarSomDeMencao(true, SONS_DE_CHAMADA[normalizarToqueDeChamada(toque)]);
 });
 
 ipcMain.on('app:parar-som-chamada', (evento) => {

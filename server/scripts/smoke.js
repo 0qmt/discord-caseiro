@@ -571,7 +571,19 @@ async function main() {
   aliceSocket.emit('voice:convidar', { userId: dave.user.id });
   const convite = await convitePraDave.catch(() => null);
   check('convite pra call chega pra quem foi chamado',
-    convite?.channelId === canalVoz.id && convite?.de?.username === 'alice', JSON.stringify(convite));
+    convite?.channelId === canalVoz.id && convite?.de?.username === 'alice'
+      && convite?.toque === 'padrao', JSON.stringify(convite));
+
+  const encerrouPrimeiroConvite = waitFor(aliceSocket, 'voice:convite-resultado');
+  daveSocket.emit('voice:convite-responder', { id: convite?.id, resposta: 'recusar' });
+  await encerrouPrimeiroConvite.catch(() => null);
+
+  const conviteForjadoPraDave = waitFor(daveSocket, 'voice:convite');
+  bobSocket2.emit('voice:convidar', { userId: dave.user.id, toque: 'sirene' });
+  const conviteForjado = await conviteForjadoPraDave.catch(() => null);
+  check('conta sem autorizacao nao consegue forjar a sirene',
+    conviteForjado?.toque === 'padrao', JSON.stringify(conviteForjado));
+  daveSocket.emit('voice:convite-responder', { id: conviteForjado?.id, resposta: 'recusar' });
 
   const convitePraEstranho = waitFor(strangerSocket, 'voice:convite', 1000);
   aliceSocket.emit('voice:convidar', { userId: stranger.user.id });

@@ -7,6 +7,7 @@ import StatusDot from './StatusDot.jsx';
 import { getSaidaAudio, setSaidaAudio } from '../lib/audioOutput.js';
 import { getEntradaAudio, setEntradaAudio } from '../lib/audioInput.js';
 import { ehDesktop, estadoDaPermissao, notificar, pedirPermissaoDeNotificacao } from '../lib/notificar.js';
+import { isSpecialCallSoundEnabled, setSpecialCallSoundEnabled } from '../lib/specialCallSound.js';
 import { getNativeVersion, platform } from '../platform/index.js';
 import {
   aplicarGradienteApp, aplicarTemaApp, reaplicarTemaSalvo, removerTemaApp,
@@ -195,9 +196,10 @@ function SecaoTemas() {
  * negada no navegador, e sem uma tela mostrando isso a pessoa não tem como
  * descobrir - fica achando que o app está quebrado.
  */
-function SecaoNotificacoes() {
+function SecaoNotificacoes({ podeUsarSirene = false }) {
   const [permissao, setPermissao] = useState(() => estadoDaPermissao());
   const [testada, setTestada] = useState(false);
+  const [sireneAtiva, setSireneAtiva] = useState(() => isSpecialCallSoundEnabled());
 
   const desktop = ehDesktop();
 
@@ -246,6 +248,30 @@ function SecaoNotificacoes() {
         <p className="hint">
           Não apareceu nada? Então é a permissão mesmo — veja a explicação acima.
         </p>
+      )}
+
+      {podeUsarSirene && (
+        <>
+          <h3>Convites de chamada</h3>
+          <label className="settings-linha settings-opcao-checkbox">
+            <div>
+              <strong>Usar sirene especial ao chamar para call</strong>
+              <p className="hint">
+                Ligado, o computador de quem você chamar toca a sirene até a pessoa responder.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              checked={sireneAtiva}
+              onChange={(event) => {
+                const ativa = event.target.checked;
+                setSireneAtiva(ativa);
+                setSpecialCallSoundEnabled(ativa);
+              }}
+              aria-label="Usar sirene especial ao chamar para call"
+            />
+          </label>
+        </>
       )}
 
       <h3>Onde ajustar o resto</h3>
@@ -535,7 +561,7 @@ function MobileUserArea({
   } else if (pagina === 'voz') {
     conteudo = <MobileSectionPage title="Voz e vídeo" onBack={voltar}><SecaoVoz /></MobileSectionPage>;
   } else if (pagina === 'notificacoes') {
-    conteudo = <MobileSectionPage title="Notificações" onBack={voltar}><SecaoNotificacoes /></MobileSectionPage>;
+    conteudo = <MobileSectionPage title="Notificações" onBack={voltar}><SecaoNotificacoes podeUsarSirene={Boolean(me.capabilities?.specialCallSound)} /></MobileSectionPage>;
   } else if (pagina === 'temas') {
     conteudo = <MobileSectionPage title="Aparência" onBack={voltar}><SecaoTemas /></MobileSectionPage>;
   } else if (pagina === 'servidor' && souDono) {
@@ -761,7 +787,7 @@ export default function SettingsScreen({
 
         {aba === 'voz' && <SecaoVoz />}
 
-        {aba === 'notificacoes' && <SecaoNotificacoes />}
+        {aba === 'notificacoes' && <SecaoNotificacoes podeUsarSirene={Boolean(me.capabilities?.specialCallSound)} />}
 
         {aba === 'temas' && <SecaoTemas />}
 
