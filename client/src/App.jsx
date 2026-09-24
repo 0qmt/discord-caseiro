@@ -16,6 +16,7 @@ import { useAusenciaAutomatica, useDeteccaoDeJogo } from './lib/usePresenca.js';
 import { notificar, pedirPermissaoDeNotificacao } from './lib/notificar.js';
 import { useVoice } from './lib/useVoice.js';
 import { suportaGanhoWebAudio } from './lib/volumeGain.js';
+import { callInviteSoundFor } from './lib/specialCallSound.js';
 import AuthView from './components/AuthView.jsx';
 import Avatar from './components/Avatar.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
@@ -321,7 +322,7 @@ export default function App() {
 
   useEffect(() => {
     if (!voiceConvite) return undefined;
-    window.appDesktop?.iniciarSomDeChamada?.();
+    window.appDesktop?.iniciarSomDeChamada?.(voiceConvite.toque);
     return () => window.appDesktop?.pararSomDeChamada?.();
   }, [voiceConvite?.id]);
 
@@ -354,6 +355,11 @@ export default function App() {
   const podeMoverNaCall = temPermissao(guildMembroDeMim, guild, PERM.MOVER_MEMBROS);
   const podeModerarVoz = temPermissao(guildMembroDeMim, guild, PERM.SILENCIAR_MEMBROS) || temPermissao(guildMembroDeMim, guild, PERM.ENSURDECER_MEMBROS);
   const minhaAtividade = presencas[me?.id]?.activity ?? null;
+
+  function convidarParaCall(userId, nome) {
+    voiceActions.convidar(userId, callInviteSoundFor(me));
+    setChamadaSaindo({ id: userId, nome });
+  }
 
   /*
    * Deploy novo: recarrega NA HORA, mesmo em chamada - quem estava numa
@@ -1340,8 +1346,7 @@ export default function App() {
       setAviso(`Entre em #${canal.name} primeiro pra poder chamar alguém pra lá.`);
       return;
     }
-    voiceActions.convidar(carga.userId);
-    setChamadaSaindo({ id: carga.userId, nome: carga.nome });
+    convidarParaCall(carga.userId, carga.nome);
   }
 
   /**
@@ -1441,8 +1446,7 @@ export default function App() {
       } catch (err) { setAviso(err.message); }
     },
     chamarParaCall: voice.channelId ? (m) => {
-      voiceActions.convidar(m.id);
-      setChamadaSaindo({ id: m.id, nome: m.username });
+      convidarParaCall(m.id, m.username);
     } : null,
     abrirNota: (m) => setModal({ type: 'nota', membro: m }),
     mudarApelido: (m) => setModal({ type: 'apelido', membro: m }),
@@ -1931,8 +1935,7 @@ export default function App() {
           podeChamarParaCall={Boolean(voice.channelId)}
           podeModerarVoz={podeModerarVoz}
           onChamarParaCall={(member) => {
-            voiceActions.convidar(member.id);
-            setChamadaSaindo({ id: member.id, nome: member.username });
+            convidarParaCall(member.id, member.username);
           }}
           onMenuDoMembro={menuDoMembro}
           onMenuDoParticipanteDeVoz={menuDoParticipanteDeVoz}

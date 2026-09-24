@@ -147,6 +147,7 @@ async function testarJanelas() {
       titulo: document.title,
       ponteDesktop: typeof window.appDesktop,
       desktopNotificar: typeof window.appDesktop?.notificar,
+      desktopSomChamada: typeof window.appDesktop?.iniciarSomDeChamada,
       desktopJogo: typeof window.appDesktop?.aoDetectarJogo,
       desktopEmCall: typeof window.appDesktop?.emCall,
       desktopTelaCheia: typeof window.appDesktop?.telaCheia,
@@ -162,6 +163,7 @@ async function testarJanelas() {
   check('a ponte do app esta disponivel na pagina do servidor',
     dentro.ponteDesktop === 'object', dentro.ponteDesktop);
   check('a ponte do app expoe notificar', dentro.desktopNotificar === 'function');
+  check('a ponte do app expoe o toque de chamada', dentro.desktopSomChamada === 'function');
   check('a ponte do app expoe a deteccao de jogo', dentro.desktopJogo === 'function');
   check('a ponte do app expoe emCall', dentro.desktopEmCall === 'function');
   check('a ponte do app expoe controle de tela cheia', dentro.desktopTelaCheia === 'function');

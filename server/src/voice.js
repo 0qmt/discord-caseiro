@@ -1,4 +1,6 @@
 import { q } from './db.js';
+import { config } from './config.js';
+import { resolveCallInviteSound } from './lib/callInviteSound.js';
 import { can, hasRole, isMember, podeAgirSobre, PERM } from './lib/permissions.js';
 import { publicUser } from './lib/serialize.js';
 
@@ -358,7 +360,7 @@ export function registerVoiceHandlers(io, socket) {
    * "Puxar" alguém pra call: manda um convite pra sala/DM da pessoa, ela
    * decide se entra. Não entra ninguém à força - só o convite.
    */
-  socket.on('voice:convidar', ({ userId } = {}) => {
+  socket.on('voice:convidar', ({ userId, toque } = {}) => {
     let meuCanal = null;
     for (const [canal, membros] of rooms) {
       if (membros.has(socket.id)) { meuCanal = canal; break; }
@@ -369,6 +371,7 @@ export function registerVoiceHandlers(io, socket) {
     if (!isMember(entry.guildId, String(userId ?? ''))) return;
 
     const alvoId = String(userId);
+    const toquePermitido = resolveCallInviteSound(user.id, toque, config.specialCallSoundUserId);
     const conviteAnterior = [...convitesDeCall.values()].find((convite) => convite.alvoId === alvoId);
     if (conviteAnterior) return;
 
@@ -385,10 +388,11 @@ export function registerVoiceHandlers(io, socket) {
 
     io.to(`user:${alvoId}`).emit('voice:convite', {
       id,
-      de: user,
+      de: publicUser(user),
       channelId: meuCanal,
       guildId: entry.guildId,
       channelName: canalInfo?.name ?? 'chamada',
+      toque: toquePermitido,
       expiresAt: Date.now() + DURACAO_CONVITE_MS,
     });
   });
@@ -400,7 +404,7 @@ export function registerVoiceHandlers(io, socket) {
     convitesDeCall.delete(convite.id);
     const resultado = resposta === 'aceitar' ? 'aceitou' : 'recusou';
     io.to(convite.chamadorSocketId).emit('voice:convite-resultado', { id: convite.id, resultado });
-    io.to(socket.id).emit('voice:convite-encerrado', { id: convite.id });
+    io.to(`user:${convite.alvoId}`).emit('voice:convite-encerrado', { id: convite.id });
   });
 
   socket.on('voice:convite-cancelar', ({ userId } = {}) => {

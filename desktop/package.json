@@ -6,6 +6,7 @@
   "main": "src/main.js",
   "scripts": {
     "dev": "electron .",
+    "test": "node --test src/toque-chamada.test.js",
     "dist": "electron-builder --publish=never",
     "publicar": "node scripts/publicar.js",
     "publicar:build": "node scripts/publicar.js --build",
@@ -28,7 +29,8 @@
     "productName": "discordia",
     "icon": "build/icon.png",
     "files": [
-      "src/**/*"
+      "src/**/*",
+      "!src/**/*.test.js"
     ],
     "publish": {
       "provider": "github",

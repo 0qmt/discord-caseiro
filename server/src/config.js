@@ -51,6 +51,9 @@ export const config = {
   tokenTtl: '30d',
   dbPath: path.resolve(SERVER_ROOT, process.env.DB_PATH ?? '../data/app.db'),
   allowRegistration: (process.env.ALLOW_REGISTRATION ?? 'true') !== 'false',
+  // ID exata da única conta que pode pedir a sirene especial em convites.
+  // Vazio mantém o recurso desligado inclusive se um cliente forjar o campo.
+  specialCallSoundUserId: process.env.SPECIAL_CALL_SOUND_USER_ID?.trim() || null,
   uploadsDir: UPLOADS_DIR,
   updatesDir: UPDATES_DIR,
   mobileUpdatesDir: MOBILE_UPDATES_DIR,
