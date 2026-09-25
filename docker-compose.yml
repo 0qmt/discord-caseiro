@@ -7,7 +7,7 @@ services:
       dockerfile: server/Dockerfile
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3002:3001"
+      - "3002:3001"
     volumes:
       - ./data:/app/data
     env_file:
@@ -15,6 +15,7 @@ services:
     environment:
       SHORTCUT_UPSTREAM_HOST: pepo-telegram-downloads_server_1
       SHORTCUT_UPSTREAM_PORT: '8080'
+      REMOTE_UPDATE_ADMIN_USER_ID: 'mt53d616825562b2b513'
     networks:
       - default
       - umbrel_main_network

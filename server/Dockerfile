@@ -22,6 +22,7 @@ COPY server/package*.json ./
 RUN npm ci --omit=dev
 COPY server/ ./
 COPY --from=build-client /app/client/dist ../client/dist
+COPY client/package.json ../client/package.json
 COPY --from=build-landing /app/landing/dist ../landing/dist
 
 EXPOSE 3001

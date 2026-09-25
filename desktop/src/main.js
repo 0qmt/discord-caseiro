@@ -8,6 +8,7 @@ const {
 const fetchAdblock = require('cross-fetch');
 const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const config = require('./config.js');
+const rotas = require('./rotas.js');
 const jogos = require('./jogos.js');
 const { instalarPermissoes, instalarCapturaDeTela } = require('./sessao.js');
 const { normalizarToqueDeChamada } = require('./toque-chamada.js');
@@ -37,7 +38,9 @@ let splash = null;
 let bandeja = null;
 let saindoDeVerdade = false;
 let encerrandoParaAtualizacao = false;
-const servidorAtual = DEV_URL ?? config.SERVIDOR_PRODUCAO;
+let servidorAtual = DEV_URL;
+let buscaDeServidor = null;
+const servidoresCandidatos = DEV_URL ? [DEV_URL] : config.SERVIDORES_PRODUCAO;
 
 /*
  * Isto precisa acontecer ANTES do app ficar pronto: flags de linha de comando
@@ -45,12 +48,13 @@ const servidorAtual = DEV_URL ?? config.SERVIDOR_PRODUCAO;
  * que faz microfone, câmera e captura de tela funcionarem num servidor caseiro
  * em http, sem ninguém precisar mexer em flag de navegador.
  */
-if (config.precisaLiberarOrigemInsegura(servidorAtual)) {
-  app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', servidorAtual);
+const origensInseguras = servidoresCandidatos.filter(config.precisaLiberarOrigemInsegura);
+if (origensInseguras.length > 0) {
+  app.commandLine.appendSwitch('unsafely-treat-insecure-origin-as-secure', origensInseguras.join(','));
   app.commandLine.appendSwitch('disable-features', 'BlockInsecurePrivateNetworkRequests');
 }
 
-const ehNossoServidor = (url) => config.mesmaOrigem(url, servidorAtual);
+const ehNossoServidor = (url) => servidoresCandidatos.some((route) => config.mesmaOrigem(url, route));
 
 const paginaLocal = (nome) => path.join(__dirname, nome);
 const SOM_DE_MENCAO = pathToFileURL(paginaLocal('som-mencao.mp3')).toString();
@@ -321,28 +325,47 @@ function instalarBloqueadorDeAnuncios(sessao) {
   return estado.pronto;
 }
 
-async function servidorRespondendo(url) {
+async function servidorRespondendo(url, signal) {
   try {
     const resposta = await fetch(`${url}/api/health`, {
       headers: CABECALHOS_TUNEL,
-      signal: AbortSignal.timeout(4000),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(5000)])
+        : AbortSignal.timeout(5000),
     });
-    return resposta.ok;
+    if (!resposta.ok) return false;
+    return (await resposta.json())?.ok === true;
   } catch {
     return false;
   }
 }
 
 async function abrirOndeDer() {
-  while (janela && !janela.isDestroyed()) {
-    if (await servidorRespondendo(servidorAtual)) {
-      const endereco = new URL(servidorAtual);
-      endereco.searchParams.set('_app_boot', String(Date.now()));
-      return janela.loadURL(endereco.toString());
+  if (buscaDeServidor) return buscaDeServidor;
+  buscaDeServidor = (async () => {
+    while (janela && !janela.isDestroyed()) {
+      const controller = new AbortController();
+      const escolhido = await rotas.primeiraRotaDisponivel(
+        servidoresCandidatos,
+        (url) => servidorRespondendo(url, controller.signal),
+      );
+      controller.abort();
+
+      if (escolhido) {
+        servidorAtual = escolhido;
+        const endereco = new URL(escolhido);
+        endereco.searchParams.set('_app_boot', String(Date.now()));
+        try {
+          await janela.loadURL(endereco.toString());
+          return;
+        } catch {
+          servidorAtual = null;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, RETENTAR_SERVIDOR_MS));
     }
-    await new Promise((resolve) => setTimeout(resolve, RETENTAR_SERVIDOR_MS));
-  }
-  return undefined;
+  })().finally(() => { buscaDeServidor = null; });
+  return buscaDeServidor;
 }
 
 function mostrarSplash() {
@@ -730,6 +753,11 @@ ipcMain.on('app:vigiar-jogo', (evento) => {
 ipcMain.on('app:parar-vigia-jogo', () => {
   pararVigiaDeJogo?.();
   pararVigiaDeJogo = null;
+});
+
+ipcMain.on('app:reconectar-servidor', (evento) => {
+  if (!veioDaNossaPagina(evento)) return;
+  void abrirOndeDer();
 });
 
 if (!app.requestSingleInstanceLock()) {

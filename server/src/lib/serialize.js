@@ -1,6 +1,7 @@
 import { q } from '../db.js';
 import { config } from '../config.js';
 import { canUseSpecialCallSound } from './callInviteSound.js';
+import { canManageRemoteUpdates } from './clientSessions.js';
 
 /** Nunca devolvemos password_hash nem email de terceiros pro cliente. */
 export const publicUser = (u) =>
@@ -31,6 +32,7 @@ export const selfUser = (u) => ({
   email: u.email,
   capabilities: {
     specialCallSound: canUseSpecialCallSound(u.id, config.specialCallSoundUserId),
+    remoteClientUpdate: canManageRemoteUpdates(u.id, config.remoteUpdateAdminUserId),
   },
 });
 

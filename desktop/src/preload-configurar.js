@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('appDesktop', {
    * se uma atualização baixada reinicia na hora ou espera (ver
    * atualizador.js). */
   emCall: (emCall) => ipcRenderer.send('app:em-call', { emCall }),
+  reconnectServer: () => ipcRenderer.send('app:reconectar-servidor'),
   /** Assina a deteccao de jogo. Devolve uma funcao pra cancelar. */
   aoDetectarJogo: (callback) => {
     const handler = (_evento, nome) => callback(nome);

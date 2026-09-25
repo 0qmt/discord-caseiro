@@ -9,6 +9,12 @@ import {
   canInChannel, dmParticipants, estaDeCastigo, guildIdOfChannel, isMember, PERM,
 } from './lib/permissions.js';
 import { dmMessageDto, messageDto, publicUser, reactionsOf } from './lib/serialize.js';
+import {
+  canManageRemoteUpdates,
+  sanitizeClientInfo,
+  selectRemoteUpdateTargets,
+  sessionsForUser,
+} from './lib/clientSessions.js';
 import { registerVoiceHandlers } from './voice.js';
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -49,6 +55,39 @@ function anexoValido(bruto) {
 
 /** userId -> Set<socketId>. Alguem pode estar em varias abas ao mesmo tempo. */
 const online = new Map();
+
+/** socketId -> { userId, info }. Efêmero e visível apenas para a conta autorizada. */
+const clientSessions = new Map();
+
+function clientSessionSnapshot() {
+  return Object.fromEntries(
+    [...online.entries()].map(([userId, socketIds]) => [
+      userId,
+      sessionsForUser(socketIds, clientSessions),
+    ]),
+  );
+}
+
+function emitClientSessionsForUser(io, userId) {
+  if (!config.remoteUpdateAdminUserId) return;
+  io.to(`user:${config.remoteUpdateAdminUserId}`).emit('client-info:update', {
+    userId,
+    sessions: sessionsForUser(online.get(userId) ?? new Set(), clientSessions),
+    currentVersion: config.currentClientVersion,
+  });
+}
+
+function usersShareGuild(leftUserId, rightUserId) {
+  return Boolean(q.get(
+    `SELECT 1
+       FROM guild_members requester
+       JOIN guild_members target ON target.guild_id = requester.guild_id
+      WHERE requester.user_id = ? AND target.user_id = ?
+      LIMIT 1`,
+    leftUserId,
+    rightUserId,
+  ));
+}
 
 /**
  * userId -> { status, activity }. Status e o que a pessoa escolheu
@@ -197,6 +236,14 @@ export function attachRealtime(httpServer) {
     sockets.add(socket.id);
     online.set(user.id, sockets);
 
+    if (canManageRemoteUpdates(user.id, config.remoteUpdateAdminUserId)) {
+      socket.emit('client-info:sync', {
+        sessions: clientSessionSnapshot(),
+        currentVersion: config.currentClientVersion,
+      });
+    }
+    emitClientSessionsForUser(io, user.id);
+
     // Estado inicial de presenca pra quem acabou de entrar: quem esta online,
     // com que status e fazendo o que.
     socket.emit('presence:sync', {
@@ -206,6 +253,49 @@ export function attachRealtime(httpServer) {
     if (wasOffline) {
       socket.broadcast.emit('presence:update', presencaPublica(user.id));
     }
+
+    /* -------- identificação privada e atualização direcionada -------- */
+
+    socket.on('client:identify', (rawInfo = {}, ack) => {
+      const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
+      const info = sanitizeClientInfo(rawInfo);
+      if (!info) return respond({ error: 'identificacao de cliente invalida' });
+      clientSessions.set(socket.id, { userId: user.id, info });
+      emitClientSessionsForUser(io, user.id);
+      return respond({ ok: true });
+    });
+
+    socket.on('client:force-update', ({ targetUserId, socketIds } = {}, ack) => {
+      const respond = (data) => (typeof ack === 'function' ? ack(data) : undefined);
+      if (!canManageRemoteUpdates(user.id, config.remoteUpdateAdminUserId)) {
+        return respond({ error: 'permissao insuficiente' });
+      }
+      const targetId = String(targetUserId ?? '');
+      if (!targetId || targetId === user.id) return respond({ error: 'usuario alvo invalido' });
+      if (!usersShareGuild(user.id, targetId)) return respond({ error: 'usuario alvo indisponivel' });
+      if (!config.currentClientVersion) return respond({ error: 'versao atual indisponivel no servidor' });
+
+      const targets = selectRemoteUpdateTargets({
+        targetUserId: targetId,
+        selectedSocketIds: socketIds,
+        onlineSocketIds: online.get(targetId) ?? new Set(),
+        sessionsBySocket: clientSessions,
+        currentVersion: config.currentClientVersion,
+      });
+      const requestedAt = Date.now();
+      for (const socketId of targets) {
+        io.to(socketId).emit('app:force-update', {
+          targetVersion: config.currentClientVersion,
+          requestedAt,
+          expiresAt: requestedAt + 10 * 60 * 1000,
+        });
+      }
+      return respond({
+        ok: true,
+        delivered: targets.length,
+        currentVersion: config.currentClientVersion,
+      });
+    });
 
     /** Entrou num servidor novo por convite: passa a receber os eventos dele. */
     socket.on('guild:subscribe', ({ guildId } = {}) => {
@@ -523,16 +613,17 @@ export function attachRealtime(httpServer) {
     });
 
     socket.on('disconnect', () => {
+      clientSessions.delete(socket.id);
       const set = online.get(user.id);
-      if (!set) return;
-      set.delete(socket.id);
-      if (set.size === 0) {
+      set?.delete(socket.id);
+      if (set && set.size === 0) {
         online.delete(user.id);
         // A presenca some junto: status e jogo valem so enquanto ela esta
         // conectada, e sem isso a proxima sessao herdaria um "Jogando X" velho.
         presencas.delete(user.id);
         io.emit('presence:update', { userId: user.id, online: false, status: 'offline', activity: null });
       }
+      emitClientSessionsForUser(io, user.id);
     });
   });
 

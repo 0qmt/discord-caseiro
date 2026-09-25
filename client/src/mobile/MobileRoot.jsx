@@ -3,27 +3,11 @@ import { Network } from '@capacitor/network';
 import { App as NativeApp } from '@capacitor/app';
 import App from '../App.jsx';
 import { platform, saveServerUrl } from '../platform/index.js';
+import { findAvailableServer } from '../platform/serverRoutes.js';
 import discordiaLogo from '../assets/discordia-logo.png';
 import MobileUpdater from './MobileUpdater.jsx';
 
-const HEALTH_TIMEOUT_MS = 7000;
 const RETRY_DELAY_MS = 3000;
-const MOBILE_SERVER_URL = 'https://discord-caseiro.duckdns.org:3001';
-
-async function serverHealth(baseUrl) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
-  try {
-    const response = await fetch(new URL('/api/health', `${baseUrl}/`), {
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-    if (!response.ok) throw new Error(`Servidor respondeu ${response.status}.`);
-    return response.json();
-  } finally {
-    clearTimeout(timeout);
-  }
-}
 
 function MobileConnecting() {
   return (
@@ -47,8 +31,9 @@ export default function MobileRoot() {
     clearTimeout(retryRef.current);
     checkingRef.current = true;
     try {
-      await serverHealth(MOBILE_SERVER_URL);
-      await saveServerUrl(MOBILE_SERVER_URL);
+      const serverUrl = await findAvailableServer();
+      if (!serverUrl) throw new Error('Nenhuma rota do servidor respondeu.');
+      await saveServerUrl(serverUrl);
       setConnected(true);
     } catch (err) {
       console.warn('[mobile] servidor indisponivel', err?.message || err);
@@ -72,10 +57,12 @@ export default function MobileRoot() {
       void check();
     };
     window.addEventListener('discordia:configure-server', reconnect);
+    window.addEventListener('discordia:connection-lost', reconnect);
     return () => {
       clearTimeout(retryRef.current);
       networkListener?.remove();
       window.removeEventListener('discordia:configure-server', reconnect);
+      window.removeEventListener('discordia:connection-lost', reconnect);
     };
   }, [check]);
 

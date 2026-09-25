@@ -34,6 +34,16 @@ function resolveJwtSecret() {
   return secret;
 }
 
+function resolveClientVersion() {
+  if (process.env.CLIENT_VERSION?.trim()) return process.env.CLIENT_VERSION.trim();
+  try {
+    const clientPackage = path.resolve(SERVER_ROOT, '../client/package.json');
+    return String(JSON.parse(fs.readFileSync(clientPackage, 'utf8')).version ?? '').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 3001),
   clientOrigins: [
@@ -54,6 +64,10 @@ export const config = {
   // ID exata da única conta que pode pedir a sirene especial em convites.
   // Vazio mantém o recurso desligado inclusive se um cliente forjar o campo.
   specialCallSoundUserId: process.env.SPECIAL_CALL_SOUND_USER_ID?.trim() || null,
+  // Conta exclusiva que enxerga versões por sessão e pode solicitar a
+  // atualização de um desktop específico. Não depende de nome nem de cargo.
+  remoteUpdateAdminUserId: process.env.REMOTE_UPDATE_ADMIN_USER_ID?.trim() || null,
+  currentClientVersion: resolveClientVersion(),
   uploadsDir: UPLOADS_DIR,
   updatesDir: UPDATES_DIR,
   mobileUpdatesDir: MOBILE_UPDATES_DIR,

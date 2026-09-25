@@ -17,6 +17,13 @@ import { notificar, pedirPermissaoDeNotificacao } from './lib/notificar.js';
 import { useVoice } from './lib/useVoice.js';
 import { suportaGanhoWebAudio } from './lib/volumeGain.js';
 import { callInviteSoundFor } from './lib/specialCallSound.js';
+import {
+  createRemoteUpdateIntent,
+  nextRemoteUpdateAction,
+  readRemoteUpdateIntent,
+  remoteUpdateMenuItems,
+  saveRemoteUpdateIntent,
+} from './lib/remoteUpdate.js';
 import AuthView from './components/AuthView.jsx';
 import Avatar from './components/Avatar.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
@@ -30,6 +37,7 @@ import Modal from './components/Modal.jsx';
 import ProfileCard from './components/ProfileCard.jsx';
 import ProfileEditor from './components/ProfileEditor.jsx';
 import { attachmentForServer } from './platform/server.js';
+import { getNativeVersion, platform } from './platform/index.js';
 import ReportBugModal from './components/ReportBugModal.jsx';
 import SettingsScreen from './components/SettingsScreen.jsx';
 import { itensDeStatus } from './components/UserPanel.jsx';
@@ -38,6 +46,39 @@ import WatchTogetherModal from './components/WatchTogetherModal.jsx';
 
 const TYPING_TTL = 4000;
 const AVISO_TTL = 6000;
+const RESELECT_SERVER_AFTER_MS = 12000;
+const APP_VERSION = __APP_VERSION__;
+const REMOTE_UPDATE_POLL_MS = 1500;
+
+async function identifyThisClient() {
+  const desktop = window.appDesktop;
+  if (desktop?.versao) {
+    const [version, installation] = await Promise.all([
+      desktop.versao().catch(() => null),
+      desktop.instalacao ? desktop.instalacao().catch(() => null) : Promise.resolve(null),
+    ]);
+    return {
+      platform: 'desktop',
+      // Nunca usa a versão do bundle web como fallback: num Electron antigo
+      // ele já pode ter carregado a interface nova do servidor, mas o binário
+      // instalado continua antigo e é justamente isso que queremos medir.
+      version,
+      portable: Boolean(installation?.portable),
+      automaticUpdate: Boolean(installation?.atualizacaoAutomatica),
+      updateBridge: Boolean(
+        desktop.atualizacaoInfo
+        && desktop.reiniciarAtualizacao
+        && desktop.reiniciarApp,
+      ),
+    };
+  }
+
+  if (platform.android) {
+    const nativeInfo = await getNativeVersion().catch(() => null);
+    return { platform: 'android', version: nativeInfo?.version ?? APP_VERSION };
+  }
+  return { platform: 'web', version: APP_VERSION };
+}
 
 /**
  * Onde fica guardado "eu estava nessa call quando o app recarregou", pra
@@ -245,6 +286,10 @@ export default function App() {
   // online: agora precisamos saber também o status escolhido e o que a pessoa
   // está jogando, não só se ela está conectada.
   const [presencas, setPresencas] = useState({});
+  // Metadados por socket, enviados somente para a conta com a capacidade
+  // privada de atualização remota.
+  const [clientSessionsByUser, setClientSessionsByUser] = useState({});
+  const [remoteCurrentVersion, setRemoteCurrentVersion] = useState(APP_VERSION);
   const [typing, setTyping] = useState({});
   const [modal, setModal] = useState(null);
   const [cinemaAberto, setCinemaAberto] = useState(false);
@@ -277,6 +322,9 @@ export default function App() {
   // Avisado que saiu versão nova: recarrega sozinho quando não tiver
   // ninguém numa chamada pra não cortar áudio/vídeo de ninguém no meio.
   const [atualizacaoPendente, setAtualizacaoPendente] = useState(false);
+  // Incrementado ao chegar um comando remoto; também começa em zero para
+  // retomar uma intenção que sobreviveu ao primeiro reinício do desktop.
+  const [remoteUpdateToken, setRemoteUpdateToken] = useState(0);
   // Aviso curto e flutuante (resultado de comando, erro de ação de menu...).
   const [aviso, setAviso] = useState(null);
   // Texto que o menu de contexto quer empurrar pro campo de mensagem. O
@@ -302,6 +350,28 @@ export default function App() {
   const statusRef = useRef('online');
 
   const { voice, voiceRooms, voiceVotacoes, voiceConvite, voiceResultadoConvite, voiceWatch, voiceActions } = useVoice(socket);
+
+  const guardarCallParaRetomar = useCallback(() => {
+    if (!voice.channelId) return;
+    localStorage.setItem(CHAVE_RETOMAR_CALL, JSON.stringify({
+      guildId: activeGuildId,
+      channelId: voice.channelId,
+      ts: Date.now(),
+      camera: voice.self.camera,
+      screen: voice.self.screen,
+      muted: voice.self.muted,
+      deafened: voice.self.deafened,
+      callMaximizada,
+    }));
+  }, [
+    voice.channelId,
+    voice.self.camera,
+    voice.self.screen,
+    voice.self.muted,
+    voice.self.deafened,
+    activeGuildId,
+    callMaximizada,
+  ]);
 
   useEffect(() => {
     const aoVoltarNoAndroid = (event) => {
@@ -375,21 +445,73 @@ export default function App() {
    */
   useEffect(() => {
     if (!atualizacaoPendente) return;
-    if (voice.channelId) {
-      localStorage.setItem(CHAVE_RETOMAR_CALL, JSON.stringify({
-        guildId: activeGuildId,
-        channelId: voice.channelId,
-        ts: Date.now(),
-        camera: voice.self.camera,
-        screen: voice.self.screen,
-        muted: voice.self.muted,
-        deafened: voice.self.deafened,
-        callMaximizada,
-      }));
-    }
+    guardarCallParaRetomar();
     const reiniciar = window.appDesktop?.reiniciarApp?.();
     if (!reiniciar) window.location.reload();
-  }, [atualizacaoPendente, voice.channelId, activeGuildId, voice.self.camera, voice.self.screen, voice.self.muted, voice.self.deafened, callMaximizada]);
+  }, [atualizacaoPendente, guardarCallParaRetomar]);
+
+  /*
+   * Um comando remoto não instala nada por conta própria no navegador. Ele
+   * apenas deixa uma intenção curta e usa as mesmas pontes do atualizador
+   * Electron já instalado. A intenção sobrevive a um único relaunch, o que
+   * permite refazer a consulta de release sem criar um ciclo infinito.
+   */
+  useEffect(() => {
+    let ativo = true;
+    let timer = null;
+
+    const agendar = () => {
+      if (!ativo) return;
+      clearTimeout(timer);
+      timer = setTimeout(processar, REMOTE_UPDATE_POLL_MS);
+    };
+
+    const processar = async () => {
+      const intent = readRemoteUpdateIntent();
+      if (!intent) {
+        saveRemoteUpdateIntent(null);
+        return;
+      }
+
+      const desktop = window.appDesktop;
+      if (!desktop?.atualizacaoInfo || !desktop?.reiniciarAtualizacao || !desktop?.reiniciarApp) {
+        saveRemoteUpdateIntent(null);
+        return;
+      }
+
+      try {
+        const updaterState = await desktop.atualizacaoInfo();
+        if (!ativo) return;
+        const decision = nextRemoteUpdateAction(intent, updaterState);
+
+        if (decision.action === 'stop') {
+          saveRemoteUpdateIntent(null);
+          return;
+        }
+        if (decision.action === 'install') {
+          guardarCallParaRetomar();
+          const started = await desktop.reiniciarAtualizacao();
+          if (!started) saveRemoteUpdateIntent(null);
+          return;
+        }
+        if (decision.action === 'restart') {
+          saveRemoteUpdateIntent(decision.intent);
+          guardarCallParaRetomar();
+          await desktop.reiniciarApp();
+          return;
+        }
+        agendar();
+      } catch {
+        saveRemoteUpdateIntent(null);
+      }
+    };
+
+    void processar();
+    return () => {
+      ativo = false;
+      clearTimeout(timer);
+    };
+  }, [remoteUpdateToken, guardarCallParaRetomar]);
 
   /*
    * Avisa o app de desktop se estamos numa call agora - é o que decide lá
@@ -553,16 +675,33 @@ export default function App() {
   useEffect(() => {
     if (!me) return undefined;
 
+    let routeTimer = null;
+    const clearRouteTimer = () => {
+      clearTimeout(routeTimer);
+      routeTimer = null;
+    };
+    const requestAnotherRoute = () => {
+      window.dispatchEvent(new Event('discordia:connection-lost'));
+      window.appDesktop?.reconnectServer?.();
+    };
     const socket = createSocket(getToken(), {
       connect: () => {
+        clearRouteTimer();
         setConnected(true);
+        void identifyThisClient()
+          .then((info) => socketRef.current?.emit('client:identify', info))
+          .catch(() => {});
         // Reconexões podem ter perdido eventos enquanto o servidor estava
         // fora; o contador volta sempre da fonte persistente.
         api.mencoesNaoLidas()
           .then(({ mentions }) => setMentionUnread(mentions ?? {}))
           .catch(() => {});
       },
-      disconnect: () => setConnected(false),
+      disconnect: () => {
+        setConnected(false);
+        clearRouteTimer();
+        routeTimer = setTimeout(requestAnotherRoute, RESELECT_SERVER_AFTER_MS);
+      },
 
       'presence:sync': ({ online, presences }) => {
         // `presences` traz status e atividade; `online` é a lista crua e serve
@@ -574,6 +713,16 @@ export default function App() {
       },
       'presence:update': (p) =>
         setPresencas((prev) => ({ ...prev, [p.userId]: p })),
+
+      'client-info:sync': ({ sessions, currentVersion }) => {
+        setClientSessionsByUser(sessions ?? {});
+        if (currentVersion) setRemoteCurrentVersion(currentVersion);
+      },
+      'client-info:update': ({ userId, sessions, currentVersion }) => {
+        if (!userId) return;
+        setClientSessionsByUser((prev) => ({ ...prev, [userId]: sessions ?? [] }));
+        if (currentVersion) setRemoteCurrentVersion(currentVersion);
+      },
 
       'message:reactions': ({ channelId, dmChannelId, messageId, reactions }) => {
         const aplicar = (lista) => lista.map((m) => (m.id === messageId ? { ...m, reactions } : m));
@@ -782,6 +931,13 @@ export default function App() {
       },
 
       'app:reload': () => setAtualizacaoPendente(true),
+      'app:force-update': ({ targetVersion, expiresAt } = {}) => {
+        const intent = createRemoteUpdateIntent(targetVersion);
+        if (!intent || !window.appDesktop?.atualizacaoInfo) return;
+        if (Number.isFinite(expiresAt)) intent.expiresAt = Math.min(intent.expiresAt, expiresAt);
+        if (!saveRemoteUpdateIntent(intent)) return;
+        setRemoteUpdateToken((value) => value + 1);
+      },
 
       'typing:start': ({ channelId, user }) => {
         if (user.id === me.id) return;
@@ -853,6 +1009,7 @@ export default function App() {
     socketRef.current = socket;
     setSocket(socket);
     return () => {
+      clearRouteTimer();
       socket.close();
       socketRef.current = null;
       setSocket(null);
@@ -1481,14 +1638,48 @@ export default function App() {
     }),
   };
 
+  async function forcarAtualizacaoDoMembro(membro, socketIds) {
+    if (!socketRef.current) {
+      setAviso('Sem conexão com o servidor.');
+      return;
+    }
+    const response = await emitAck(socketRef.current, 'client:force-update', {
+      targetUserId: membro.id,
+      socketIds,
+    });
+    if (response?.error) {
+      setAviso(response.error);
+      return;
+    }
+    setAviso(response?.delivered > 0
+      ? `Atualização enviada para ${membro.username}.`
+      : `Nenhum desktop desatualizado de ${membro.username} está disponível.`);
+  }
+
+  function itensDeVersaoDoMembro(membro) {
+    if (!me.capabilities?.remoteClientUpdate || membro.id === me.id) return [];
+    return [
+      { tipo: 'sep' },
+      { tipo: 'titulo', label: 'Versões conectadas' },
+      ...remoteUpdateMenuItems(
+        clientSessionsByUser[membro.id],
+        remoteCurrentVersion,
+        (socketIds) => void forcarAtualizacaoDoMembro(membro, socketIds),
+      ),
+    ];
+  }
+
   /** Handler de botão direito em cima de uma pessoa da lista de membros. */
-  const menuDoMembro = (membro, { euMembro }) => menuContexto.abrirCom(() => itensDoMembro({
-    membro,
-    euMembro,
-    guild,
-    souEu: membro.id === me.id,
-    acoes: acoesDoMembro,
-  }));
+  const menuDoMembro = (membro, { euMembro }) => menuContexto.abrirCom(() => [
+    ...itensDoMembro({
+      membro,
+      euMembro,
+      guild,
+      souEu: membro.id === me.id,
+      acoes: acoesDoMembro,
+    }),
+    ...itensDeVersaoDoMembro(membro),
+  ]);
 
   /** Botão direito em cima de alguém que está numa call. */
   const menuDoParticipanteDeVoz = (participante) => menuContexto.abrirCom(() => {
@@ -1591,7 +1782,7 @@ export default function App() {
       });
     }
 
-    return [...base, ...extras];
+    return [...base, ...extras, ...itensDeVersaoDoMembro(membro)];
   });
 
   /** Botão direito em cima de um canal na barra lateral. */

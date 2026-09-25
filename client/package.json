@@ -1,12 +1,12 @@
 {
   "name": "discord-caseiro-client",
-  "version": "0.2.73",
+  "version": "0.2.74",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test src/lib/volumeGain.test.mjs src/lib/specialCallSound.test.mjs",
+    "test": "node --test src/lib/volumeGain.test.mjs src/lib/specialCallSound.test.mjs src/lib/remoteUpdate.test.mjs",
     "build:android": "vite build --mode android && cap sync android",
     "android:sync": "cap sync android",
     "android:open": "cap open android",
