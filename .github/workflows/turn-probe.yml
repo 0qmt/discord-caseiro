@@ -18,7 +18,7 @@ jobs:
 
       - name: Exercise UDP relay from outside the home network
         env:
-          ICE_ENDPOINT: https://discord-caseiro.duckdns.org/api/ice
+          ICE_ENDPOINT: https://discord-caseiro.duckdns.org:8443/api/ice
         run: |
           set -euo pipefail
           ice_json="$(curl --fail --silent --show-error --max-time 15 "$ICE_ENDPOINT")"

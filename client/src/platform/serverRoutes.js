@@ -1,5 +1,6 @@
 export const SERVER_CANDIDATES = Object.freeze([
   'http://192.168.0.56:3002',
+  'https://discord-caseiro.duckdns.org:8443',
   'https://discord-caseiro.duckdns.org',
   'https://discord-caseiro.duckdns.org:3001',
   'https://discordia.tail291b3e.ts.net',
